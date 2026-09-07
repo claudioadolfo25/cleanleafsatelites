@@ -35,7 +35,7 @@ const navigation = [
   { label: "Resumen", icon: Sparkles, href: "#resumen" },
   { label: "Mis predios", icon: MapPinned, href: "#predios" },
   { label: "Análisis", icon: ScanLine, href: "#analisis" },
-  { label: "Informes", icon: FileText, href: "#informes" },
+  { label: "Informes", icon: FileText, href: "/dashboard/informes" },
   { label: "Fuentes satelitales", icon: Settings, href: "/dashboard/configuracion/satelites" },
 ];
 

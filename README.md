@@ -67,6 +67,8 @@ La auditoría de extremo a extremo y las correcciones aplicadas están en `docs/
 
 La nueva sección para explicar y configurar fuentes satelitales está en `/dashboard/configuracion/satelites`; la decisión de producto y sus límites de precisión se documentan en `docs/satellite-selection-guide.md`.
 
+El centro operativo de informes está en `/dashboard/informes`, con detalle en `/dashboard/informes/:id`, progreso 0–100%, estados, trazabilidad y descargas. Su alcance y pendientes de persistencia están documentados en `docs/reports-dashboard-guide.md`.
+
 ## Copernicus como catálogo de recursos
 
 Cleanleaf no trata Copernicus solo como una lista de satélites. `shared/copernicus-catalog.ts` organiza recursos por **sector**, **necesidad**, **variables**, **fuente oficial** y **fase de integración**. CDSE Statistical API queda como fuente MVP para agricultura y también como contrato común para acuicultura y forestal. CMEMS se ofrece como recurso futuro para temperatura, clorofila, corrientes y nivel del mar; CLMS para uso de suelo y vegetación; CEMS para inundaciones, incendios y sequía; CDS para contexto climático; y CAMS para atmósfera y humo. Los recursos futuros son visibles en la interfaz, pero permanecen desactivados hasta validar caso de uso, autenticación y límites.

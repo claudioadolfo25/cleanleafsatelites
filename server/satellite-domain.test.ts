@@ -15,6 +15,7 @@ import { validatePlanLimits } from "@shared/plan-limits";
 import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
 import { guidanceForNeed, satelliteGuidance } from "@shared/satellite-guidance";
+import { getReport, listReports } from "@shared/report-catalog";
 import { appRouter } from "./routers";
 
 describe("catálogo satelital por vertical", () => {
@@ -245,5 +246,20 @@ describe("guía de elección satelital", () => {
   it("mantiene Sentinel-3 como orientación de fase 2 para acuicultura", () => {
     expect(guidanceForNeed("acuicultura").recommendations).toContain("sentinel-3");
     expect(satelliteGuidance["sentinel-3"].phase).toBe("fase_2");
+  });
+});
+
+describe("dashboard de informes", () => {
+  it("filtra por estado y conserva trazabilidad hasta informe listo", () => {
+    const ready = listReports({ status: "completado" });
+    expect(ready.length).toBeGreaterThan(0);
+    expect(ready.every(report => report.progress === 100 && report.trace.at(-1)?.status === "completado")).toBe(true);
+  });
+
+  it("expone estados no terminados sin prometer descarga", () => {
+    const report = getReport("inf-el-aromo-error");
+    expect(report?.status).toBe("error_reintentable");
+    expect(report?.progress).toBeLessThan(100);
+    expect(report?.trace.at(-1)?.message).toContain("Fallo");
   });
 });

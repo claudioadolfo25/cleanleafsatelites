@@ -16,6 +16,7 @@ import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
+import { getReport, listReports } from "@shared/report-catalog";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -161,6 +162,10 @@ export const appRouter = router({
   }),
   cleanleaf: router({
     dashboard: publicProcedure.query(() => demoDashboard),
+    reports: router({
+      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
+      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+    }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
       return getSatelitesHabilitados(vertical).map(id => satelliteCatalog[id]);
