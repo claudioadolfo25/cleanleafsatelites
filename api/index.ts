@@ -9,7 +9,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const trpcMiddleware = createExpressMiddleware({
   router: appRouter,
-  createContext: async () => ({ user: null }),
+  createContext: async ({ req, res }) => ({ req, res, user: null }),
 });
 
 app.use("/api/trpc", trpcMiddleware);
