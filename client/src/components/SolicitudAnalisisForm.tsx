@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import type { SatelliteDefinition, SatelliteId } from "@shared/satellite-catalog";
-import { CheckCircle2, Leaf, Loader2, MapPinned, ScanSearch } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Leaf, Loader2, MapPinned, ScanSearch } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import SatelliteSelector from "./SatelliteSelector";
@@ -23,6 +23,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
   const [hectareas, setHectareas] = useState("42");
   const [satellites, setSatellites] = useState<SatelliteId[]>(["sentinel-2"]);
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
+  const { data: configStatus } = trpc.cleanleaf.configStatus.useQuery({ vertical: "agricultura" });
   const createAnalysis = trpc.cleanleaf.createAnalysis.useMutation({
     onSuccess: result => {
       toast.success("Análisis programado", { description: result.mensaje });
@@ -93,6 +94,13 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         </div>
         {catalogLoading ? <div className="h-32 animate-pulse rounded-xl bg-stone-100" /> : <SatelliteSelector satellites={catalog as SatelliteDefinition[]} selected={satellites} onChange={setSatellites} vertical="agricultura" />}
       </div>
+
+      {configStatus && !configStatus.valid ? (
+        <div className="flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span><strong className="font-semibold">Configuración ajustada de forma segura.</strong> {configStatus.warnings.join(" ")}</span>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800">
         <ScanSearch size={15} className="shrink-0" />

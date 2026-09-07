@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import {
   getSatelitesHabilitados,
+  getSatelliteConfigurationStatus,
   satelliteCatalog,
   satelliteValidationMessage,
   validarSatelitesSolicitados,
@@ -74,6 +75,9 @@ export const appRouter = router({
         const enabled = getSatelitesHabilitados(vertical);
         return enabled.map(id => satelliteCatalog[id]);
       }),
+    configStatus: publicProcedure
+      .input(z.object({ vertical: verticalSchema }).optional())
+      .query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
     createAnalysis: publicProcedure
       .input(
         z.object({

@@ -69,6 +69,14 @@ const fallbackEnabled: Record<Vertical, SatelliteId[]> = {
   forestal: ["sentinel-2", "sentinel-1"],
 };
 
+// Product policy is stricter than environment configuration. An operator can
+// narrow a catalog, but can never widen it beyond the approved vertical policy.
+const policyEnabled: Record<Vertical, SatelliteId[]> = {
+  agricultura: ["sentinel-2", "sentinel-1"],
+  acuicultura: ["sentinel-3", "sentinel-2"],
+  forestal: ["sentinel-2", "sentinel-1"],
+};
+
 const environmentKey: Record<Vertical, string> = {
   agricultura: "CLEANLEAF_SATELITES_HABILITADOS_AGRICULTURA",
   acuicultura: "CLEANLEAF_SATELITES_HABILITADOS_ACUICULTURA",
@@ -84,7 +92,49 @@ export function getSatelitesHabilitados(vertical: Vertical): SatelliteId[] {
     .map(value => value.trim())
     .filter((value): value is SatelliteId => value in satelliteCatalog);
 
-  return parsed.length > 0 ? parsed : fallbackEnabled[vertical];
+  const policy = policyEnabled[vertical];
+  const narrowed = parsed.filter(satellite => policy.includes(satellite));
+  return narrowed.length > 0 ? narrowed : fallbackEnabled[vertical];
+}
+
+export type SatelliteConfigurationStatus = {
+  vertical: Vertical;
+  configured: boolean;
+  valid: boolean;
+  effective: SatelliteId[];
+  warnings: string[];
+};
+
+export function getSatelliteConfigurationStatus(vertical: Vertical): SatelliteConfigurationStatus {
+  const raw = process.env[environmentKey[vertical]];
+  const effective = getSatelitesHabilitados(vertical);
+  if (!raw) {
+    return {
+      vertical,
+      configured: false,
+      valid: true,
+      effective,
+      warnings: ["No hay configuración explícita; se usa el catálogo seguro por defecto."],
+    };
+  }
+
+  const requested = raw.split(",").map(value => value.trim()).filter(Boolean);
+  const warnings: string[] = [];
+  const duplicates = requested.filter((item, index) => requested.indexOf(item) !== index);
+  const unknown = requested.filter(item => !(item in satelliteCatalog));
+  const disallowed = requested.filter(item => item in satelliteCatalog && !policyEnabled[vertical].includes(item as SatelliteId));
+  if (duplicates.length > 0) warnings.push(`Satélites duplicados ignorados: ${duplicates.join(", ")}.`);
+  if (unknown.length > 0) warnings.push(`Valores desconocidos ignorados: ${unknown.join(", ")}.`);
+  if (disallowed.length > 0) warnings.push(`Satélites fuera de política para ${vertical} ignorados: ${disallowed.join(", ")}.`);
+  if (effective.length === 0) warnings.push("La configuración no dejó fuentes utilizables; se aplicó el fallback seguro.");
+
+  return {
+    vertical,
+    configured: true,
+    valid: warnings.length === 0 && requested.length > 0,
+    effective,
+    warnings,
+  };
 }
 
 export function validarSatelitesSolicitados(

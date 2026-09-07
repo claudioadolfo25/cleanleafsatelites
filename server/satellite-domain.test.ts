@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getSatelitesHabilitados,
+  getSatelliteConfigurationStatus,
   validarSatelitesSolicitados,
 } from "@shared/satellite-catalog";
 import {
@@ -27,6 +28,34 @@ describe("catálogo satelital por vertical", () => {
   it("rechaza Sentinel-3 en agricultura y acepta la combinación agrícola", () => {
     expect(validarSatelitesSolicitados("agricultura", ["sentinel-3"])).toBe(false);
     expect(validarSatelitesSolicitados("agricultura", ["sentinel-2", "sentinel-1"])).toBe(true);
+  });
+
+  it("aplica una política fail-safe aunque el entorno intente habilitar Sentinel-3 en agricultura", () => {
+    const key = "CLEANLEAF_SATELITES_HABILITADOS_AGRICULTURA";
+    const previous = process.env[key];
+    process.env[key] = "sentinel-3";
+    try {
+      expect(getSatelitesHabilitados("agricultura")).toEqual(["sentinel-2", "sentinel-1"]);
+      const status = getSatelliteConfigurationStatus("agricultura");
+      expect(status.valid).toBe(false);
+      expect(status.warnings.join(" ")).toContain("fuera de política");
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
+  });
+
+  it("ignora valores desconocidos y conserva fuentes válidas", () => {
+    const key = "CLEANLEAF_SATELITES_HABILITADOS_AGRICULTURA";
+    const previous = process.env[key];
+    process.env[key] = "sentinel-2, fuente-inexistente";
+    try {
+      expect(getSatelitesHabilitados("agricultura")).toEqual(["sentinel-2"]);
+      expect(getSatelliteConfigurationStatus("agricultura").warnings.join(" ")).toContain("desconocidos");
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
   });
 });
 

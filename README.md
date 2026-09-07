@@ -48,3 +48,9 @@ El frontend consume contratos tipados de tRPC y no contiene reglas de negocio de
 La capa `shared/interpretation.ts` prepara el prompt que recibirá Dify con `satelite`, `variable`, `valor` y `unidad`, y contiene una interpretación determinista de respaldo para NDVI y Sigma0 VV. `supabase/schema.sql` y `supabase/seed.sql` documentan la migración futura a Postgres/Supabase, con `tenant_id`, `get_current_tenant_id()` y políticas RLS por tenant. El seed incluye el caso de rechazo de Sentinel-3 para agricultura.
 
 Queda fuera de esta fase, de forma intencional: integración real con Sentinel Hub, workflows n8n conectados, Stripe, WhatsApp y autenticación de API keys multi-tenant. Se deben integrar en Fase 2 reemplazando stubs sin cambiar los contratos públicos.
+
+## Robustez de configuración satelital
+
+El catálogo aplica una política **fail-safe** en dos capas. Primero, cada vertical tiene una allowlist de producto que no puede ampliarse mediante variables de entorno. Segundo, los valores desconocidos, duplicados o incompatibles se ignoran y el sistema vuelve al catálogo seguro por defecto si la configuración deja cero fuentes utilizables. Así, una configuración accidental como `CLEANLEAF_SATELITES_HABILITADOS_AGRICULTURA=sentinel-3` no habilita Sentinel-3: conserva Sentinel-2 y Sentinel-1 y expone un diagnóstico de advertencia.
+
+La consulta `cleanleaf.configStatus` permite observar `configured`, `valid`, `effective` y `warnings`. El formulario de solicitud muestra la advertencia al operador, pero mantiene el flujo funcional con la configuración segura. Las pruebas cubren específicamente el intento de habilitar Sentinel-3 en agricultura y la presencia de valores desconocidos. Sentinel-4, Sentinel-5P y Sentinel-6 no forman parte del catálogo ni de ninguna opción activable.
