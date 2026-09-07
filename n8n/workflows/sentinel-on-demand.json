@@ -1,0 +1,19 @@
+{
+  "name": "Cleanleaf · Sentinel on demand (stub)",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    { "name": "Webhook request", "type": "n8n-nodes-base.webhook", "parameters": { "httpMethod": "POST", "path": "sentinel-on-demand", "responseMode": "onReceived" }, "position": [0, 0] },
+    { "name": "Route by tier", "type": "n8n-nodes-base.switch", "parameters": { "rules": { "values": [{ "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$json.tier}}", "rightValue": "tier1_predio", "operator": { "type": "string", "operation": "equals" } }] } }, { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$json.tier}}", "rightValue": "tier2_extendido", "operator": { "type": "string", "operation": "equals" } }] } }, { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$json.tier}}", "rightValue": "tier3_regional", "operator": { "type": "string", "operation": "equals" } }] } }] } }, "position": [250, 0] },
+    { "name": "Process tier 1/2 stub", "type": "n8n-nodes-base.httpRequest", "parameters": { "method": "POST", "url": "={{$env.CLEANLEAF_API_URL}}/api/v1/sentinel/procesar", "sendBody": true, "jsonBody": "={{ { solicitudId: $json.id, tier: $json.tier } }}" }, "position": [520, -100] },
+    { "name": "Hold tier 3", "type": "n8n-nodes-base.noOp", "parameters": { "note": "Tier 3 requiere liberación explícita de super_admin o job regional." }, "position": [520, 140] },
+    { "name": "Always log", "type": "n8n-nodes-base.httpRequest", "parameters": { "method": "POST", "url": "={{$env.CLEANLEAF_API_URL}}/api/v1/workflow-logs", "sendBody": true, "jsonBody": "={{ { workflow: 'sentinel-on-demand', estado: 'exitoso', solicitudId: $json.id } }}" }, "position": [800, 0] }
+  ],
+  "connections": {
+    "Webhook request": { "main": [[{ "node": "Route by tier", "type": "main", "index": 0 }]] },
+    "Route by tier": { "main": [[{ "node": "Process tier 1/2 stub", "type": "main", "index": 0 }], [{ "node": "Process tier 1/2 stub", "type": "main", "index": 0 }], [{ "node": "Hold tier 3", "type": "main", "index": 0 }]] },
+    "Process tier 1/2 stub": { "main": [[{ "node": "Always log", "type": "main", "index": 0 }]] },
+    "Hold tier 3": { "main": [[{ "node": "Always log", "type": "main", "index": 0 }]] }
+  },
+  "meta": { "phase": "stub", "note": "Tier 3 nunca se procesa automáticamente en este MVP." }
+}

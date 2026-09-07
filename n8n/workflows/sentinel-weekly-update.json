@@ -1,0 +1,17 @@
+{
+  "name": "Cleanleaf · Sentinel weekly update (stub)",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    { "name": "Weekly cron", "type": "n8n-nodes-base.cron", "parameters": { "triggerTimes": { "item": [{ "mode": "everyWeek", "weekday": "1", "hour": 6, "minute": 0 }] } }, "position": [0, 0] },
+    { "name": "List active properties", "type": "n8n-nodes-base.httpRequest", "parameters": { "method": "GET", "url": "={{$env.CLEANLEAF_API_URL}}/api/v1/predios?active=true" }, "position": [240, 0] },
+    { "name": "Create tier 1 request", "type": "n8n-nodes-base.httpRequest", "parameters": { "method": "POST", "url": "={{$env.CLEANLEAF_API_URL}}/api/v1/solicitudes", "sendBody": true, "jsonBody": "={{ { predioId: $json.id, predioNombre: $json.nombre, hectareas: $json.superficie_ha, vertical: 'agricultura', satellites: ['sentinel-2'], planId: 'piloto' } }}" }, "position": [500, 0] },
+    { "name": "Log workflow", "type": "n8n-nodes-base.httpRequest", "parameters": { "method": "POST", "url": "={{$env.CLEANLEAF_API_URL}}/api/v1/workflow-logs", "sendBody": true, "jsonBody": "={{ { workflow: 'sentinel-weekly-update', estado: 'exitoso', solicitudId: $json.id } }}" }, "position": [760, 0] }
+  ],
+  "connections": {
+    "Weekly cron": { "main": [[{ "node": "List active properties", "type": "main", "index": 0 }]] },
+    "List active properties": { "main": [[{ "node": "Create tier 1 request", "type": "main", "index": 0 }]] },
+    "Create tier 1 request": { "main": [[{ "node": "Log workflow", "type": "main", "index": 0 }]] }
+  },
+  "meta": { "phase": "stub", "note": "Reemplazar endpoints por Supabase/Sentinel Hub reales en Fase 2." }
+}

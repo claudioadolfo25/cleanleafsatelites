@@ -54,3 +54,11 @@ Queda fuera de esta fase, de forma intencional: integración real con Sentinel H
 El catálogo aplica una política **fail-safe** en dos capas. Primero, cada vertical tiene una allowlist de producto que no puede ampliarse mediante variables de entorno. Segundo, los valores desconocidos, duplicados o incompatibles se ignoran y el sistema vuelve al catálogo seguro por defecto si la configuración deja cero fuentes utilizables. Así, una configuración accidental como `CLEANLEAF_SATELITES_HABILITADOS_AGRICULTURA=sentinel-3` no habilita Sentinel-3: conserva Sentinel-2 y Sentinel-1 y expone un diagnóstico de advertencia.
 
 La consulta `cleanleaf.configStatus` permite observar `configured`, `valid`, `effective` y `warnings`. El formulario de solicitud muestra la advertencia al operador, pero mantiene el flujo funcional con la configuración segura. Las pruebas cubren específicamente el intento de habilitar Sentinel-3 en agricultura y la presencia de valores desconocidos. Sentinel-4, Sentinel-5P y Sentinel-6 no forman parte del catálogo ni de ninguna opción activable.
+
+## Arquitectura v7 y continuidad operativa
+
+El MVP agrega un motor de enrutamiento por superficie en `shared/satellite-router.ts`. Tier 1 cubre hasta 50 ha y usa el modo `processing_api`; Tier 2 cubre más de 50 y hasta 5.000 ha y usa `statistical_api`; Tier 3 supera 5.000 ha, usa `batch_api` y requiere un plan que lo permita. Los límites son configurables mediante `CLEANLEAF_TIER1_MAX_HA` y `CLEANLEAF_TIER2_MAX_HA`, con fallback seguro.
+
+La API versionada está representada por el namespace tRPC `apiV1`, con solicitudes, onboarding y generación de API keys stub. Los workflows `n8n/workflows/sentinel-weekly-update.json` y `n8n/workflows/sentinel-on-demand.json` documentan la integración futura sin activar llamadas externas. `supabase/schema.sql` y `supabase/seed.sql` contienen el modelo multi-tenant objetivo con planes, solicitudes, API keys, consumo, informes, alertas y políticas RLS.
+
+El diagnóstico técnico y las instrucciones para la continuación quirúrgica están en `docs/v7-diagnostic.md` y `docs/JULES_HANDOFF.md`. Antes de producción se debe ejecutar RLS real en Supabase, persistir solicitudes y consumo, resolver sesión/API key por tenant, conectar n8n con secretos y sustituir los stubs por proveedores reales.

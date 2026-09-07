@@ -3,8 +3,9 @@ import {
   satelliteCatalog,
   type SatelliteId,
 } from "./satellite-catalog";
+import { getTierForSuperficie, type ProcessingTier } from "./satellite-router";
 
-export type Tier = "tier1_predio" | "tier2_extendido" | "tier3_regional";
+export type Tier = ProcessingTier;
 
 export type SentinelMeasurement = {
   satelite: SatelliteId;
@@ -15,9 +16,7 @@ export type SentinelMeasurement = {
 };
 
 export function resolveTier(hectares: number): Tier {
-  if (hectares < 50) return "tier1_predio";
-  if (hectares < 500) return "tier2_extendido";
-  return "tier3_regional";
+  return getTierForSuperficie(hectares);
 }
 
 export function tierLabel(tier: Tier): string {

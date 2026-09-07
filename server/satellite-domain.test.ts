@@ -10,6 +10,8 @@ import {
   querySentinel3,
   resolveTier,
 } from "@shared/satellite-service";
+import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
+import { validatePlanLimits } from "@shared/plan-limits";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
 import { appRouter } from "./routers";
 
@@ -83,8 +85,10 @@ describe("contrato unificado de Sentinel", () => {
 
   it("resuelve el tier de tamaño de forma independiente", () => {
     expect(resolveTier(42)).toBe("tier1_predio");
-    expect(resolveTier(420)).toBe("tier2_extendido");
-    expect(resolveTier(500)).toBe("tier3_regional");
+    expect(resolveTier(50)).toBe("tier1_predio");
+    expect(resolveTier(50.01)).toBe("tier2_extendido");
+    expect(resolveTier(5000)).toBe("tier2_extendido");
+    expect(resolveTier(5000.01)).toBe("tier3_regional");
   });
 });
 
@@ -110,9 +114,31 @@ describe("creación de solicitud", () => {
       hectareas: 250,
       vertical: "acuicultura",
       satellites: ["sentinel-3"],
+      planId: "regional_pyme",
     });
-    expect(result).toMatchObject({ estado: "en_proceso", tier: "tier2_extendido" });
+    expect(result).toMatchObject({ estado: "en_cola", tier: "tier2_extendido" });
     expect(result.medicionPreview.satelite).toBe("sentinel-3");
+  });
+});
+
+describe("enrutamiento y límites de plan v7", () => {
+  it("mantiene los límites inclusivos y asigna un motor por tier", () => {
+    expect(getTierForSuperficie(0.5)).toBe("tier1_predio");
+    expect(getTierForSuperficie(50)).toBe("tier1_predio");
+    expect(getTierForSuperficie(50.01)).toBe("tier2_extendido");
+    expect(getTierForSuperficie(5000)).toBe("tier2_extendido");
+    expect(getTierForSuperficie(5000.01)).toBe("tier3_regional");
+    expect(processingModeForTier("tier3_regional")).toBe("batch_api");
+  });
+
+  it("rechaza tier regional a un plan sin permiso", () => {
+    const result = validatePlanLimits("regional_pyme", "tier3_regional", 6000, { haMesUsadas: 0, prediosActivos: 1 });
+    expect(result).toMatchObject({ allowed: false, code: "TIER3_NOT_ALLOWED" });
+  });
+
+  it("rechaza exceso mensual incluso si el tier es permitido", () => {
+    const result = validatePlanLimits("piloto", "tier1_predio", 20, { haMesUsadas: 40, prediosActivos: 1 });
+    expect(result).toMatchObject({ allowed: false, code: "MONTHLY_HA_LIMIT" });
   });
 });
 
@@ -126,5 +152,30 @@ describe("agente de interpretación", () => {
     const prompt = buildInterpretationPrompt({ satelite: "sentinel-1", variable: "sigma0_vv", valor: -18, unidad: "dB" });
     expect(prompt).toContain("sentinel-1");
     expect(prompt).toContain("sigma0_vv");
+  });
+});
+
+describe("API v1 multi-plataforma", () => {
+  it("devuelve un envelope JSON estable para health y onboarding", async () => {
+    const caller = appRouter.createCaller({} as never);
+    await expect(caller.apiV1.health()).resolves.toMatchObject({ data: { api: "v1", status: "ok" }, error: null });
+    await expect(caller.apiV1.onboarding.createTenant({ organizationName: "Campo Demo", planId: "piloto" })).resolves.toMatchObject({ data: { estado: "trial", planId: "piloto" }, error: null });
+  });
+
+  it("rechaza tier regional por plan antes de crear la solicitud", async () => {
+    const caller = appRouter.createCaller({} as never);
+    const response = await caller.apiV1.solicitudes.create({
+      predioId: "region-araucania",
+      predioNombre: "Región Araucanía",
+      hectareas: 5000.01,
+      vertical: "agricultura",
+      satellites: ["sentinel-2"],
+      planId: "regional_pyme",
+      haMesUsadas: 0,
+      prediosActivos: 1,
+    });
+    expect(response.data).toBeNull();
+    expect(response.error?.code).toBe("REQUEST_REJECTED");
+    expect(response.error?.message).toContain("TIER3_NOT_ALLOWED");
   });
 });
