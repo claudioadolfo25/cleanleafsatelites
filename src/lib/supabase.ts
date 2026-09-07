@@ -7,8 +7,16 @@ export interface SupabaseConfig {
 }
 
 export function getSupabaseConfig(): SupabaseConfig {
-  const supabaseUrl = process.env.SUPABASE_URL || "https://demo.supabase.co";
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "demo-anon-key";
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "https://ovtvreilzmjndcmkpius.supabase.co";
+
+  const supabaseAnonKey =
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    "sb_publishable_xCcJ9mZiA7Lx6U9SfOiWPg_KC0Xp9w9";
+
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   return {
