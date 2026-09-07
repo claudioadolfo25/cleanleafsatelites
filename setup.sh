@@ -15,21 +15,17 @@ if [ ! -f .env.local ]; then
   fi
 fi
 
-# 3. Instalar dependencias de desarrollo
-echo "🛠️  Instalando herramientas de desarrollo..."
-pnpm add -D @types/node @types/react @types/react-dom
-
-# 4. Ejecutar migraciones de database (si aplica)
+# 3. Ejecutar migraciones de database (si aplica)
 if [ -n "$DATABASE_URL" ]; then
   echo "🗄️  Ejecutando migraciones..."
   pnpm db:push || echo "⚠️ Migraciones omitidas (database no disponible en build local)"
 fi
 
-# 5. Ejecutar tests
+# 4. Ejecutar tests
 echo "🧪 Ejecutando tests..."
 pnpm test
 
-# 6. Ejecutar typecheck
+# 5. Ejecutar typecheck
 echo "✅ Ejecutando typecheck..."
 pnpm check
 
