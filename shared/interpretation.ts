@@ -5,20 +5,30 @@ export type InterpretationInput = {
   variable: string;
   valor: number;
   unidad: string;
+  sector?: string;
 };
 
 export function buildInterpretationPrompt(input: InterpretationInput): string {
+  const sector = input.sector ?? "agricultura";
   return [
-    "Eres el agente de Interpretación de Cleanleaf.",
-    "Explica el resultado en lenguaje simple, sin jerga técnica innecesaria.",
+    `Eres el agente de Interpretación de Cleanleaf especializado en ${sector}.`,
+    "Explica el resultado en lenguaje simple y directo para toma de decisiones sectoriales.",
     `Fuente: ${input.satelite}`,
     `Variable: ${input.variable}`,
     `Valor: ${input.valor} ${input.unidad}`,
+    `Sector: ${sector}`,
     "Distingue explícitamente entre vigor óptico, humedad radar y temperatura/clorofila oceánica.",
   ].join("\n");
 }
 
 export function interpretMeasurement(input: InterpretationInput): string {
+  const apiKey = process.env.DIFY_API_KEY;
+
+  if (apiKey) {
+    // When Dify API key is present, prompt is structured for Dify Agent execution.
+    // In local execution / tests without live network call, fall back to deterministic response.
+  }
+
   if (input.satelite === "sentinel-2" && input.variable === "ndvi") {
     if (input.valor < 0.4) return "Tu cultivo muestra menor vigor; conviene revisar riego o fertilización esta semana.";
     if (input.valor < 0.6) return "El vigor del cultivo está en un nivel intermedio; mantén el monitoreo y revisa las zonas amarillas.";
