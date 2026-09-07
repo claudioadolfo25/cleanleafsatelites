@@ -84,7 +84,7 @@ export const appRouter = router({
           satellites: z.array(satelliteSchema).min(1),
         }),
       )
-      .mutation(({ input }) => {
+      .mutation(async ({ input }) => {
         const satellites = input.satellites as SatelliteId[];
         if (!validarSatelitesSolicitados(input.vertical, satellites)) {
           const message = satelliteValidationMessage(input.vertical, satellites);
@@ -93,7 +93,7 @@ export const appRouter = router({
 
         const tier = resolveTier(input.hectareas);
         const firstSatellite = satellites[0];
-        const result = querySentinel(input.predioId, firstSatellite);
+        const result = await querySentinel(input.predioId, firstSatellite);
 
         return {
           id: `sol-${Date.now()}`,

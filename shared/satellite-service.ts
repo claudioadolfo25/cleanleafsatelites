@@ -11,12 +11,12 @@ export type SentinelMeasurement = {
   variable: string;
   valor: number;
   unidad: string;
-  fecha_adquisicion: string;
+  fecha_adquisicion: Date;
 };
 
 export function resolveTier(hectares: number): Tier {
-  if (hectares <= 100) return "tier1_predio";
-  if (hectares <= 10_000) return "tier2_extendido";
+  if (hectares < 50) return "tier1_predio";
+  if (hectares < 500) return "tier2_extendido";
   return "tier3_regional";
 }
 
@@ -51,19 +51,19 @@ function measurement(
     variable,
     valor: stableValue(`${predioId}:${satellite}:${variable}`, definition.rango[0], definition.rango[1]),
     unidad: definition.unidad,
-    fecha_adquisicion: new Date().toISOString(),
+    fecha_adquisicion: new Date(),
   };
 }
 
-export function querySentinel1(predioId: string, variable = "sigma0_vv"): SentinelMeasurement {
+export async function querySentinel1(predioId: string, variable = "sigma0_vv"): Promise<SentinelMeasurement> {
   return measurement(predioId, "sentinel-1", variable);
 }
 
-export function querySentinel2(predioId: string, variable = "ndvi"): SentinelMeasurement {
+export async function querySentinel2(predioId: string, variable = "ndvi"): Promise<SentinelMeasurement> {
   return measurement(predioId, "sentinel-2", variable);
 }
 
-export function querySentinel3(predioId: string, variable = "sst"): SentinelMeasurement {
+export async function querySentinel3(predioId: string, variable = "sst"): Promise<SentinelMeasurement> {
   return measurement(predioId, "sentinel-3", variable);
 }
 
@@ -71,7 +71,7 @@ export function querySentinel(
   predioId: string,
   satellite: SatelliteId,
   variable?: string,
-): SentinelMeasurement {
+): Promise<SentinelMeasurement> {
   const defaultVariable = getVariablesPorSatelite(satellite)[0]?.variable;
   const selectedVariable = variable ?? defaultVariable;
   if (!selectedVariable) throw new Error("No hay variables configuradas para el satélite solicitado");

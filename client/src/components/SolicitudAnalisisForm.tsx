@@ -13,9 +13,9 @@ type SolicitudAnalisisFormProps = {
 };
 
 const tierFromHectares = (hectares: number) => {
-  if (hectares <= 100) return { label: "Predio", detail: "0,5–100 ha · análisis detallado" };
-  if (hectares <= 10_000) return { label: "Zona extendida", detail: "101–10.000 ha · visión territorial" };
-  return { label: "Regional", detail: ">10.000 ha · contexto regional" };
+  if (hectares < 50) return { label: "Predio", detail: "0,5–49 ha · análisis detallado" };
+  if (hectares < 500) return { label: "Zona extendida", detail: "50–499 ha · visión territorial" };
+  return { label: "Regional", detail: "500+ ha · contexto regional (stub MVP)" };
 };
 
 export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFormProps) {
