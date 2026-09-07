@@ -1,0 +1,45 @@
+flowchart TB
+  U[Usuario productor / admin / soporte] --> UX[Web responsive\nMóvil · PWA futura · escritorio]
+  UX --> APP[Cleanleaf UX\nDashboard · Solicitud · Predios · Informes]
+  APP --> JARVIS[JARVIS Cleanleaf\nexplica · prioriza · propone acciones]
+  APP --> API[tRPC / apiV1\nenvelope data/error]
+  JARVIS --> API
+
+  API --> AUTH[Auth + permisos\nManus OAuth ahora\nSupabase Auth objetivo]
+  API --> DOMAIN[Capa de dominio]
+  DOMAIN --> CAT[Catálogo fail-safe\nvertical → fuente permitida]
+  DOMAIN --> COP[Catálogo Copernicus\nsector → necesidad → recurso]
+  DOMAIN --> TIER[Router por superficie\nT1 ≤50 · T2 ≤5000 · T3 >5000]
+  DOMAIN --> PLAN[Plan limits\nha/mes · predios · tier3]
+  DOMAIN --> MEAS[Medición normalizada\nfuente · variable · valor · unidad · fecha]
+  CAT --> MEAS
+  COP --> CAT
+  TIER --> PLAN
+  MEAS --> JARVIS
+
+  API --> DATA[Persistencia]
+  DATA --> MYSQL[Drizzle/MySQL actual\nruntime demo]
+  DATA -. migración objetivo .-> PG[Supabase/Postgres\ntenants · RLS · solicitudes · consumo]
+  PG --> RLS[RLS + auditoría\ntenant_id · rol]
+
+  API --> WF[Workflows n8n]
+  WF --> WEEKLY[Semanal\nmonitoreo automático]
+  WF --> OND[On-demand\nrama por tier]
+  OND --> T1[Tier 1\nprocessing_api]
+  OND --> T2[Tier 2\nstatistical_api]
+  OND --> T3[Tier 3\nbatch_api · liberación explícita]
+  T1 --> LOG[medición · informe · alerta · consumo · log]
+  T2 --> LOG
+  T3 --> LOG
+  LOG --> PG
+
+  MEAS --> CDSE[Copernicus CDSE Statistical\nMVP: Sentinel-1/2]
+  COP -. Fase 2 .-> CMEMS[CMEMS · acuicultura]
+  COP -. Fase 2 .-> CLMS[CLMS · tierra/forestal]
+  COP -. Fase 2 .-> CEMS[CEMS · emergencias]
+  COP -. Fase 2 .-> CDS[CDS · clima]
+  COP -. Fase 2 .-> CAMS[CAMS · atmósfera]
+
+  SAFE[Controles\nallowlist · fallback\nno secretos cliente\nT3 no automático] --> DOMAIN
+  SAFE --> AUTH
+  SAFE --> WF
