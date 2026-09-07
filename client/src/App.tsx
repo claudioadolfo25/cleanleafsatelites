@@ -13,6 +13,7 @@ import ReportsDashboard from "./pages/ReportsDashboard";
 import ReportDetail from "./pages/ReportDetail";
 import UserProfile from "./pages/UserProfile";
 import GuideInterpreterPage from "./pages/GuideInterpreterPage";
+import PrediosPage from "./pages/PrediosPage";
 
 function Router() {
   return (
@@ -36,7 +37,7 @@ function Router() {
       <Route path={"/dashboard/predios"}>
         {() => (
           <DashboardLayout>
-            <Home />
+            <PrediosPage />
           </DashboardLayout>
         )}
       </Route>
