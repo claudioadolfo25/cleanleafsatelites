@@ -12,6 +12,7 @@ import SatelliteConfiguration from "./pages/SatelliteConfiguration";
 import ReportsDashboard from "./pages/ReportsDashboard";
 import ReportDetail from "./pages/ReportDetail";
 import UserProfile from "./pages/UserProfile";
+import GuideInterpreterPage from "./pages/GuideInterpreterPage";
 
 function Router() {
   return (
@@ -36,6 +37,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Home />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/guias/interpretar-informes"}>
+        {() => (
+          <DashboardLayout>
+            <GuideInterpreterPage />
           </DashboardLayout>
         )}
       </Route>

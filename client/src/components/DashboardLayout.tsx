@@ -12,9 +12,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { FileBarChart2, Home, LayoutDashboard, Leaf, LogOut, MapPinned, Settings, User } from "lucide-react";
+import { BookOpen, FileBarChart2, Home, LayoutDashboard, Leaf, LogOut, MapPinned, Settings, User } from "lucide-react";
 import { CSSProperties, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 const menuItems = [
@@ -22,6 +22,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MapPinned, label: "Predios", path: "/dashboard/predios" },
   { icon: FileBarChart2, label: "Informes", path: "/dashboard/informes" },
+  { icon: BookOpen, label: "Guía de Informes", path: "/dashboard/guias/interpretar-informes" },
   { icon: Settings, label: "Satélites", path: "/dashboard/configuracion/satelites" },
   { icon: User, label: "Mi Perfil", path: "/dashboard/configuracion/perfil" },
 ];
