@@ -59,8 +59,11 @@ create table if not exists solicitudes_analisis (
   superficie_ha numeric not null check (superficie_ha >= 0.5),
   tier text not null check (tier in ('tier1_predio', 'tier2_extendido', 'tier3_regional')),
   satelites_solicitados text[] not null default array['sentinel-2'],
-  estado text not null default 'pendiente' check (estado in ('pendiente', 'en_cola', 'procesando', 'completado', 'error', 'rechazada_catalogo', 'rechazada_plan')),
+  estado text not null default 'pendiente' check (estado in ('borrador', 'pendiente', 'en_cola', 'procesando', 'completado', 'error_reintentable', 'error_final', 'requiere_revision', 'cancelado', 'rechazada_catalogo', 'rechazada_plan')),
   motor_usado text check (motor_usado in ('processing_api', 'statistical_api', 'batch_api')),
+  variables_solicitadas text[] not null default array['ndvi'],
+  correlation_id text not null default gen_random_uuid()::text,
+  idempotency_key text not null,
   resultado_informe_id uuid,
   mensaje_error text,
   solicitado_por uuid references users(id),
@@ -180,4 +183,6 @@ create index if not exists idx_predios_tenant on predios(tenant_id);
 create index if not exists idx_mediciones_predio_fecha on mediciones(predio_id, fecha_adquisicion desc);
 create index if not exists idx_mediciones_satelite_variable on mediciones(satelite, variable);
 create index if not exists idx_solicitudes_tenant_estado on solicitudes_analisis(tenant_id, estado);
+create unique index if not exists uq_solicitudes_tenant_idempotency on solicitudes_analisis(tenant_id, idempotency_key);
 create index if not exists idx_api_keys_tenant_active on api_keys(tenant_id, activa);
+create unique index if not exists uq_mediciones_request_source_variable_date on mediciones(tenant_id, predio_id, solicitud_id, satelite, variable, fecha_adquisicion);

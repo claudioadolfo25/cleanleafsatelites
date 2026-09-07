@@ -6,6 +6,7 @@ import type { SatelliteDefinition, SatelliteId } from "@shared/satellite-catalog
 import { AlertTriangle, CheckCircle2, Leaf, Loader2, MapPinned, ScanSearch } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SatelliteSelector from "./SatelliteSelector";
 import CopernicusResourcePanel from "./CopernicusResourcePanel";
 
@@ -16,19 +17,20 @@ type SolicitudAnalisisFormProps = {
 const tierFromHectares = (hectares: number) => {
   if (hectares <= 50) return { label: "Predio", detail: "0,5–50 ha · análisis detallado" };
   if (hectares <= 5000) return { label: "Zona extendida", detail: "50,01–5.000 ha · visión territorial" };
-  return { label: "Regional", detail: ">5.000 ha · contexto regional (stub MVP)" };
+  return { label: "Regional · requiere evaluación", detail: ">5.000 ha · no se procesa automáticamente en el MVP" };
 };
 
 export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFormProps) {
   const [predio, setPredio] = useState("Las Quinas");
   const [hectareas, setHectareas] = useState("42");
   const [satellites, setSatellites] = useState<SatelliteId[]>(["sentinel-2"]);
+  const [selectedVariables, setSelectedVariables] = useState<Record<string, string>>({ "sentinel-2": "ndvi" });
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
   const { data: configStatus } = trpc.cleanleaf.configStatus.useQuery({ vertical: "agricultura" });
   const { data: copernicusResources = [] } = trpc.cleanleaf.resources.useQuery({ sector: "agricultura" });
   const createAnalysis = trpc.cleanleaf.createAnalysis.useMutation({
     onSuccess: result => {
-      toast.success("Análisis programado", { description: result.mensaje });
+      toast.success("Análisis creado", { description: (result as { mensaje?: string }).mensaje ?? "La solicitud fue validada." });
       onSuccess();
     },
     onError: error => toast.error("No pudimos crear la solicitud", { description: error.message }),
@@ -57,6 +59,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
       hectareas: numericHectares,
       vertical: "agricultura",
       satellites,
+      variables: satellites.map(satellite => selectedVariables[satellite] ?? (catalog as SatelliteDefinition[]).find(item => item.id === satellite)?.variables[0]?.variable ?? "ndvi"),
     });
   };
 
@@ -96,6 +99,26 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         </div>
         {catalogLoading ? <div className="h-32 animate-pulse rounded-xl bg-stone-100" /> : <SatelliteSelector satellites={catalog as SatelliteDefinition[]} selected={satellites} onChange={setSatellites} vertical="agricultura" />}
       </div>
+
+      {satellites.length > 0 ? (
+        <div className="space-y-2.5">
+          <Label className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Variables a consultar</Label>
+          {satellites.map(satelliteId => {
+            const definition = (catalog as SatelliteDefinition[]).find(item => item.id === satelliteId);
+            if (!definition) return null;
+            const value = selectedVariables[satelliteId] ?? definition.variables[0]?.variable;
+            return (
+              <div key={satelliteId} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3">
+                <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-stone-700">{definition.nombre}</p><p className="text-[11px] text-stone-400">{definition.variables.find(item => item.variable === value)?.descripcion}</p></div>
+                <Select value={value} onValueChange={next => setSelectedVariables(current => ({ ...current, [satelliteId]: next }))}>
+                  <SelectTrigger className="h-9 w-[145px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{definition.variables.map(variable => <SelectItem key={variable.variable} value={variable.variable}>{variable.variable} · {variable.unidad}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <CopernicusResourcePanel sector="agricultura" resources={copernicusResources} />
 

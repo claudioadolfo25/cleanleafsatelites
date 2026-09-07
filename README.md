@@ -63,6 +63,8 @@ La API versionada está representada por el namespace tRPC `apiV1`, con solicitu
 
 El diagnóstico técnico y las instrucciones para la continuación quirúrgica están en `docs/v7-diagnostic.md` y `docs/JULES_HANDOFF.md`. Antes de producción se debe ejecutar RLS real en Supabase, persistir solicitudes y consumo, resolver sesión/API key por tenant, conectar n8n con secretos y sustituir los stubs por proveedores reales.
 
+La auditoría de extremo a extremo y las correcciones aplicadas están en `docs/DIAGNOSTICO_FLUJOS.md`. El flujo demo ahora valida fuente-variable, enruta por tier, genera medición e informe base para Tier 1/2, devuelve `requiere_revision` para Tier 3 y conserva `correlationId` e `idempotencyKey`.
+
 ## Copernicus como catálogo de recursos
 
 Cleanleaf no trata Copernicus solo como una lista de satélites. `shared/copernicus-catalog.ts` organiza recursos por **sector**, **necesidad**, **variables**, **fuente oficial** y **fase de integración**. CDSE Statistical API queda como fuente MVP para agricultura y también como contrato común para acuicultura y forestal. CMEMS se ofrece como recurso futuro para temperatura, clorofila, corrientes y nivel del mar; CLMS para uso de suelo y vegetación; CEMS para inundaciones, incendios y sequía; CDS para contexto climático; y CAMS para atmósfera y humo. Los recursos futuros son visibles en la interfaz, pero permanecen desactivados hasta validar caso de uso, autenticación y límites.

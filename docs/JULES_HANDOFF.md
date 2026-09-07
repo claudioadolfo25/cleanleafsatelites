@@ -4,6 +4,8 @@
 
 No cambiar contratos de dominio sin actualizar las pruebas. La interfaz estable de solicitudes debe conservar `tier`, `satelitesSolicitados`, `estado`, `motorUsado`, `tiempoEstimado` y el envelope `{ data, error }` para la API versionada.
 
+El flujo demo actual agrega `variablesSolicitadas`, `correlationId`, `idempotencyKey`, `history` e `informe`. Tier 1 y Tier 2 llegan a informe base determinista; Tier 3 queda en `requiere_revision` y no consume cuota. La implementación real debe conservar estos semánticos aunque cambie la persistencia.
+
 ## Prioridad P0 — seguridad y persistencia
 
 1. Crear el proyecto Supabase de staging y aplicar `supabase/schema.sql`.
@@ -66,3 +68,11 @@ psql "$SUPABASE_DB_URL" -f tests/rls.test.sql
 ## No hacer
 
 No activar Sentinel Hub real, Stripe o WhatsApp en este PR. No permitir que una variable de entorno amplíe una allowlist satelital. No procesar Tier 3 automáticamente. No hacer cross-tenant desde un admin normal. No exponer secretos al frontend. No eliminar el caso de rechazo por plan ni las pruebas de configuración inválida.
+
+## Prioridad P0 — cerrar el producto final
+
+1. Persistir el informe base con fuentes, variables, periodo, hallazgos, recomendaciones y limitaciones. No entregar solo el valor NDVI.
+2. Implementar `GET /api/v1/solicitudes/:id` y `GET /api/v1/informes/:id` con respuestas explicativas cuando el informe aún no está listo.
+3. Usar `shared/analysis-state.ts` como referencia de transiciones y registrar actor, motivo, fecha y `correlation_id` en cada cambio.
+4. Sustituir el store demo de idempotencia por una restricción única en Supabase y una transacción que proteja mediciones, consumo, informes y alertas.
+5. Conservar Dify como capa posterior al informe determinista. Un fallo de Dify no puede impedir la entrega de datos, gráfico y recomendación base.

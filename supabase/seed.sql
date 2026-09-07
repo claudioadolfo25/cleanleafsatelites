@@ -33,10 +33,10 @@ insert into suscripciones (tenant_id, plan_id, estado) values
   ('00000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'trial')
 on conflict do nothing;
 
-insert into solicitudes_analisis (id, tenant_id, predio_id, superficie_ha, tier, satelites_solicitados, estado, motor_usado, solicitado_por) values
-  ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 0.5, 'tier1_predio', array['sentinel-2'], 'completado', 'processing_api', '30000000-0000-0000-0000-000000000001'),
-  ('40000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 800, 'tier2_extendido', array['sentinel-2','sentinel-1'], 'procesando', 'statistical_api', '30000000-0000-0000-0000-000000000001'),
-  ('40000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000005', 6000, 'tier3_regional', array['sentinel-2'], 'rechazada_plan', 'batch_api', '30000000-0000-0000-0000-000000000003')
+insert into solicitudes_analisis (id, tenant_id, predio_id, superficie_ha, tier, satelites_solicitados, variables_solicitadas, estado, motor_usado, solicitado_por, idempotency_key) values
+  ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 0.5, 'tier1_predio', array['sentinel-2'], array['ndvi'], 'completado', 'processing_api', '30000000-0000-0000-0000-000000000001', 'seed-a-tier1'),
+  ('40000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 800, 'tier2_extendido', array['sentinel-2','sentinel-1'], array['ndvi','sigma0_vv'], 'procesando', 'statistical_api', '30000000-0000-0000-0000-000000000001', 'seed-a-tier2'),
+  ('40000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000005', 6000, 'tier3_regional', array['sentinel-2'], array['ndvi'], 'requiere_revision', 'batch_api', '30000000-0000-0000-0000-000000000003', 'seed-b-tier3')
 on conflict (id) do nothing;
 
 insert into mediciones (tenant_id, predio_id, satelite, variable, valor, unidad, fecha_adquisicion)

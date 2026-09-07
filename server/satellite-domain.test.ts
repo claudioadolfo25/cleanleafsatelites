@@ -117,8 +117,37 @@ describe("creación de solicitud", () => {
       satellites: ["sentinel-3"],
       planId: "regional_pyme",
     });
-    expect(result).toMatchObject({ estado: "en_cola", tier: "tier2_extendido" });
+    expect(result).toMatchObject({ estado: "completado", tier: "tier2_extendido" });
     expect(result.medicionPreview.satelite).toBe("sentinel-3");
+    expect(result.informe.estado).toBe("completado");
+    expect(result.history).toEqual(["pendiente", "en_cola", "procesando", "completado"]);
+  });
+
+  it("rechaza combinaciones de satélite y variable incompatibles", async () => {
+    const caller = appRouter.createCaller({} as never);
+    await expect(caller.cleanleaf.createAnalysis({
+      predioId: "el-aromo",
+      predioNombre: "El Aromo",
+      hectareas: 31,
+      vertical: "agricultura",
+      satellites: ["sentinel-2"],
+      variables: ["sst"],
+    })).rejects.toThrow("INVALID_SATELLITE_VARIABLE");
+  });
+
+  it("repite una solicitud sin duplicar el resultado por idempotencyKey", async () => {
+    const caller = appRouter.createCaller({} as never);
+    const input = {
+      predioId: "las-quinas",
+      predioNombre: "Las Quinas",
+      hectareas: 42,
+      vertical: "agricultura" as const,
+      satellites: ["sentinel-2"] as const,
+      idempotencyKey: "idempotency-las-quinas-01",
+    };
+    const first = await caller.cleanleaf.createAnalysis(input);
+    const second = await caller.cleanleaf.createAnalysis(input);
+    expect(second).toEqual(first);
   });
 });
 
@@ -193,5 +222,13 @@ describe("catálogo Copernicus multi-sector", () => {
     const resources = getCopernicusResources("acuicultura");
     expect(resources.map(resource => resource.id)).toContain("cmems");
     expect(resources.find(resource => resource.id === "cmems")?.enabled).toBe(false);
+  });
+});
+
+describe("máquina de estados", () => {
+  it("rechaza transiciones inválidas y acepta el camino completo", async () => {
+    const { assertTransition } = await import("@shared/analysis-state");
+    expect(() => assertTransition("completado", "procesando")).toThrow("INVALID_STATE_TRANSITION");
+    expect(() => assertTransition("procesando", "completado")).not.toThrow();
   });
 });

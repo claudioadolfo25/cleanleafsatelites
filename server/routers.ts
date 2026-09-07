@@ -10,6 +10,9 @@ import {
 } from "@shared/satellite-catalog";
 import { interpretMeasurement } from "@shared/interpretation";
 import { getCopernicusResources, type Sector } from "@shared/copernicus-catalog";
+import { validateSatelliteVariable } from "@shared/analysis-validation";
+import { assertTransition, type AnalysisStatus } from "@shared/analysis-state";
+import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation-provider";
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
@@ -23,6 +26,7 @@ const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
 const planSchema = z.enum(["piloto", "regional_pyme", "region_completa"]);
 const sectorSchema = z.enum(["agricultura", "acuicultura", "forestal", "emergencias"]);
+const variableSchema = z.string().min(1);
 
 const demoDashboard = {
   tenant: {
@@ -59,18 +63,32 @@ const analysisInput = z.object({
   hectareas: z.number().positive().max(1_000_000),
   vertical: verticalSchema,
   satellites: z.array(satelliteSchema).min(1),
+  variables: z.array(variableSchema).default([]),
+  periodFrom: z.string().datetime().optional(),
+  periodTo: z.string().datetime().optional(),
+  correlationId: z.string().min(8).optional(),
+  idempotencyKey: z.string().min(8).optional(),
   planId: planSchema.default("piloto"),
   haMesUsadas: z.number().nonnegative().default(0),
   prediosActivos: z.number().int().nonnegative().default(1),
 });
 
 type AnalysisInput = z.infer<typeof analysisInput>;
+const idempotencyStore = new Map<string, unknown>();
+const observationProvider = new MockCopernicusProvider();
 
 async function createAnalysisRequest(input: AnalysisInput) {
   const satellites = input.satellites as SatelliteId[];
   if (!validarSatelitesSolicitados(input.vertical, satellites)) {
     throw new Error(satelliteValidationMessage(input.vertical, satellites));
   }
+
+  const variables = satellites.map((satellite, index) => input.variables[index] ?? satelliteCatalog[satellite].variables[0]?.variable).filter((value): value is string => Boolean(value));
+  satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
+  const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const idempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
+  const previous = idempotencyStore.get(idempotencyKey);
+  if (previous) return previous;
 
   const tier = getTierForSuperficie(input.hectareas);
   const planResult = validatePlanLimits(input.planId as PlanId, tier, input.hectareas, {
@@ -79,22 +97,56 @@ async function createAnalysisRequest(input: AnalysisInput) {
   });
   if (!planResult.allowed) throw new Error(`${planResult.code}: ${planResult.message}`);
 
+  const id = `sol-${Date.now()}`;
+  if (tier === "tier3_regional") {
+    const regionalResult = {
+      id,
+      correlationId,
+      idempotencyKey,
+      estado: "requiere_revision" as const,
+      history: ["pendiente", "requiere_revision"] as AnalysisStatus[],
+      tier,
+      tierLabel: tierLabel(tier),
+      motorUsado: processingModeForTier(tier),
+      tiempoEstimado: tierWaitEstimate(tier),
+      predioNombre: input.predioNombre,
+      satelitesSolicitados: satellites,
+      variablesSolicitadas: variables,
+      mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
+    };
+    idempotencyStore.set(idempotencyKey, regionalResult);
+    return regionalResult;
+  }
+
   const firstSatellite = satellites[0];
-  const result = await querySentinel(input.predioId, firstSatellite);
-  const estado = tier === "tier3_regional" ? "pendiente" : "en_cola";
-  return {
-    id: `sol-${Date.now()}`,
-    estado,
+  const firstVariable = variables[0];
+  const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
+  assertTransition(history[0], history[1]);
+  assertTransition(history[1], history[2]);
+  const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo });
+  const report = buildAnalysisReport({ id, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
+  history.push("completado");
+  assertTransition(history[2], history[3]);
+  const completedResult = {
+    id,
+    correlationId,
+    idempotencyKey,
+    estado: "completado" as const,
+    history,
     tier,
     tierLabel: tierLabel(tier),
     motorUsado: processingModeForTier(tier),
     tiempoEstimado: tierWaitEstimate(tier),
     predioNombre: input.predioNombre,
     satelitesSolicitados: satellites,
+    variablesSolicitadas: variables,
     medicionPreview: result,
     interpretacionPreview: interpretMeasurement(result),
+    informe: report,
     mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
+  idempotencyStore.set(idempotencyKey, completedResult);
+  return completedResult;
 }
 
 export const appRouter = router({
