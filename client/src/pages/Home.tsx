@@ -36,6 +36,7 @@ const navigation = [
   { label: "Mis predios", icon: MapPinned, href: "#predios" },
   { label: "Análisis", icon: ScanLine, href: "#analisis" },
   { label: "Informes", icon: FileText, href: "#informes" },
+  { label: "Fuentes satelitales", icon: Settings, href: "/dashboard/configuracion/satelites" },
 ];
 
 const satelliteMeta = {
@@ -102,7 +103,7 @@ export default function Home() {
           <Progress value={(data.tenant.usoHa / data.tenant.limiteHa) * 100} className="mt-3 h-1.5 bg-white [&>div]:bg-emerald-700" />
           <button onClick={() => toast.info("Plan Piloto Araucanía", { description: "El periodo de evaluación finaliza el 30 de septiembre." })} className="mt-3 text-xs font-semibold text-emerald-800 transition hover:text-emerald-950">Ver detalles del plan →</button>
         </div>
-        <button onClick={() => toast.info("Configuración", { description: "La configuración de la cuenta estará disponible próximamente." })} className="mt-5 flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"><Settings size={18} className="text-stone-400" />Configuración</button>
+        <a href="/dashboard/configuracion/satelites" className="mt-5 flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"><Settings size={18} className="text-stone-400" />Configuración satelital</a>
       </aside>
 
       <main className="lg:pl-[244px]">

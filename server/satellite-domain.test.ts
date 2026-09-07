@@ -14,6 +14,7 @@ import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-r
 import { validatePlanLimits } from "@shared/plan-limits";
 import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
+import { guidanceForNeed, satelliteGuidance } from "@shared/satellite-guidance";
 import { appRouter } from "./routers";
 
 describe("catálogo satelital por vertical", () => {
@@ -230,5 +231,19 @@ describe("máquina de estados", () => {
     const { assertTransition } = await import("@shared/analysis-state");
     expect(() => assertTransition("completado", "procesando")).toThrow("INVALID_STATE_TRANSITION");
     expect(() => assertTransition("procesando", "completado")).not.toThrow();
+  });
+});
+
+
+describe("guía de elección satelital", () => {
+  it("recomienda Sentinel-2 para vigor y Sentinel-1 como respaldo con nubosidad", () => {
+    expect(guidanceForNeed("vigor").recommendations).toEqual(["sentinel-2"]);
+    expect(guidanceForNeed("nubosidad").recommendations).toEqual(["sentinel-2", "sentinel-1"]);
+    expect(satelliteGuidance["sentinel-1"].limitations.join(" ")).toContain("interpretación");
+  });
+
+  it("mantiene Sentinel-3 como orientación de fase 2 para acuicultura", () => {
+    expect(guidanceForNeed("acuicultura").recommendations).toContain("sentinel-3");
+    expect(satelliteGuidance["sentinel-3"].phase).toBe("fase_2");
   });
 });
