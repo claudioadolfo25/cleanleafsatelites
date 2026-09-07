@@ -9,6 +9,7 @@ import {
   type Vertical,
 } from "@shared/satellite-catalog";
 import { interpretMeasurement } from "@shared/interpretation";
+import { getCopernicusResources, type Sector } from "@shared/copernicus-catalog";
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
@@ -21,6 +22,7 @@ import { publicProcedure, router } from "./_core/trpc";
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
 const planSchema = z.enum(["piloto", "regional_pyme", "region_completa"]);
+const sectorSchema = z.enum(["agricultura", "acuicultura", "forestal", "emergencias"]);
 
 const demoDashboard = {
   tenant: {
@@ -112,6 +114,7 @@ export const appRouter = router({
       return getSatelitesHabilitados(vertical).map(id => satelliteCatalog[id]);
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
+    resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({

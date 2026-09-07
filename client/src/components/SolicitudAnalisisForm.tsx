@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Leaf, Loader2, MapPinned, ScanSearch } fro
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import SatelliteSelector from "./SatelliteSelector";
+import CopernicusResourcePanel from "./CopernicusResourcePanel";
 
 type SolicitudAnalisisFormProps = {
   onSuccess: () => void;
@@ -24,6 +25,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
   const [satellites, setSatellites] = useState<SatelliteId[]>(["sentinel-2"]);
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
   const { data: configStatus } = trpc.cleanleaf.configStatus.useQuery({ vertical: "agricultura" });
+  const { data: copernicusResources = [] } = trpc.cleanleaf.resources.useQuery({ sector: "agricultura" });
   const createAnalysis = trpc.cleanleaf.createAnalysis.useMutation({
     onSuccess: result => {
       toast.success("Análisis programado", { description: result.mensaje });
@@ -94,6 +96,8 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         </div>
         {catalogLoading ? <div className="h-32 animate-pulse rounded-xl bg-stone-100" /> : <SatelliteSelector satellites={catalog as SatelliteDefinition[]} selected={satellites} onChange={setSatellites} vertical="agricultura" />}
       </div>
+
+      <CopernicusResourcePanel sector="agricultura" resources={copernicusResources} />
 
       {configStatus && !configStatus.valid ? (
         <div className="flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900">

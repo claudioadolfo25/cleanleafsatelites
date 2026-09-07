@@ -12,6 +12,7 @@ import {
 } from "@shared/satellite-service";
 import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
 import { validatePlanLimits } from "@shared/plan-limits";
+import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
 import { appRouter } from "./routers";
 
@@ -177,5 +178,20 @@ describe("API v1 multi-plataforma", () => {
     expect(response.data).toBeNull();
     expect(response.error?.code).toBe("REQUEST_REJECTED");
     expect(response.error?.message).toContain("TIER3_NOT_ALLOWED");
+  });
+});
+
+describe("catálogo Copernicus multi-sector", () => {
+  it("mantiene CDSE Statistical como fuente MVP para agricultura y deja CMEMS fuera", () => {
+    const resources = getCopernicusResources("agricultura");
+    expect(resources.map(resource => resource.id)).toContain("cdse-statistical");
+    expect(resources.map(resource => resource.id)).not.toContain("cmems");
+    expect(getActiveCopernicusResources("agricultura").every(resource => resource.enabled)).toBe(true);
+  });
+
+  it("ofrece recursos marinos para acuicultura sin activarlos por accidente", () => {
+    const resources = getCopernicusResources("acuicultura");
+    expect(resources.map(resource => resource.id)).toContain("cmems");
+    expect(resources.find(resource => resource.id === "cmems")?.enabled).toBe(false);
   });
 });

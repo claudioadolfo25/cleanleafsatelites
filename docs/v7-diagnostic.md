@@ -21,6 +21,7 @@ El proyecto **no debe declararse todavía producción-ready**. La persistencia o
 | Supabase | Schema completo objetivo con tenants, users, planes, suscripciones, solicitudes, mediciones, informes, consumo, alertas, api_keys y logs | Artefacto de migración |
 | Seed | Dos clientes, usuarios admin/viewer, super-admin de Ops, planes, predios, solicitudes y mediciones | Artefacto de prueba |
 | n8n | Workflow semanal y workflow bajo demanda con rama por tier | JSON stub, no conectado |
+| Copernicus | Catálogo por sector y necesidad con CDSE MVP y CMEMS/CLMS/CEMS/CDS/CAMS en Fase 2 | Contrato de producto; OAuth2 y APIs reales pendientes |
 | Tests | Dominio satelital, fail-safe, contrato de medición, interpretación, plan-limits y API v1 | Suite local |
 
 ## Validación ejecutada
@@ -50,6 +51,12 @@ El frontend sigue llamando tRPC directamente. La ruta `apiV1` existe como contra
 La ruta de solicitud tiene tres barreras. Primero, valida que la vertical permita los satélites pedidos. Segundo, calcula el tier por superficie. Tercero, bloquea el tier regional si el plan no tiene `permiteTier3Regional` o si se supera el consumo mensual. Sentinel-4, Sentinel-5P y Sentinel-6 no pueden aparecer por configuración.
 
 El Tier 1 se enruta a `processing_api`, el Tier 2 a `statistical_api` y el Tier 3 a `batch_api`. El Tier 3 se devuelve como `pendiente` y no se libera automáticamente. Esta decisión evita saturar la cola con una solicitud regional.
+
+## Diagnóstico Copernicus
+
+Copernicus quedó modelado como un catálogo de recursos y no como una simple lista de misiones. Para agricultura, CDSE Statistical API es la fuente activa del MVP y cubre índices vegetales y radar mediante el contrato existente. Para acuicultura, CMEMS aparece como recurso futuro para temperatura, clorofila, corrientes y nivel del mar. CLMS, CEMS, CDS y CAMS quedan visibles como capacidades de fase 2 para tierra, emergencias, clima y atmósfera. Ningún recurso futuro se activa por configuración accidental.
+
+La propuesta Copernicus incluye afirmaciones de cuota y endpoint que deben verificarse contra la cuenta y documentación vigentes antes de producción. Esta iteración no crea credenciales ni realiza llamadas externas. Jules debe implementar OAuth2 server-side, caché de token, timeouts, reintentos acotados, logging de proveedor y límites de consumo antes de reemplazar los stubs.
 
 ## Recomendación de salida a producción
 

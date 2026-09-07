@@ -30,6 +30,14 @@ No cambiar contratos de dominio sin actualizar las pruebas. La interfaz estable 
 4. Conectar Dify usando servidor-side secrets, timeout y fallback. El dashboard no debe romperse si Dify está caído.
 5. Crear tres agentes: onboarding, interpretación y soporte. El agente de interpretación debe recibir `satelite`, `variable`, `valor`, `unidad`, `tier` y, para Tier 2/3, indicar que la lectura es agregada por sub-área.
 
+## Prioridad P1 — Copernicus por sector
+
+1. Usar `shared/copernicus-catalog.ts` como catálogo de producto. No habilitar un recurso solo porque exista en Copernicus; cada sector necesita una política explícita.
+2. Implementar `src/lib/copernicus.ts` o equivalente server-side con OAuth2 client credentials, caché de token y timeout. Las credenciales deben vivir en secretos del servidor.
+3. Conectar primero CDSE Statistical API para Sentinel-2 y Sentinel-1. Mantener el contrato de medición actual y guardar proveedor, colección, fecha, variable y unidad.
+4. Para acuicultura, validar CMEMS antes de activar el recurso. Para CLMS, CEMS, CDS y CAMS crear pruebas de contrato y activarlos solo con un caso de uso aprobado.
+5. Registrar consumo, errores de proveedor y latencia por fuente. Una caída de Copernicus debe dejar la solicitud en `error` con mensaje accionable, no bloquear el dashboard.
+
 ## Prioridad P2 — frontend y producción
 
 1. Conectar `PredioMap` a Leaflet Draw y calcular hectáreas con una librería geoespacial validada antes de guardar.
