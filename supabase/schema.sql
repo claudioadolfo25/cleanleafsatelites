@@ -65,6 +65,7 @@ create table if not exists solicitudes_analisis (
   correlation_id text not null default gen_random_uuid()::text,
   idempotency_key text not null,
   resultado_informe_id uuid,
+  resultado_json jsonb not null default '{}'::jsonb,
   mensaje_error text,
   solicitado_por uuid references users(id),
   creado_en timestamptz not null default now(),
