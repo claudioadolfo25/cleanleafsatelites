@@ -10,7 +10,14 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const trpcMiddleware = createExpressMiddleware({
   router: appRouter,
-  createContext,
+  createContext: async (opts) => {
+    try {
+      return await createContext(opts);
+    } catch (error) {
+      console.warn("[tRPC Context Warning] Database or OAuth unavailable in serverless environment, falling back to public context:", error);
+      return { req: opts.req, res: opts.res, user: null };
+    }
+  },
   onError: ({ error, path }) => {
     console.error(`[tRPC Error] path=${path}:`, error);
   },
