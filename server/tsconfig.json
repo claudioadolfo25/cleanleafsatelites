@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["**/*", "../shared/**/*"],
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["esnext"],
+    "types": ["node"],
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    }
+  }
+}

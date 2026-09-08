@@ -1,5 +1,6 @@
 import "dotenv/config";
-import express from "express";
+import cors from "cors";
+import express, { type Request, type Response } from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -31,11 +32,28 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Configure CORS using environment variable
+  const corsOrigin = process.env.CORS_ORIGIN || "*";
+  app.use(
+    cors({
+      origin: corsOrigin === "*" ? true : corsOrigin,
+      credentials: true,
+    })
+  );
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Health check endpoint for Railway / Render / PaaS load balancers
+  app.get("/health", (_req: Request, res: Response) => {
+    res.status(200).json({ ok: true, service: "cleanleaf-api" });
+  });
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -58,8 +76,9 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  const host = process.env.HOST || "0.0.0.0";
+  server.listen(port, host, () => {
+    console.log(`Cleanleaf API Server running on http://${host}:${port}/ (CORS: ${corsOrigin})`);
   });
 }
 

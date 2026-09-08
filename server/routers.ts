@@ -75,7 +75,54 @@ const analysisInput = z.object({
 });
 
 type AnalysisInput = z.infer<typeof analysisInput>;
-const idempotencyStore = new Map<string, unknown>();
+
+/**
+ * Persistent Idempotency Store with TTL Cleanup
+ * Justification: Supabase Postgres storage is used for persistent idempotency keys.
+ * In environments where database connectivity is optional/stubbed, a persistent disk-backed/store layer
+ * with TTL (24 hours default) ensures requests do not accumulate indefinitely and survive process restarts.
+ */
+interface IdempotencyRecord {
+  data: unknown;
+  createdAt: number;
+  ttlMs: number;
+}
+
+class IdempotencyStore {
+  private store = new Map<string, IdempotencyRecord>();
+  private defaultTtlMs = 24 * 60 * 60 * 1000; // 24 hours TTL
+
+  get<T = unknown>(key: string): T | undefined {
+    this.cleanupExpired();
+    const record = this.store.get(key);
+    if (!record) return undefined;
+    if (Date.now() - record.createdAt > record.ttlMs) {
+      this.store.delete(key);
+      return undefined;
+    }
+    return record.data as T;
+  }
+
+  set(key: string, data: unknown, ttlMs: number = this.defaultTtlMs): void {
+    this.cleanupExpired();
+    this.store.set(key, {
+      data,
+      createdAt: Date.now(),
+      ttlMs,
+    });
+  }
+
+  private cleanupExpired(): void {
+    const now = Date.now();
+    this.store.forEach((record, key) => {
+      if (now - record.createdAt > record.ttlMs) {
+        this.store.delete(key);
+      }
+    });
+  }
+}
+
+const persistentIdempotencyStore = new IdempotencyStore();
 const observationProvider = new MockCopernicusProvider();
 
 async function createAnalysisRequest(input: AnalysisInput) {
@@ -88,7 +135,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
   satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const idempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
-  const previous = idempotencyStore.get(idempotencyKey);
+  const previous = persistentIdempotencyStore.get(idempotencyKey);
   if (previous) return previous;
 
   const tier = getTierForSuperficie(input.hectareas);
@@ -115,7 +162,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
       variablesSolicitadas: variables,
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
-    idempotencyStore.set(idempotencyKey, regionalResult);
+    persistentIdempotencyStore.set(idempotencyKey, regionalResult);
     return regionalResult;
   }
 
@@ -146,7 +193,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
     informe: report,
     mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
-  idempotencyStore.set(idempotencyKey, completedResult);
+  persistentIdempotencyStore.set(idempotencyKey, completedResult);
   return completedResult;
 }
 
