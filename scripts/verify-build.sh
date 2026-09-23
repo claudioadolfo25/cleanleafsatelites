@@ -13,9 +13,9 @@ pnpm test
 echo "3. Building Client & Server Bundles (pnpm build)..."
 pnpm build
 
-echo "4. Verifying Client Assets Output (dist/public)..."
-if [ ! -f "dist/public/index.html" ]; then
-  echo "❌ Error: dist/public/index.html is missing!"
+echo "4. Verifying Client Assets Output (dist/index.html)..."
+if [ ! -f "dist/index.html" ]; then
+  echo "❌ Error: dist/index.html is missing!"
   exit 1
 fi
 

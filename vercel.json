@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm build:client",
-  "outputDirectory": "dist/public",
+  "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
     {
