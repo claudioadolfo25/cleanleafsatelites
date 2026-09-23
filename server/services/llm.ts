@@ -1,13 +1,19 @@
-export interface ToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-}
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 
+// ============================================================================
+// TIPOS (Deben coincidir con server/agent/types.ts o shared/types.ts)
+// ============================================================================
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
-  toolCalls?: ToolCall[];
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface ToolDefinition {
@@ -15,19 +21,97 @@ export interface ToolDefinition {
   function: {
     name: string;
     description: string;
-    parameters: Record<string, unknown>;
+    parameters: Record<string, any>;
   };
 }
 
 export interface LLMResponse {
   content: string;
-  toolCalls?: ToolCall[];
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
 }
 
 export interface LLMService {
   chat(messages: ChatMessage[], tools?: ToolDefinition[]): Promise<LLMResponse>;
 }
 
+// ============================================================================
+// IMPLEMENTACIÓN REAL: OpenAIService
+// ============================================================================
+export class OpenAIService implements LLMService {
+  private client: OpenAI;
+  private model: string;
+
+  constructor(apiKey: string, model: string = "gpt-4o") {
+    this.client = new OpenAI({ apiKey });
+    this.model = model;
+  }
+
+  async chat(messages: ChatMessage[], tools?: ToolDefinition[]): Promise<LLMResponse> {
+    try {
+      // 1. Mapear mensajes al formato estricto de OpenAI
+      const openaiMessages: ChatCompletionMessageParam[] = messages.map((msg) => {
+        if (msg.role === "assistant" && msg.tool_calls) {
+          return {
+            role: "assistant",
+            content: msg.content,
+            tool_calls: msg.tool_calls as any,
+          };
+        }
+        if (msg.role === "tool") {
+          return {
+            role: "tool",
+            content: msg.content,
+            tool_call_id: msg.tool_call_id!,
+            name: msg.name,
+          };
+        }
+        return {
+          role: msg.role as "system" | "user",
+          content: msg.content,
+        };
+      });
+
+      // 2. Mapear herramientas al formato de OpenAI
+      const openaiTools: ChatCompletionTool[] | undefined = tools?.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.function.name,
+          description: tool.function.description,
+          parameters: tool.function.parameters,
+        },
+      }));
+
+      // 3. Llamar a la API
+      const response = await this.client.chat.completions.create({
+        model: this.model,
+        messages: openaiMessages,
+        tools: openaiTools,
+        tool_choice: "auto", // Permite al modelo decidir si usa una herramienta
+      });
+
+      const choice = response.choices[0];
+      const message = choice?.message;
+
+      return {
+        content: message?.content || "",
+        tool_calls: message?.tool_calls as any,
+      };
+    } catch (error) {
+      console.error("❌ OpenAI API Error:", error);
+      // Fallback de emergencia: si falla la API, devolvemos un error controlado
+      // en lugar de romper todo el flujo del agente.
+      throw new Error("Fallo en la comunicación con el modelo de lenguaje (OpenAI).");
+    }
+  }
+}
+
+// ============================================================================
+// IMPLEMENTACIÓN MOCK: Fallback seguro
+// ============================================================================
 export class MockLLMService implements LLMService {
   async chat(messages: ChatMessage[], _tools?: ToolDefinition[]): Promise<LLMResponse> {
     const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || "";
@@ -64,9 +148,19 @@ export class MockLLMService implements LLMService {
   }
 }
 
+// ============================================================================
+// FÁBRICA: Decisor de implementación
+// ============================================================================
 export function createLLMService(): LLMService {
-  if (process.env.LLM_PROVIDER === "openai" && process.env.OPENAI_API_KEY) {
-    // Return OpenAIService implementation when credentials configured
+  const provider = process.env.LLM_PROVIDER?.toLowerCase();
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_MODEL || "gpt-4o";
+
+  if (provider === "openai" && apiKey && apiKey.length > 10) {
+    console.log("✅ Agente 44.05: Conectado a OpenAI (Modelo:", model, ")");
+    return new OpenAIService(apiKey, model);
   }
+
+  console.log("🛡️ Agente 44.05: Ejecutando en modo MOCK (Sin API Key válida)");
   return new MockLLMService();
 }
