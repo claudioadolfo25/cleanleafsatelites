@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SatelliteSelector from "./SatelliteSelector";
 import CopernicusResourcePanel from "./CopernicusResourcePanel";
+import ParcelMap from "./ParcelMap";
 
 type SolicitudAnalisisFormProps = {
   onSuccess: () => void;
@@ -23,6 +24,7 @@ const tierFromHectares = (hectares: number) => {
 export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFormProps) {
   const [predio, setPredio] = useState("Las Quinas");
   const [hectareas, setHectareas] = useState("42");
+  const [geoJsonString, setGeoJsonString] = useState<string>("");
   const [satellites, setSatellites] = useState<SatelliteId[]>(["sentinel-2"]);
   const [selectedVariables, setSelectedVariables] = useState<Record<string, string>>({ "sentinel-2": "ndvi" });
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
@@ -65,9 +67,21 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
 
   return (
     <form className="space-y-5" onSubmit={submit}>
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Delimitar Parcela en el Mapa</Label>
+        <ParcelMap
+          onPolygonChange={(geoJson, areaHa) => {
+            setGeoJsonString(geoJson);
+            if (areaHa > 0) {
+              setHectareas(areaHa.toString());
+            }
+          }}
+        />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
         <div className="space-y-2">
-          <Label htmlFor="predio" className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Predio</Label>
+          <Label htmlFor="predio" className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Nombre del Predio</Label>
           <div className="relative">
             <MapPinned className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
             <Input id="predio" value={predio} onChange={event => setPredio(event.target.value)} className="h-11 border-stone-200 bg-stone-50 pl-9 text-stone-800 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20" />
