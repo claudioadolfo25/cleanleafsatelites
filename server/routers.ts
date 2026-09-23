@@ -18,6 +18,8 @@ import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@
 import { querySentinel, tierLabel } from "@shared/satellite-service";
 import { getReport, listReports } from "@shared/report-catalog";
 import { getIdempotentAnalysis, setIdempotentAnalysis } from "./idempotency";
+import { runAgent } from "./agent/agent";
+import { calcularConfianza } from "./services/confidence";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -178,6 +180,83 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+  parcelas: router({
+    list: publicProcedure.query(() => [
+      { id: "parc-jalisco-01", nombre: "Lote 3 Norte - Maíz", areaHa: 45.5, poligonoGeojson: '{"type":"Polygon","coordinates":[[[-103.3,20.6],[-103.3,20.7],[-103.2,20.7],[-103.2,20.6],[-103.3,20.6]]]}' },
+    ]),
+    getById: publicProcedure.input(z.object({ id: z.string() })).query(({ input }) => ({
+      id: input.id,
+      nombre: "Lote 3 Norte - Maíz",
+      areaHa: 45.5,
+      poligonoGeojson: '{"type":"Polygon","coordinates":[[[-103.3,20.6],[-103.3,20.7],[-103.2,20.7],[-103.2,20.6],[-103.3,20.6]]]}',
+    })),
+    create: publicProcedure.input(z.object({ nombre: z.string(), poligonoGeojson: z.string(), areaHa: z.number() })).mutation(({ input }) => ({
+      id: `parc-${Date.now()}`,
+      ...input,
+    })),
+  }),
+  temporadas: router({
+    list: publicProcedure.query(() => [
+      { id: "temp-2026", parcelaId: "parc-jalisco-01", ciclo: "2026-2027", faseActual: 4, metaRendimientoTonHa: 14.5 },
+    ]),
+    getById: publicProcedure.input(z.object({ id: z.string() })).query(({ input }) => ({
+      id: input.id,
+      parcelaId: "parc-jalisco-01",
+      ciclo: "2026-2027",
+      faseActual: 4,
+      metaRendimientoTonHa: 14.5,
+    })),
+    advancePhase: publicProcedure.input(z.object({ temporadaId: z.string(), targetPhase: z.number().int().min(0).max(5) })).mutation(({ input }) => ({
+      success: true,
+      temporadaId: input.temporadaId,
+      faseActual: input.targetPhase,
+    })),
+  }),
+  alertas: router({
+    list: publicProcedure.query(() => {
+      const c1 = calcularConfianza({ validObservations: 3, cloudCoverageAvg: 12, daysSinceLastObservation: 7, trendConsistency: "consistente" });
+      const c2 = calcularConfianza({ validObservations: 2, cloudCoverageAvg: 28, daysSinceLastObservation: 14, trendConsistency: "parcial" });
+      const c3 = calcularConfianza({ validObservations: 1, cloudCoverageAvg: 65, daysSinceLastObservation: 25, trendConsistency: "consistente" });
+
+      return [
+        { id: "alt-101", zona: "Zona Norte", tipo: "bajo_vigor", deteccion: "Caída de 18% en NDVI", confianza: c1.level, factores: c1.factors, leida: false },
+        { id: "alt-102", zona: "Zona Sur", tipo: "estres_hidrico", deteccion: "Métrica radar indica suelo seco", confianza: c2.level, factores: c2.factors, leida: false },
+        { id: "alt-103", zona: "Zona Este", tipo: "posible_anomalia", deteccion: "Nubosidad alta en última toma", confianza: c3.level, factores: c3.factors, leida: true },
+      ];
+    }),
+    markAsRead: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => ({ success: true, id: input.id, leida: true })),
+  }),
+  labores: router({
+    list: publicProcedure.query(() => [
+      { id: "lab-1", fase: 3, tipo: "Siembra", fecha: "2024-05-10", descripcion: "Siembra de maíz híbrido a 75,000 pl/ha" },
+      { id: "lab-2", fase: 4, tipo: "Fertilización", fecha: "2024-06-15", descripcion: "Primera aplicación de nitrógeno en V4" },
+    ]),
+    create: publicProcedure.input(z.object({ temporadaId: z.string(), fase: z.number(), tipo: z.string(), fecha: z.string(), descripcion: z.string() })).mutation(({ input }) => ({
+      id: `lab-${Date.now()}`,
+      ...input,
+    })),
+  }),
+  aprendizaje: router({
+    create: publicProcedure.input(z.object({ alertaId: z.string(), accionUsuario: z.string(), resultado: z.string().optional(), fueUtil: z.boolean().optional() })).mutation(({ input }) => ({
+      id: `apr-${Date.now()}`,
+      ...input,
+    })),
+  }),
+  agente: router({
+    chat: publicProcedure
+      .input(
+        z.object({
+          mensaje: z.string().min(1),
+          parcela_id: z.string().default("parc-jalisco-01"),
+          temporada_id: z.string().default("temp-2026"),
+          fase_actual: z.number().default(4),
+          alerta_id: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await runAgent(input);
+      }),
   }),
   cleanleaf: router({
     dashboard: publicProcedure.query(() => demoDashboard),
