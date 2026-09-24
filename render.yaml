@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: agropulso-api
+    env: node
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://agropulso.vercel.app
+
+  - type: worker
+    name: agropulso-worker
+    env: node
+    buildCommand: pnpm install && pnpm build
+    startCommand: node dist/worker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: cron
+    name: agropulso-cron
+    env: node
+    schedule: "0 2 * * *"
+    buildCommand: pnpm install && pnpm build
+    startCommand: node dist/cron.js
+    envVars:
+      - key: NODE_ENV
+        value: production

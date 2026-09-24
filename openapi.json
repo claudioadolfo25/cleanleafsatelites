@@ -1,0 +1,104 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AgroPulso REST API",
+    "version": "1.0.0",
+    "description": "API REST versionada /api/v1 para el monitoreo agrícola satelital multi-tenant AgroPulso."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Base API V1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check del servidor API",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/predios": {
+      "get": {
+        "summary": "Listar predios del tenant activo",
+        "responses": { "200": { "description": "Lista de predios" } }
+      },
+      "post": {
+        "summary": "Crear predio con polígono",
+        "responses": { "201": { "description": "Predio creado" } }
+      }
+    },
+    "/solicitudes": {
+      "post": {
+        "summary": "Solicitar análisis satelital",
+        "responses": { "202": { "description": "Solicitud encolada" } }
+      }
+    },
+    "/informes": {
+      "get": {
+        "summary": "Listar informes generados",
+        "responses": { "200": { "description": "Lista de informes" } }
+      }
+    },
+    "/informes/{id}": {
+      "get": {
+        "summary": "Obtener detalle de un informe",
+        "responses": { "200": { "description": "Detalle del informe" } }
+      }
+    },
+    "/alertas": {
+      "get": {
+        "summary": "Listar alertas agronómicas",
+        "responses": { "200": { "description": "Lista de alertas" } }
+      }
+    },
+    "/bitacora": {
+      "get": {
+        "summary": "Obtener bitácora de labores",
+        "responses": { "200": { "description": "Historial de labores" } }
+      },
+      "post": {
+        "summary": "Registrar labor agrícola",
+        "responses": { "201": { "description": "Labor registrada" } }
+      }
+    },
+    "/ciclos": {
+      "get": {
+        "summary": "Obtener ciclos de campaña",
+        "responses": { "200": { "description": "Lista de ciclos" } }
+      },
+      "post": {
+        "summary": "Crear nuevo ciclo de campaña",
+        "responses": { "201": { "description": "Ciclo creado" } }
+      }
+    },
+    "/catalogo/satelites": {
+      "get": {
+        "summary": "Obtener catálogo de satélites habilitados por vertical",
+        "responses": { "200": { "description": "Catálogo satelital" } }
+      }
+    },
+    "/consumo": {
+      "get": {
+        "summary": "Obtener consumo mensual procesado por tenant",
+        "responses": { "200": { "description": "Registro de consumo" } }
+      }
+    }
+  }
+}
