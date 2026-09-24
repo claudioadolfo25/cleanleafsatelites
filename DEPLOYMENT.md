@@ -8,37 +8,13 @@ Cleanleaf es un SaaS de monitoreo satelital agrícola construido con un modelo *
 
 ---
 
-## Configuración de Vercel (`vercel.json`)
+## Configuración de Vercel (Default Zero-Config Deployment)
 
-El archivo `vercel.json` en la raíz define cómo Vercel empaqueta y enruta la aplicación:
-
-```json
-{
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm build",
-  "outputDirectory": "dist/public",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "server/**"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-```
-
-### Puntos Clave de Configuración:
-1. **`functions["api/index.ts"].includeFiles = "server/**"`**: Le indica a Vercel NFT (Node File Trace) que incluya todos los archivos del directorio `server/` dentro del paquete de la función serverless `/api/index`, resolviendo cualquier error `ERR_MODULE_NOT_FOUND`.
-2. **`rewrites`**: Dirige todas las llamadas `/api/*` hacia la función serverless `api/index.ts` y el resto de las rutas al SPA (`/index.html`).
-3. **Punto Único de Entrada en `api/`**: `api/index.ts` es el único entrypoint serverless. Los archivos compilados `api/*.js` se ignoran en `.gitignore`.
+Cleanleaf está optimizado para funcionar con la detección automática de Vercel sobre `pnpm`:
+- **Build Command**: `pnpm build`
+- **Output Directory**: `dist/public`
+- **Root Directory**: `./` (raíz del repositorio)
+- **Serverless Entrypoint**: Vercel detecta automáticamente `api/index.ts` como la función serverless principal. Los archivos compilados `api/*.js` se ignoran en `.gitignore`.
 
 ---
 
