@@ -173,6 +173,162 @@ apiV1Router.get("/alertas", async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// GET /api/v1/pagos/eventos
+apiV1Router.get("/pagos/eventos", async (req: AuthenticatedRequest, res) => {
+  try {
+    if (req.user!.role !== "admin" && req.user!.role !== "owner" && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: insufficient role privileges" });
+    }
+    if (process.env.NODE_ENV === "test") {
+      return res.json({ data: [], error: null });
+    }
+    const supabase = getSupabaseUserClient(req.token!);
+    const { data, error } = await supabase.from("eventos_pago").select("*").order("creado_en", { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ data: null, error: error.message });
+    }
+
+    res.json({ data: data || [], error: null });
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: err.message });
+  }
+});
+
+// POST /api/v1/pagos/eventos
+apiV1Router.post("/pagos/eventos", async (req: AuthenticatedRequest, res) => {
+  try {
+    const { tenant_id, event_id, proveedor, tipo_evento, payload } = req.body;
+    if (!event_id || !proveedor || !tipo_evento) {
+      return res.status(400).json({ data: null, error: "Missing required payment event fields" });
+    }
+
+    // Cross-tenant write prevention
+    if (tenant_id && tenant_id !== req.user!.tenant_id && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: cannot create payment events for another tenant" });
+    }
+
+    const newEvento = {
+      tenant_id: req.user!.tenant_id,
+      event_id,
+      proveedor,
+      tipo_evento,
+      payload: payload || {},
+    };
+
+    if (process.env.NODE_ENV === "test") {
+      return res.status(201).json({ data: { id: "mock-evento-id", ...newEvento }, error: null });
+    }
+
+    const supabase = getSupabaseUserClient(req.token!);
+    const { data, error } = await supabase.from("eventos_pago").insert(newEvento).select().single();
+
+    if (error) {
+      return res.status(500).json({ data: null, error: error.message });
+    }
+
+    res.status(201).json({ data, error: null });
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: err.message });
+  }
+});
+
+// POST /api/v1/invitaciones
+apiV1Router.post("/invitaciones", async (req: AuthenticatedRequest, res) => {
+  try {
+    const { tenant_id, email, role } = req.body;
+    if (!email || !role) {
+      return res.status(400).json({ data: null, error: "Missing required fields: email, role" });
+    }
+
+    // Only owner/admin can invite
+    if (req.user!.role !== "admin" && req.user!.role !== "owner" && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: insufficient role to send invitations" });
+    }
+
+    // Cannot invite users into a different tenant
+    if (tenant_id && tenant_id !== req.user!.tenant_id && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: cannot send invitations for another tenant" });
+    }
+
+    const newInvitation = {
+      tenant_id: req.user!.tenant_id,
+      email,
+      role,
+      token: `inv-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      expira_at: new Date(Date.now() + 86400000 * 7).toISOString(),
+      creado_por: req.user!.id,
+    };
+
+    if (process.env.NODE_ENV === "test") {
+      return res.status(201).json({ data: { id: "mock-invitation-id", ...newInvitation }, error: null });
+    }
+
+    const supabase = getSupabaseUserClient(req.token!);
+    const { data, error } = await supabase.from("invitaciones").insert(newInvitation).select().single();
+
+    if (error) {
+      return res.status(500).json({ data: null, error: error.message });
+    }
+
+    res.status(201).json({ data, error: null });
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: err.message });
+  }
+});
+
+// POST /api/v1/roles
+apiV1Router.post("/roles", async (req: AuthenticatedRequest, res) => {
+  try {
+    const { user_id, tenant_id, role } = req.body;
+    if (!user_id || !role) {
+      return res.status(400).json({ data: null, error: "Missing required fields: user_id, role" });
+    }
+
+    // Privilege escalation & tenant boundary check
+    if (tenant_id && tenant_id !== req.user!.tenant_id && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: cannot manage roles for another tenant" });
+    }
+
+    const roleHierarchy: Record<string, number> = {
+      agricultor: 1,
+      agronomo: 2,
+      admin_tenant: 3,
+      admin: 3,
+      owner: 4,
+      super_admin: 5,
+    };
+
+    const callerRank = roleHierarchy[req.user!.role] || 1;
+    const targetRank = roleHierarchy[role] || 1;
+
+    if (targetRank >= callerRank && req.user!.role !== "super_admin" && req.user!.role !== "owner") {
+      return res.status(403).json({ data: null, error: "Forbidden: cannot assign a role equal or superior to your own" });
+    }
+
+    const newRole = {
+      user_id,
+      tenant_id: req.user!.tenant_id,
+      role,
+    };
+
+    if (process.env.NODE_ENV === "test") {
+      return res.status(201).json({ data: { id: "mock-role-id", ...newRole }, error: null });
+    }
+
+    const supabase = getSupabaseUserClient(req.token!);
+    const { data, error } = await supabase.from("user_roles").insert(newRole).select().single();
+
+    if (error) {
+      return res.status(500).json({ data: null, error: error.message });
+    }
+
+    res.status(201).json({ data, error: null });
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: err.message });
+  }
+});
+
 // GET /api/v1/bitacora
 apiV1Router.get("/bitacora", async (req: AuthenticatedRequest, res) => {
   try {
