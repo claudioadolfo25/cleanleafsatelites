@@ -1,172 +1,236 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, MapPin, Eye, Calendar, Cloud, Layers, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Calendar, Cloud, Eye, ShieldCheck, Download, Filter, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
+import { Link } from "wouter";
+import { toast } from "sonner";
 
-interface ParcelCardData {
+interface ReportItem {
   id: string;
-  predioNombre: string;
-  cultivo: string;
+  nombrePredio: string;
+  lote: string;
+  tipoCultivo: string;
   superficieHa: number;
-  ndviMean: number;
-  minNdvi: number;
-  maxNdvi: number;
-  validPixelRatio: number;
-  status: "SUCCESS" | "LOW_CONFIDENCE" | "NO_DATA";
+  ndviPromedio: number;
+  ndviMin: number;
+  ndviMax: number;
   fechaAdquisicion: string;
-  coberturaNubes: number;
-  satelite: string;
+  porcentajeNubes: number;
+  confianzaScore: number;
+  confianzaBadge: "Alta Confianza" | "Confianza Baja";
+  coordenadasGeoJSON: string;
 }
 
-const mockParcels: ParcelCardData[] = [
+const MOCK_REPORTS: ReportItem[] = [
   {
-    id: "predio-paine-01",
-    predioNombre: "Fundo El Olivar — Lote Maíz A1",
-    cultivo: "Maíz",
-    superficieHa: 25.0,
-    ndviMean: 0.3774,
-    minNdvi: -0.1002,
-    maxNdvi: 0.9586,
-    validPixelRatio: 1.0, // 100% despejado
-    status: "SUCCESS",
+    id: "lote-maiz-a1",
+    nombrePredio: "Fundo El Olivar",
+    lote: "Lote Maíz A1",
+    tipoCultivo: "Maíz",
+    superficieHa: 25,
+    ndviPromedio: 0.3774,
+    ndviMin: -0.10,
+    ndviMax: 0.96,
     fechaAdquisicion: "2026-09-14",
-    coberturaNubes: 0.14,
-    satelite: "Sentinel-2 (L2A)",
+    porcentajeNubes: 0.14,
+    confianzaScore: 100,
+    confianzaBadge: "Alta Confianza",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.65,-33.45],[-70.64,-33.45],[-70.64,-33.46],[-70.65,-33.46],[-70.65,-33.45]]]}',
   },
   {
-    id: "predio-buin-02",
-    predioNombre: "Agrícola Buin — Sector Nogales",
-    cultivo: "Nogales",
+    id: "lote-nogales-b2",
+    nombrePredio: "Agrícola Buin",
+    lote: "Sector Nogales",
+    tipoCultivo: "Nogales",
     superficieHa: 18.2,
-    ndviMean: 0.3674,
-    minNdvi: -0.0264,
-    maxNdvi: 0.8567,
-    validPixelRatio: 0.718, // 71.8% despejado, 28.2% SCL mask
-    status: "SUCCESS",
+    ndviPromedio: 0.3674,
+    ndviMin: -0.03,
+    ndviMax: 0.86,
     fechaAdquisicion: "2026-09-21",
-    coberturaNubes: 47.12,
-    satelite: "Sentinel-2 (L2A)",
+    porcentajeNubes: 47.12,
+    confianzaScore: 72,
+    confianzaBadge: "Alta Confianza",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.70,-33.70],[-70.69,-33.70],[-70.69,-33.71],[-70.70,-33.71],[-70.70,-33.70]]]}',
   },
   {
-    id: "predio-melipilla-03",
-    predioNombre: "Fundo San José — Sector Cerezos",
-    cultivo: "Cerezos",
+    id: "lote-cerezos-c3",
+    nombrePredio: "Fundo San José",
+    lote: "Sector Cerezos",
+    tipoCultivo: "Cerezos",
     superficieHa: 30.5,
-    ndviMean: 0.215,
-    minNdvi: -0.05,
-    maxNdvi: 0.52,
-    validPixelRatio: 0.22, // 22% despejado < 30% threshold
-    status: "LOW_CONFIDENCE",
+    ndviPromedio: 0.2150,
+    ndviMin: -0.05,
+    ndviMax: 0.52,
     fechaAdquisicion: "2026-09-19",
-    coberturaNubes: 78.4,
-    satelite: "Sentinel-2 (L2A)",
+    porcentajeNubes: 78.40,
+    confianzaScore: 22,
+    confianzaBadge: "Confianza Baja",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.80,-33.80],[-70.79,-33.80],[-70.79,-33.81],[-70.80,-33.81],[-70.80,-33.80]]]}',
   },
 ];
 
 export default function ReportsDashboard() {
-  const [selectedMapParcel, setSelectedMapParcel] = useState<string | null>(null);
+  const [filterConfidence, setFilterConfidence] = useState<"all" | "high" | "low">("all");
+  const [activeMapId, setActiveMapId] = useState<string | null>(null);
+
+  const filteredReports = MOCK_REPORTS.filter((report) => {
+    if (filterConfidence === "high") return report.confianzaBadge === "Alta Confianza";
+    if (filterConfidence === "low") return report.confianzaBadge === "Confianza Baja";
+    return true;
+  });
+
+  const handleExportCSV = () => {
+    toast.success("Exportando métricas de vegetación en formato CSV...");
+  };
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              Monitoreo Satelital de Predios
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Indicadores estadísticos de vegetación (NDVI) promediados por polígono PostGIS.
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Header Hero Banner */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 p-8 rounded-2xl text-white shadow-xl">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-emerald-300 border-emerald-500/50 bg-emerald-950">
+                PostGIS Polygon Engine
+              </Badge>
+              <span className="text-xs text-emerald-200/80 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Sentinel-2 L2A Cloud Masked
+              </span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Centro de Informes Satelitales</h1>
+            <p className="text-emerald-100/90 text-sm max-w-2xl">
+              Monitoreo continuo de salud vegetal (NDVI), cobertura nubosa SCL y nivel de confianza por lote.
             </p>
           </div>
-          <Badge variant="outline" className="px-3 py-1 bg-green-50 text-green-700 border-green-200 text-sm">
-            Copernicus CDSE Statistical Engine Active
-          </Badge>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleExportCSV} variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs">
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Exportar CSV
+            </Button>
+          </div>
         </div>
 
-        {/* Parcel Cards Grid */}
+        {/* Filter Controls Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Filter className="w-4 h-4 text-emerald-700" /> Filtrar por Nivel de Confianza:
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={filterConfidence === "all" ? "default" : "outline"}
+              className={filterConfidence === "all" ? "bg-emerald-800 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("all")}
+            >
+              Todos ({MOCK_REPORTS.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={filterConfidence === "high" ? "default" : "outline"}
+              className={filterConfidence === "high" ? "bg-emerald-800 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("high")}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" /> Alta Confianza
+            </Button>
+            <Button
+              size="sm"
+              variant={filterConfidence === "low" ? "default" : "outline"}
+              className={filterConfidence === "low" ? "bg-amber-600 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("low")}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-200" /> Confianza Baja
+            </Button>
+          </div>
+        </div>
+
+        {/* Reports Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockParcels.map((parcel) => (
-            <Card key={parcel.id} className="shadow-sm hover:shadow-md transition-shadow">
+          {filteredReports.map((report) => (
+            <Card key={report.id} className="hover:border-emerald-500/40 transition-all shadow-sm flex flex-col justify-between">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-base font-semibold text-gray-900">
-                      {parcel.predioNombre}
-                    </CardTitle>
-                    <CardDescription className="text-xs flex items-center gap-1 text-gray-500 mt-1">
-                      <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                      {parcel.cultivo} • {parcel.superficieHa} ha
+                    <CardTitle className="text-base text-slate-900">{report.nombrePredio}</CardTitle>
+                    <CardDescription className="font-semibold text-emerald-800 text-xs">
+                      {report.lote}
                     </CardDescription>
                   </div>
-                  {parcel.status === "SUCCESS" ? (
-                    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3 text-green-600" />
-                      Alta Confianza ({Math.round(parcel.validPixelRatio * 100)}%)
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-xs flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3 text-amber-600" />
-                      Confianza Baja ({Math.round(parcel.validPixelRatio * 100)}%)
-                    </Badge>
-                  )}
+                  <Badge
+                    variant="outline"
+                    className={
+                      report.confianzaBadge === "Alta Confianza"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 text-[11px]"
+                        : "bg-amber-50 text-amber-800 border-amber-300 text-[11px]"
+                    }
+                  >
+                    {report.confianzaBadge} ({report.confianzaScore}%)
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-2">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{report.tipoCultivo} • {report.superficieHa} ha</span>
                 </div>
               </CardHeader>
 
-              <CardContent className="space-y-4 pt-0">
-                {/* Primary Metric Widget */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">NDVI Promedio</p>
-                    <p className="text-2xl font-bold text-slate-900 mt-0.5">{parcel.ndviMean.toFixed(4)}</p>
+              <CardContent className="space-y-4">
+                {/* NDVI Metric Card */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">NDVI Promedio</span>
+                    <span className="text-xs text-slate-500">Mín: {report.ndviMin.toFixed(2)} | Máx: {report.ndviMax.toFixed(2)}</span>
                   </div>
-                  <div className="text-right text-xs text-slate-500 space-y-0.5">
-                    <p>Mín: <span className="font-medium text-slate-700">{parcel.minNdvi.toFixed(2)}</span></p>
-                    <p>Máx: <span className="font-medium text-slate-700">{parcel.maxNdvi.toFixed(2)}</span></p>
-                  </div>
-                </div>
-
-                {/* Metadata Row */}
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                  <div className="flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-100">
-                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{parcel.fechaAdquisicion}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-100">
-                    <Cloud className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{parcel.coberturaNubes}% nubes</span>
+                  <div className="text-3xl font-black text-emerald-900 tracking-tight">
+                    {report.ndviPromedio.toFixed(4)}
                   </div>
                 </div>
 
-                {/* On-Demand Satellite Map View Button */}
-                <div className="pt-1">
-                  <Button
-                    variant="outline"
-                    className="w-full text-xs flex items-center justify-center gap-1.5 border-slate-200 text-slate-700 hover:bg-slate-50"
-                    onClick={() => setSelectedMapParcel(selectedMapParcel === parcel.id ? null : parcel.id)}
-                  >
-                    <Eye className="h-3.5 w-3.5 text-slate-500" />
-                    {selectedMapParcel === parcel.id ? "Ocultar Mapa Satelital" : "Ver Mapa Satelital"}
-                  </Button>
+                {/* Satellite Acquisition Info */}
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{report.fechaAdquisicion}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{report.porcentajeNubes.toFixed(2)}% nubes</span>
+                  </div>
                 </div>
 
-                {/* Demand-driven Map Panel (Loaded only when clicked) */}
-                {selectedMapParcel === parcel.id && (
-                  <div className="p-3 bg-emerald-50/50 border border-emerald-200/60 rounded-xl space-y-2 text-xs animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between text-emerald-900 font-medium">
-                      <span className="flex items-center gap-1">
-                        <Layers className="h-3.5 w-3.5 text-emerald-600" /> Visor Processing API
-                      </span>
-                      <span className="text-[10px] text-emerald-700">Sentinel-2 L2A</span>
+                {/* On-Demand Satellite Map Toggle Viewer */}
+                {activeMapId === report.id ? (
+                  <div className="space-y-2">
+                    <div className="bg-emerald-950 text-emerald-200 text-xs p-3 rounded-lg font-mono border border-emerald-800 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400 animate-spin" />
+                      Visualización Processing API Sentinel-2 L2A Activa
                     </div>
-                    <div className="h-32 bg-slate-200 rounded-lg flex items-center justify-center border border-slate-300 relative overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-green-500/30 to-amber-500/20" />
-                      <div className="relative z-10 text-center p-2 bg-white/80 backdrop-blur-sm rounded-md shadow-xs">
-                        <p className="font-semibold text-slate-800 text-[11px]">Capa Falso Color NDVI</p>
-                        <p className="text-[10px] text-slate-500">Renderizado bajo demanda (Processing API)</p>
-                      </div>
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs text-slate-600"
+                      onClick={() => setActiveMapId(null)}
+                    >
+                      Ocultar Capa Satelital
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs border-emerald-300 text-emerald-900 hover:bg-emerald-50"
+                      onClick={() => setActiveMapId(report.id)}
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-1 text-emerald-700" /> Ver Mapa Satelital
+                    </Button>
+                    <Link href={`/dashboard/informes/${report.id}`}>
+                      <Button size="sm" className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs px-3">
+                        Detalles
+                      </Button>
+                    </Link>
                   </div>
                 )}
               </CardContent>
