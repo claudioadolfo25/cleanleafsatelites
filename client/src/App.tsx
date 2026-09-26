@@ -11,6 +11,7 @@ import ReportDetail from "./pages/ReportDetail";
 import SupportPage from "./pages/SupportPage";
 import GuideInterpreterPage from "./pages/GuideInterpreterPage";
 import AgentPage from "./pages/AgentPage";
+import ProfilePage from "./pages/ProfilePage";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
       <Route path={"/dashboard/soporte"} component={SupportPage} />
       <Route path={"/dashboard/guias/interpretar-informes"} component={GuideInterpreterPage} />
       <Route path={"/dashboard/agente"} component={AgentPage} />
+      <Route path={"/dashboard/perfil"} component={ProfilePage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

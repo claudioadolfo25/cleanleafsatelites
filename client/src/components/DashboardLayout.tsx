@@ -23,9 +23,12 @@ import {
   ChevronRight,
   ShieldCheck,
   Bot,
+  User,
+  Settings,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import FloatingAgentWidget from "./FloatingAgentWidget";
+import { useUserProfile } from "../lib/userProfile";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -33,6 +36,7 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
+  const { profile } = useUserProfile();
 
   const navigationItems = [
     {
@@ -58,6 +62,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       url: "/dashboard/agente",
       icon: Bot,
       description: "Especialistas Sentinel y Don Ernesto Cruz",
+    },
+    {
+      title: "Mi Perfil & Vertical",
+      url: "/dashboard/perfil",
+      icon: User,
+      description: "Personalización de datos y terrenos",
     },
     {
       title: "Guía de Interpretación",
@@ -127,16 +137,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-slate-100 p-4 bg-slate-50/50">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-900 font-bold text-xs">
-                U
+          <SidebarFooter className="border-t border-slate-100 p-3 bg-slate-50/50">
+            <Link href="/dashboard/perfil" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-200/60 transition-all cursor-pointer group">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-800 text-white font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                {profile.nombre.charAt(0)}
               </div>
               <div className="flex flex-col min-w-0 flex-1">
-                <span className="text-xs font-bold text-slate-900 truncate">Usuario AgroPulso</span>
-                <span className="text-[11px] text-slate-500 truncate">demo@agropulso.com</span>
+                <span className="text-xs font-bold text-slate-900 truncate group-hover:text-emerald-800 transition-colors">
+                  {profile.nombre}
+                </span>
+                <span className="text-[11px] text-slate-500 truncate capitalize flex items-center gap-1">
+                  <Settings className="w-3 h-3 text-emerald-600" /> {profile.vertical}
+                </span>
               </div>
-            </div>
+            </Link>
           </SidebarFooter>
         </Sidebar>
 

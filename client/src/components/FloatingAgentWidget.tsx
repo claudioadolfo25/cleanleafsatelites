@@ -1,5 +1,33 @@
 import { useState } from "react";
-import { SPECIALISTS, type SpecialistPersona } from "@/pages/AgentPage";
+type SpecialistPersona = "ernestocruz" | "sentinel1" | "sentinel2" | "sentinel3" | "orientador";
+
+const SPECIALISTS: Record<SpecialistPersona, { name: string; badge: string; initialGreeting: string }> = {
+  orientador: {
+    name: "Guía AgroPulso",
+    badge: "Guía General",
+    initialGreeting: "¡Hola! Te orientaré para configurar tus terrenos y seleccionar satélites."
+  },
+  ernestocruz: {
+    name: "Don Ernesto Cruz",
+    badge: "Alto Rendimiento",
+    initialGreeting: "¡Hola! Soy Don Ernesto Cruz. Vamos a maximizar la salud del suelo y el rendimiento."
+  },
+  sentinel1: {
+    name: "Radar Sentinel-1",
+    badge: "Radar C-Band",
+    initialGreeting: "Firma radar Sentinel-1 activa. Penetración de nubes para humedad de suelo."
+  },
+  sentinel2: {
+    name: "Óptico Sentinel-2",
+    badge: "Alta Res. 10m",
+    initialGreeting: "Sensor MSI Sentinel-2 listo para evaluar vegetación, NDVI y clorofila."
+  },
+  sentinel3: {
+    name: "Térmico Sentinel-3",
+    badge: "SLSTR / OLCI",
+    initialGreeting: "Instrumentos OLCI/SLSTR en línea para macroclima y temperatura del agua."
+  }
+};
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
