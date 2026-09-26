@@ -25,6 +25,8 @@ import {
   Bot,
   User,
   Settings,
+  Sliders,
+  History,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import FloatingAgentWidget from "./FloatingAgentWidget";
@@ -44,6 +46,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       url: "/",
       icon: LayoutDashboard,
       description: "Vista general de predios y consumo",
+    },
+    {
+      title: "EO Browser Workstation",
+      url: "/dashboard/copernicus/workstation",
+      icon: Sliders,
+      description: "Consola de satélites y filtros CDSE",
+    },
+    {
+      title: "Históricos & Workspace",
+      url: "/dashboard/copernicus/historico",
+      icon: History,
+      description: "Serie temporal y registro de pasadas",
     },
     {
       title: "Centro de Informes",

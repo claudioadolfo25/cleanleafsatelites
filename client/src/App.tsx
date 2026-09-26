@@ -12,12 +12,16 @@ import SupportPage from "./pages/SupportPage";
 import GuideInterpreterPage from "./pages/GuideInterpreterPage";
 import AgentPage from "./pages/AgentPage";
 import ProfilePage from "./pages/ProfilePage";
+import CopernicusWorkstationPage from "./pages/CopernicusWorkstationPage";
+import CopernicusHistoryPage from "./pages/CopernicusHistoryPage";
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
+      <Route path={"/dashboard/copernicus/workstation"} component={CopernicusWorkstationPage} />
+      <Route path={"/dashboard/copernicus/historico"} component={CopernicusHistoryPage} />
       <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
       <Route path={"/dashboard/informes"} component={ReportsDashboard} />
       <Route path={"/dashboard/soporte"} component={SupportPage} />
