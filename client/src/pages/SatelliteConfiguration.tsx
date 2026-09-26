@@ -6,12 +6,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { satelliteCatalog, type SatelliteId, type Vertical } from "@shared/satellite-catalog";
 import { guidanceForNeed, needOptions, satelliteGuidance, type NeedId } from "@shared/satellite-guidance";
-import { Check, CloudSun, Info, Leaf, Radio, Save, Sparkles, ThermometerSun, ShieldCheck } from "lucide-react";
+import { Check, CloudSun, Info, Leaf, Radio, Save, Sparkles, ThermometerSun, ShieldCheck, Sliders, Layers, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 const icons = { "sentinel-1": Radio, "sentinel-2": CloudSun, "sentinel-3": ThermometerSun };
 const activeForMvp: SatelliteId[] = ["sentinel-1", "sentinel-2"];
 type ConfigSector = Vertical | "emergencias";
+
+export interface CopernicusFilterState {
+  maxCloudCover: number;
+  spectralIndex: "NDVI" | "NDWI" | "EVI" | "RADAR_MOISTURE" | "LST_THERMAL";
+  bandPreset: "true_color" | "false_color_ir" | "agriculture" | "soil_moisture";
+  revisitDaysMax: number;
+}
 
 function activeForVertical(vertical: ConfigSector): SatelliteId[] {
   if (vertical === "acuicultura") return ["sentinel-2"];
@@ -23,20 +30,39 @@ export default function SatelliteConfiguration() {
   const [vertical, setVertical] = useState<ConfigSector>("agricultura");
   const [need, setNeed] = useState<NeedId>("nubosidad");
   const [selected, setSelected] = useState<SatelliteId[]>(["sentinel-2", "sentinel-1"]);
+
+  // Copernicus CDSE Filter Workbench State
+  const [filters, setFilters] = useState<CopernicusFilterState>({
+    maxCloudCover: 20,
+    spectralIndex: "NDVI",
+    bandPreset: "true_color",
+    revisitDaysMax: 5,
+  });
+
   const recommendation = useMemo(() => guidanceForNeed(need), [need]);
   const visibleNeeds = needOptions.filter(option => option.verticals.includes(vertical));
   const activeSources = activeForVertical(vertical);
 
   useEffect(() => {
     const saved = localStorage.getItem("cleanleaf-satellite-preferences");
-    if (!saved) return;
-    try {
-      const preferences = JSON.parse(saved) as { vertical?: ConfigSector; need?: NeedId; selected?: SatelliteId[] };
-      if (preferences.vertical) setVertical(preferences.vertical);
-      if (preferences.need) setNeed(preferences.need);
-      if (preferences.selected?.length) setSelected(preferences.selected);
-    } catch {
-      localStorage.removeItem("cleanleaf-satellite-preferences");
+    if (saved) {
+      try {
+        const preferences = JSON.parse(saved) as { vertical?: ConfigSector; need?: NeedId; selected?: SatelliteId[] };
+        if (preferences.vertical) setVertical(preferences.vertical);
+        if (preferences.need) setNeed(preferences.need);
+        if (preferences.selected?.length) setSelected(preferences.selected);
+      } catch {
+        localStorage.removeItem("cleanleaf-satellite-preferences");
+      }
+    }
+
+    const savedFilters = localStorage.getItem("cleanleaf-copernicus-filters");
+    if (savedFilters) {
+      try {
+        setFilters(JSON.parse(savedFilters));
+      } catch {
+        localStorage.removeItem("cleanleaf-copernicus-filters");
+      }
     }
   }, []);
 
@@ -64,7 +90,8 @@ export default function SatelliteConfiguration() {
 
   const save = () => {
     localStorage.setItem("cleanleaf-satellite-preferences", JSON.stringify({ vertical, need, selected }));
-    toast.success("Configuración guardada", { description: "Se usará como preferencia en tus próximos análisis." });
+    localStorage.setItem("cleanleaf-copernicus-filters", JSON.stringify(filters));
+    toast.success("Configuración y Filtros Guardados", { description: "Tus parámetros Copernicus y preferencias de satélite regirán tus solicitudes de análisis." });
   };
 
   return (
@@ -75,22 +102,115 @@ export default function SatelliteConfiguration() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-emerald-300 border-emerald-500/50 bg-emerald-950">
-                Catálogo Copernicus CDSE
+                Copernicus CDSE Workbench
               </Badge>
               <span className="text-xs text-emerald-200/80 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Política por Vertical Habilitada
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Filtros y Misiones Activas
               </span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Configuración de Fuentes Satelitales</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Workbench de Filtros Satelitales Copernicus</h1>
             <p className="text-emerald-100/90 text-sm max-w-2xl">
-              Seleccione la vertical agronómica y las misiones Sentinel activas para personalizar los reportes y procesamiento de su predio.
+              Ajuste umbrales de nubosidad, combinación de bandas, índices espectrales y frecuencia de revisita para gobernar el motor de procesamiento.
             </p>
           </div>
 
           <Button onClick={save} className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold shadow-md">
-            <Save className="mr-2 h-4 w-4" /> Guardar Preferencias
+            <Save className="mr-2 h-4 w-4" /> Guardar Filtros & Preferencias
           </Button>
         </div>
+
+        {/* Copernicus CDSE Filter Workbench */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-emerald-700" />
+              <h2 className="text-lg font-bold text-slate-900">Parámetros de Procesamiento Satelital</h2>
+            </div>
+            <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 font-mono text-xs">
+              SCL Cloud Mask Enabled
+            </Badge>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {/* Cloud Cover Slider */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex justify-between">
+                <span>Máx. Cobertura Nubosa</span>
+                <span className="text-emerald-800 font-mono font-bold">{filters.maxCloudCover}%</span>
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="80"
+                step="5"
+                value={filters.maxCloudCover}
+                onChange={(e) => setFilters({ ...filters, maxCloudCover: parseInt(e.target.value) })}
+                className="w-full accent-emerald-800 cursor-pointer h-2 bg-slate-200 rounded-lg"
+              />
+              <p className="text-[11px] text-slate-500">Imágenes con nubes superiores al {filters.maxCloudCover}% serán descartadas por STAC Catalog.</p>
+            </div>
+
+            {/* Spectral Index Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Índice Espectral Principal</label>
+              <Select
+                value={filters.spectralIndex}
+                onValueChange={(val: CopernicusFilterState["spectralIndex"]) => setFilters({ ...filters, spectralIndex: val })}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NDVI">NDVI - Vigor Vegetal (NIR/Red)</SelectItem>
+                  <SelectItem value="NDWI">NDWI - Estrés Hídrico (NIR/SWIR)</SelectItem>
+                  <SelectItem value="EVI">EVI - Densidad Foliar Alta</SelectItem>
+                  <SelectItem value="RADAR_MOISTURE">VV/VH - Humedad Suelo Radar</SelectItem>
+                  <SelectItem value="LST_THERMAL">LST - Temperatura Terrestre</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-500">Determina la capa de análisis prioritaria en el cálculo estadístico.</p>
+            </div>
+
+            {/* Band Composite Preset */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Combinación de Bandas</label>
+              <Select
+                value={filters.bandPreset}
+                onValueChange={(val: CopernicusFilterState["bandPreset"]) => setFilters({ ...filters, bandPreset: val })}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true_color">Color Real (B4, B3, B2)</SelectItem>
+                  <SelectItem value="false_color_ir">Infrarrojo Color (B8, B4, B3)</SelectItem>
+                  <SelectItem value="agriculture">Agrícola (B11, B8, B2)</SelectItem>
+                  <SelectItem value="soil_moisture">Humedad de Suelo (B12, B8, B4)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-500">Define las bandas espectrales para renderizar mapas de calor.</p>
+            </div>
+
+            {/* Revisit Days Max */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Máx. Frecuencia Revisita</label>
+              <Select
+                value={filters.revisitDaysMax.toString()}
+                onValueChange={(val) => setFilters({ ...filters, revisitDaysMax: parseInt(val) })}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">Hasta 3 días (Alta Frecuencia)</SelectItem>
+                  <SelectItem value="5">Hasta 5 días (Sentinel-2 Estándar)</SelectItem>
+                  <SelectItem value="10">Hasta 10 días (Histórico Extendido)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-500">Rango de tiempo máximo entre pasadas satelitales.</p>
+            </div>
+          </div>
+        </section>
 
         {/* Sector and Need Selector */}
         <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-[220px_1fr]">

@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookOpen, CloudRain, Layers, Activity, AlertTriangle, CheckCircle2, Sparkles, Compass } from "lucide-react";
+import { BookOpen, CloudRain, Layers, Activity, AlertTriangle, CheckCircle2, Sparkles, Compass, Sliders, User, MapPin, FileText } from "lucide-react";
 
 export default function GuideInterpreterPage() {
   const [selectedNdvi, setSelectedNdvi] = useState<number>(0.65);
@@ -34,9 +34,59 @@ export default function GuideInterpreterPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Cómo Interpretar Informes Satelitales AgroPulso</h1>
           <p className="text-emerald-100/90 text-sm max-w-3xl leading-relaxed">
-            Aprenda a descifrar los indicadores estadísticos de vegetación (NDVI, NDWI), la máscara de nubes SCL de Sentinel-2 L2A y cómo tomar decisiones agronómicas fundadas en datos de precisión.
+            Aprenda a descifrar los indicadores estadísticos de vegetación (NDVI, NDWI), la máscara de nubes SCL de Sentinel-2 L2A y el ciclo completo de gestión por páginas en la plataforma.
           </p>
         </div>
+
+        {/* 4-Step User Lifecycle Section */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+          <div className="flex items-center gap-2 border-b pb-3">
+            <Compass className="w-5 h-5 text-emerald-700" />
+            <h2 className="text-lg font-bold text-slate-900">Ciclo de Trabajo del Usuario AgroPulso (Gestión por Página)</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+                <Sliders className="w-4 h-4 text-emerald-700" />
+                1. Configuración Satelital
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Workbench de filtros Copernicus: ajuste máximo de cobertura nubosa, bandas espectrales (True Color, Infrarrojo), e índice primario (NDVI, NDWI, Radar).
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/50 space-y-2">
+              <div className="flex items-center gap-2 text-teal-900 font-bold text-sm">
+                <User className="w-4 h-4 text-teal-700" />
+                2. Mi Perfil & Vertical
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Personalice su rubro industrial (Agrícola, Forestal, Acuícola, Frutícola), hectáreas base y formato de informe (McKinsey, Técnico) para adaptar las recomendaciones.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-sky-200 bg-sky-50/50 space-y-2">
+              <div className="flex items-center gap-2 text-sky-900 font-bold text-sm">
+                <MapPin className="w-4 h-4 text-sky-700" />
+                3. Nueva Solicitud (BBox)
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Defina su predio con coordenadas exactas (Lat/Lng WGS84) o atajos regionales. El sistema calcula automáticamente el polígono BBox en hectáreas para la API Statistical.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 space-y-2">
+              <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                <FileText className="w-4 h-4 text-indigo-700" />
+                4. Centro de Informes
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Monitoree el estado de procesamiento, abra mapas de calor satelital interactivos, consulte la trazabilidad de píxeles despejados y descargue informes exportables.
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* Interactive NDVI Simulator */}
         <Card className="border-emerald-200 shadow-md">
