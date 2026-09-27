@@ -4,6 +4,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import Landing3DPage from "./pages/Landing3DPage";
+import AuthPage from "./pages/AuthPage";
 import Home from "./pages/Home";
 import SatelliteConfiguration from "./pages/SatelliteConfiguration";
 import ReportsDashboard from "./pages/ReportsDashboard";
@@ -18,7 +20,10 @@ import CopernicusHistoryPage from "./pages/CopernicusHistoryPage";
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={Landing3DPage} />
+      <Route path={"/login"} component={AuthPage} />
+      <Route path={"/auth"} component={AuthPage} />
+      <Route path={"/dashboard"} component={Home} />
       <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
       <Route path={"/dashboard/copernicus/workstation"} component={CopernicusWorkstationPage} />
       <Route path={"/dashboard/copernicus/historico"} component={CopernicusHistoryPage} />

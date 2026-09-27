@@ -27,6 +27,7 @@ import {
   Settings,
   Sliders,
   History,
+  Globe,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import FloatingAgentWidget from "./FloatingAgentWidget";
@@ -43,7 +44,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigationItems = [
     {
       title: "Panel Principal",
-      url: "/",
+      url: "/dashboard",
       icon: LayoutDashboard,
       description: "Vista general de predios y consumo",
     },
@@ -102,17 +103,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex min-h-screen w-full bg-slate-50/80">
         <Sidebar className="border-r border-slate-200/80 bg-white">
           <SidebarHeader className="border-b border-slate-100 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-teal-900 text-white shadow-md shadow-emerald-900/10">
+            <Link href="/" className="flex items-center gap-3 cursor-pointer group">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-800 to-teal-900 text-white shadow-md shadow-emerald-900/10 group-hover:scale-105 transition-transform">
                 <Satellite className="h-5.5 w-5.5" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-slate-900 tracking-tight text-base">AgroPulso SaaS</span>
+                <span className="font-bold text-slate-900 tracking-tight text-base group-hover:text-emerald-800 transition-colors">AgroPulso SaaS</span>
                 <span className="text-[11px] font-medium text-emerald-800 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-600" /> Multi-Tenant CDSE
                 </span>
               </div>
-            </div>
+            </Link>
           </SidebarHeader>
 
           <SidebarContent className="p-3">
@@ -123,7 +124,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-1">
                   {navigationItems.map((item) => {
-                    const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
+                    const isActive = location === item.url || (item.url !== "/dashboard" && location.startsWith(item.url));
                     return (
                       <SidebarMenuItem key={item.url}>
                         <SidebarMenuButton
@@ -148,6 +149,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   })}
                 </SidebarMenu>
               </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup className="mt-4 border-t border-slate-100 pt-3">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className="w-full text-slate-500 hover:bg-slate-100 text-xs">
+                    <Link href="/">
+                      <Globe className="h-4 w-4 mr-2 text-teal-600" />
+                      <span>Volver al Visor 3D Inicial</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
 
