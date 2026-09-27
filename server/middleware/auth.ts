@@ -11,17 +11,7 @@ export interface AuthenticatedRequest extends Request {
   token?: string;
 }
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://example.supabase.co";
-const JWKS_URL = `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`;
-
-let JWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
-
-function getJWKS() {
-  if (!JWKS) {
-    JWKS = createRemoteJWKSet(new URL(JWKS_URL));
-  }
-  return JWKS;
-}
+const VALID_ROLES = ["super_admin", "owner", "admin", "agronomo", "agricultor", "viewer"];
 
 export async function authenticateSupabaseJWT(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -33,8 +23,12 @@ export async function authenticateSupabaseJWT(req: AuthenticatedRequest, res: Re
 
   try {
     let payload: any;
-    if (process.env.NODE_ENV === "test" || !process.env.SUPABASE_URL) {
-      // Stub decode for unit testing/mock mode when no live Supabase instance is attached
+
+    // Fail fast in staging / production if SUPABASE_URL is missing
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+
+    if (process.env.NODE_ENV === "test") {
+      // In explicit unit tests, decode unverified base64 JWT payload for test suite execution
       const parts = token.split(".");
       if (parts.length === 3) {
         payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
@@ -42,8 +36,14 @@ export async function authenticateSupabaseJWT(req: AuthenticatedRequest, res: Re
         throw new Error("Malformed test token");
       }
     } else {
-      const { payload: verifiedPayload } = await jwtVerify(token, getJWKS(), {
-        issuer: `${SUPABASE_URL}/auth/v1`,
+      if (!supabaseUrl) {
+        console.error("[FATAL Auth] SUPABASE_URL non configurado en entorno no-test. Rejeitando solicitudes.");
+        return res.status(500).json({ error: "Server Configuration Error: SUPABASE_URL is not configured" });
+      }
+
+      const jwks = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`));
+      const { payload: verifiedPayload } = await jwtVerify(token, jwks, {
+        issuer: `${supabaseUrl}/auth/v1`,
       });
       payload = verifiedPayload;
     }
@@ -54,6 +54,10 @@ export async function authenticateSupabaseJWT(req: AuthenticatedRequest, res: Re
 
     if (!tenant_id) {
       return res.status(403).json({ error: "Forbidden: JWT missing required tenant_id in app_metadata" });
+    }
+
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(403).json({ error: `Forbidden: Invalid role '${role}' in JWT app_metadata` });
     }
 
     req.user = {

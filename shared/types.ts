@@ -1,6 +1,10 @@
 import type { Vertical, SatelliteId, SatelliteVariable } from "./satellite-catalog";
 import type { ProcessingTier } from "./satellite-router";
 
+export type PlatformRole = "super_admin";
+export type TenantRole = "owner" | "admin" | "agronomo" | "agricultor" | "viewer";
+export type Role = PlatformRole | TenantRole;
+
 export type Tenant = {
   id: string;
   nombre: string;
@@ -11,7 +15,7 @@ export type Tenant = {
 export type User = {
   id: string;
   tenant_id: string;
-  role: "super_admin" | "admin" | "viewer";
+  role: Role;
   email: string;
   creado_en: string;
 };

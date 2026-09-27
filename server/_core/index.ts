@@ -8,14 +8,24 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS middleware with environment-based domain restriction
+// CORS middleware with strict origin validation and Vary header
 app.use((req, res, next) => {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "*").split(",");
+  res.setHeader("Vary", "Origin");
+
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : process.env.NODE_ENV === "test"
+    ? ["*"]
+    : ["https://agropulso.vercel.app"];
+
   const origin = req.headers.origin;
 
-  if (allowedOrigins.includes("*") || (origin && allowedOrigins.includes(origin))) {
+  if (allowedOrigins.includes("*")) {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
+
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
 

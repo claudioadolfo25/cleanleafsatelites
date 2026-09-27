@@ -3,8 +3,11 @@ import { authenticateSupabaseJWT, AuthenticatedRequest } from "../middleware/aut
 import { getSatelitesHabilitados } from "@shared/satellite-catalog";
 import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
 import { getSupabaseUserClient } from "../admin/supabase-client";
+import { DomainAgentOrchestrator } from "../services/orchestrator";
 
 export const apiV1Router = Router();
+
+const orchestrator = new DomainAgentOrchestrator();
 
 // GET /api/v1/health
 apiV1Router.get("/health", (req, res) => {
@@ -13,6 +16,54 @@ apiV1Router.get("/health", (req, res) => {
 
 // Protect all remaining /api/v1 endpoints with Supabase JWT authentication
 apiV1Router.use(authenticateSupabaseJWT as any);
+
+// POST /api/v1/agent/orchestrate
+apiV1Router.post("/agent/orchestrate", async (req: AuthenticatedRequest, res) => {
+  try {
+    const {
+      cloudCoverPct = 10,
+      validPixelRatio = 95,
+      ndviMean = 0.65,
+      gddAccumulated = 450,
+      rainfallMm = 120,
+      sowingDate = "2026-10-15",
+      hybridVariety = "DK-7303",
+      targetDensityPlantsHa = 85000,
+      hasFertilizationHistory = true,
+      hasFieldPhoto = false,
+      unexplainedVigorDrop = false,
+    } = req.body;
+
+    const correlation_id = `agent-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const result = orchestrator.orchestrateConsultation({
+      cloudCoverPct: Number(cloudCoverPct),
+      validPixelRatio: Number(validPixelRatio),
+      ndviMean: Number(ndviMean),
+      gddAccumulated: Number(gddAccumulated),
+      rainfallMm: Number(rainfallMm),
+      sowingDate: String(sowingDate),
+      hybridVariety: String(hybridVariety),
+      targetDensityPlantsHa: Number(targetDensityPlantsHa),
+      hasFertilizationHistory: Boolean(hasFertilizationHistory),
+      hasFieldPhoto: Boolean(hasFieldPhoto),
+      unexplainedVigorDrop: Boolean(unexplainedVigorDrop),
+    });
+
+    res.json({
+      data: {
+        correlation_id,
+        tenant_id: req.user!.tenant_id,
+        user_id: req.user!.id,
+        ...result,
+        timestamp: new Date().toISOString(),
+      },
+      error: null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ data: null, error: err.message });
+  }
+});
 
 // GET /api/v1/predios
 apiV1Router.get("/predios", async (req: AuthenticatedRequest, res) => {
@@ -291,12 +342,12 @@ apiV1Router.post("/roles", async (req: AuthenticatedRequest, res) => {
     }
 
     const roleHierarchy: Record<string, number> = {
-      agricultor: 1,
-      agronomo: 2,
-      admin_tenant: 3,
-      admin: 3,
-      owner: 4,
-      super_admin: 5,
+      viewer: 1,
+      agricultor: 2,
+      agronomo: 3,
+      admin: 4,
+      owner: 5,
+      super_admin: 6,
     };
 
     const callerRank = roleHierarchy[req.user!.role] || 1;

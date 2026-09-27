@@ -63,11 +63,12 @@ export class DomainAgentOrchestrator {
     }
 
     // 2. Contrast Data vs Climate Phenological Stage
-    const satStage = dataRes.findings[2].split(": ")[1] || "";
-    const thermalStage = climateRes.findings[2].split(": ")[1] || "";
+    const satStage = dataRes.findings[2]?.split(": ")[1] || "V4";
+    const thermalStage = climateRes.findings[2]?.split(": ")[1] || "V4";
     const discrepancyFlagged = satStage !== thermalStage;
 
-    const consolidatedStage = discrepancyFlagged ? satStage : satStage;
+    // Discrepancy handling: Maintain satellite stage as provisional, downgrade confidence to MEDIUM
+    const consolidatedStage = satStage;
 
     const nutritionRes = this.nutritionAgent.consult({
       consolidatedStage,
@@ -104,12 +105,12 @@ export class DomainAgentOrchestrator {
 
     // Build Final Recommendation
     const summaryLines: string[] = [
-      `[Consenso Orquestador]: Análisis integrado para ${params.hybridVariety} en etapa ${consolidatedStage}.`,
+      `[Consenso Orquestador]: Análisis integrado para ${params.hybridVariety} en etapa provisional ${consolidatedStage}.`,
     ];
 
     if (discrepancyFlagged) {
       summaryLines.push(
-        `Discrepancia detectada: Satélite estima '${satStage}' vs Clima '${thermalStage}'. Clasificado con confianza MEDIA - Se sugiere verificación en campo.`
+        `Discrepancia detectada: Satélite estima '${satStage}' vs Clima '${thermalStage}'. Confianza clasificada como MEDIA. Se sugiere verificación agronómica en campo antes de aplicar dosis masivas.`
       );
     }
 
@@ -128,8 +129,12 @@ export class DomainAgentOrchestrator {
       summaryLines.push(`Alerta Sanitaria: ${healthRes.warnings[0]}`);
     }
 
+    if (managementRes.findings.length > 0) {
+      summaryLines.push(`Gestión de Maquinaria: ${managementRes.findings[0]}`);
+    }
+
     return {
-      finalRecommendation: summaryLines.join("\n"),
+      finalRecommendation: summaryLines.join("\n\n"),
       consolidatedConfidence,
       participatingAgents,
       discrepancyFlagged,

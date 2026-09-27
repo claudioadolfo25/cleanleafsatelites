@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useUserProfile, VERTICAL_DETAILS } from "../lib/userProfile";
+import { apiFetch } from "../lib/apiClient";
 import { DOMAIN_AGENTS_CATALOG, DomainAgentId } from "@shared/domain-agents";
 import {
   Bot,
@@ -14,10 +15,6 @@ import {
   ShieldCheck,
   Lightbulb,
   Radar,
-  Eye,
-  Thermometer,
-  Award,
-  Compass,
   Building,
   Trees,
   MapPin,
@@ -28,6 +25,8 @@ import {
   ShieldAlert,
   Wrench,
   Layers,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -152,7 +151,7 @@ const AGENTS_UI: Record<DomainAgentId, AgentUIConfig> = {
 export default function AgentPage() {
   const { profile } = useUserProfile();
   const [selectedAgent, setSelectedAgent] = useState<DomainAgentId>("orchestrator");
-  const [messages, setMessages] = useState<Array<{ sender: "user" | "bot"; text: string; agentId: DomainAgentId }>>([
+  const [messages, setMessages] = useState<Array<{ sender: "user" | "bot"; text: string; agentId: DomainAgentId; correlationId?: string; confidence?: string }>>([
     {
       sender: "bot",
       text: `¡Hola ${profile.nombre}! Soy el **Agente Orquestador Central**. Tengo cargado tu perfil: **Vertical ${VERTICAL_DETAILS[profile.vertical].label}** (${profile.superficieHectareas} ha en ${profile.regionUbicacion}). ¿Qué especialista deseas consultar hoy?`,
@@ -172,7 +171,7 @@ export default function AgentPage() {
     toast.info(`Agente activo: ${config.badge}`);
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || inputText;
     if (!query.trim()) return;
 
@@ -182,31 +181,58 @@ export default function AgentPage() {
 
     setIsTyping(true);
 
-    setTimeout(() => {
-      let botReply = "";
-      if (selectedAgent === "orchestrator") {
-        botReply = `[Agente Orquestador Central]: Consolidando informe para predio de **${profile.superficieHectareas} ha** en **${profile.regionUbicacion}**:
-1. **Agente de Datos/Sensores**: Confianza ALTA (NDVI: 0.74, SCL despejado: 92%).
-2. **Agente de Clima**: GDD acumulados coinciden con floración (880 GDD).
-3. **Agente de Nutrición**: ALERTA R1 - Ventana no recuperable en marcha. Se sugiere mantener humedad a capacidad de campo y nivelar Ca/Mg.
-Origen de respuesta: Orquestador + Datos + Nutrición (Confianza: ALTA).`;
-      } else if (selectedAgent === "data_sensors") {
-        botReply = `[Agente de Datos/Sensores]: Análisis espectral ejecutado sobre ${profile.superficieHectareas} ha. NDVI medio: 0.72. Cobertura SCL con 95% píxeles válidos. Señal radar Sentinel-1 confirma rugosidad foliar homogénea.`;
-      } else if (selectedAgent === "climate") {
-        botReply = `[Agente de Clima]: Balance térmico acumulado para ${profile.regionUbicacion}: 880 GDD. Lluvia mensual acumulada: 45 mm. Etapa proyectada por calendario térmico: R1 Floración.`;
-      } else if (selectedAgent === "genetics") {
-        botReply = `[Agente de Genética/Variedades]: Criterio evaluado para la vertical ${profile.vertical}. La densidad poblacional óptima se ubica en el rango de 70,000 - 80,000 plantas/ha para maximizar arquitectura foliar sin generar vulnerabilidad de tallo.`;
-      } else if (selectedAgent === "nutrition") {
-        botReply = `[Agente de Nutrición]: Etapa activa R1 detectada. Recordatorio de regla dura: No prescribo marcas ni dosis exactas, pero la curva de absorción indica demanda pico de N y K. Mantener irrigación continua.`;
-      } else if (selectedAgent === "health") {
-        botReply = `[Agente de Sanidad]: Monitoreo de anomalías espaciales: Sin caídas atípicas bruscas de vigor. Muestra fotográfica o firma infrarroja dentro de parámetros sanos.`;
-      } else {
-        botReply = `[Agente de Manejo/Mecanización]: Checklist para la etapa R1: Revisar emisores de fertirriego, verificar fajas de pulverización y preparar maquinaria de cosecha para la ventana proyectada en 35 días.`;
-      }
+    try {
+      // Execute live orchestrated consultation against REST API v1
+      const res = await apiFetch("/agent/orchestrate", {
+        method: "POST",
+        body: JSON.stringify({
+          cloudCoverPct: 10,
+          validPixelRatio: 95,
+          ndviMean: 0.68,
+          gddAccumulated: 880,
+          rainfallMm: 65,
+          hybridVariety: "DK-7303",
+          targetDensityPlantsHa: 85000,
+          hasFertilizationHistory: true,
+          hasFieldPhoto: false,
+          unexplainedVigorDrop: false,
+        }),
+      });
 
-      setMessages((prev) => [...prev, { sender: "bot", text: botReply, agentId: selectedAgent }]);
+      if (res.error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: "bot",
+            text: `[Error API Agent]: ${res.error}. Mostrando modo contingencia.`,
+            agentId: selectedAgent,
+          },
+        ]);
+      } else {
+        const data = res.data;
+        const botReply = `[${activeAgentDef.name}]:
+${data.finalRecommendation}
+
+• Trazabilidad Correlation ID: ${data.correlation_id}
+• Nivel de Confianza: ${data.consolidatedConfidence}
+• Agentes Participantes: ${(data.participatingAgents || []).join(", ")}`;
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: "bot",
+            text: botReply,
+            agentId: selectedAgent,
+            correlationId: data.correlation_id,
+            confidence: data.consolidatedConfidence,
+          },
+        ]);
+      }
+    } catch (err: any) {
+      toast.error("Error al consultar el ecosistema de agentes");
+    } finally {
       setIsTyping(false);
-    }, 850);
+    }
   };
 
   const resetChat = () => {
@@ -375,8 +401,13 @@ Origen de respuesta: Orquestador + Datos + Nutrición (Confianza: ALTA).`;
                         : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-none space-y-1"
                     }`}
                   >
-                    <div className="font-bold text-[10px] opacity-75 mb-1 flex items-center gap-1">
-                      {msg.sender === "user" ? "Usted (" + profile.nombre + ")" : DOMAIN_AGENTS_CATALOG[msg.agentId].name}
+                    <div className="font-bold text-[10px] opacity-75 mb-1 flex items-center gap-1 justify-between">
+                      <span>{msg.sender === "user" ? "Usted (" + profile.nombre + ")" : DOMAIN_AGENTS_CATALOG[msg.agentId].name}</span>
+                      {msg.confidence && (
+                        <Badge className={`text-[9px] px-1.5 py-0 ${msg.confidence === "HIGH" ? "bg-emerald-600" : "bg-amber-600"}`}>
+                          Confianza: {msg.confidence}
+                        </Badge>
+                      )}
                     </div>
                     <div className="whitespace-pre-line text-xs font-normal">{msg.text}</div>
                   </div>
@@ -385,7 +416,7 @@ Origen de respuesta: Orquestador + Datos + Nutrición (Confianza: ALTA).`;
 
               {isTyping && (
                 <div className="flex items-center gap-2 text-xs text-emerald-800 font-medium animate-pulse p-2 bg-emerald-50 rounded-lg w-fit">
-                  <Bot className="w-4 h-4" /> {activeAgentDef.name} está procesando su consulta y base de conocimiento...
+                  <Bot className="w-4 h-4" /> {activeAgentDef.name} está procesando su consulta vía `/api/v1/agent/orchestrate`...
                 </div>
               )}
             </div>
