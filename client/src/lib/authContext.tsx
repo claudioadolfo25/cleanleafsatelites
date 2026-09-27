@@ -8,12 +8,22 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  token: string | null;
   signOut: () => Promise<void>;
   clearError: () => void;
   loginWithDemo: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Browser-safe Base64URL encoder helper (no Node.js Buffer dependency)
+function base64UrlEncode(obj: object): string {
+  const json = JSON.stringify(obj);
+  const base64 = btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_match, p1) =>
+    String.fromCharCode(parseInt(p1, 16))
+  ));
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -48,6 +58,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     setLoading(true);
     try {
+      if (typeof window !== "undefined") {
+        delete (window as any).__AGROPULSO_DEMO_TOKEN__;
+      }
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setSession(null);
@@ -71,22 +84,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLoading(true);
     try {
-      // Demo mock session user object for staging sandbox
+      // Create valid base64url JSON payload for test/demo mode using browser helper
+      const header = base64UrlEncode({ alg: "HS256", typ: "JWT" });
+      const payload = base64UrlEncode({
+        sub: "demo-tenant-admin-id",
+        email: "demo@agropulso.com",
+        role: "authenticated",
+        app_metadata: { tenant_id: "tenant-demo-001", role: "admin" },
+        user_metadata: { name: "Administrador Demo AgroPulso" },
+        exp: Math.floor(Date.now() / 1000) + 86400 * 7,
+      });
+      const mockJwtToken = `${header}.${payload}.mock-signature`;
+
+      if (typeof window !== "undefined") {
+        (window as any).__AGROPULSO_DEMO_TOKEN__ = mockJwtToken;
+      }
+
       const demoUser = {
         id: "demo-tenant-admin-id",
         email: "demo@agropulso.com",
         user_metadata: { name: "Administrador Demo AgroPulso" },
         app_metadata: { tenant_id: "tenant-demo-001", role: "admin" },
         aud: "authenticated",
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
       } as unknown as User;
 
       const demoSession = {
-        access_token: "mock-demo-jwt-token",
+        access_token: mockJwtToken,
         token_type: "bearer",
         user: demoUser,
-        expires_in: 3600,
-        refresh_token: "mock-demo-refresh-token"
+        expires_in: 86400,
+        refresh_token: "mock-demo-refresh-token",
       } as Session;
 
       setUser(demoUser);
@@ -102,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAuthenticated = !!session && !!user;
+  const token = session?.access_token ?? null;
 
   return (
     <AuthContext.Provider
@@ -111,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isAuthenticated,
         error,
+        token,
         signOut,
         clearError,
         loginWithDemo,

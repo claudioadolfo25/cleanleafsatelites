@@ -1,6 +1,6 @@
 # Arquitectura, Estructura Actual y Hoja de Ruta AgroPulso / Cleanleaf
 
-**Versión:** 1.1.0
+**Versión:** 1.2.0
 **Fecha:** Septiembre 2026
 **Estatus:** Diagnóstico y Especificación Técnica de Producción
 
@@ -37,17 +37,16 @@ La plataforma permite a productores e instituciones agrícolas, forestales y acu
 
 ---
 
-## 3. Desglose del Alcance y Estado de Integración
+## 3. Resoluciones Recientes & Estado del Alcance
 
-| Módulo / Funcionalidad | Estado de Implementación | Alcance Exacto / Detalle Técnico |
+| Módulo / Funcionalidad | Estado | Detalle Técnico de la Solución |
 | --- | --- | --- |
-| **Autenticación Frontend** | **Implementado y Probado** | Supabase Auth en `authContext.tsx` con `getSession`, `onAuthStateChange`, refresco de token, logout y rutas privadas protegidas con `ProtectedRoute`. |
-| **Protección de Rutas** | **Implementado y Probado** | Enrutador `App.tsx` protege `/dashboard/*` redirigiendo a `/login` en ausencia de sesión. |
-| **Seguridad Backend JWT** | **Implementado y Probado** | Middleware Express `authenticateSupabaseJWT` valida tokens JWT, exige `tenant_id` en `app_metadata` y valida roles del catálogo oficial (`super_admin`, `owner`, `admin`, `agronomo`, `agricultor`, `viewer`). Fail-fast fuera de tests. |
-| **Seguridad CORS** | **Implementado y Probado** | Exige `ALLOWED_ORIGINS` sin comodín `*` en entornos de ejecución no-test y añade cabecera `Vary: Origin`. |
-| **Ecosistema Agentes IA** | **Implementado y Probado** | Endpoint REST `POST /api/v1/agent/orchestrate` autenticado que ejecuta el orquestador y 6 especialistas agronómicos con trazabilidad `correlation_id` y badge de confianza. |
-| **Pipeline Copernicus CDSE** | **Implementado con Mocks / Pruebas Ciertas** | Código aislado en `copernicus-orchestrator.ts` preparado con autenticación OAuth2 y enmascaramiento SCL. Requiere credenciales reales `COPERNICUS_CLIENT_ID/SECRET` en Render para ejecución en producción. |
-| **Aislamiento Multi-Tenant RLS** | **Configurado en Esquema SQL** | Tablas en `supabase/migrations/` con políticas RLS activas por `tenant_id`. Requiere despliegue de migraciones en instancia Supabase Staging. |
+| **Propagación Token Demo** | **Resuelto** | `authContext.tsx` y `apiClient.ts` inyectan el token JWT demo (`__AGROPULSO_DEMO_TOKEN__`) en las llamadas HTTP cuando opera en modo Demo. |
+| **Normalización validPixelRatio** | **Resuelto** | `orchestrator.ts` normaliza automáticamente valores porcentuales (>1, ej: 95 -> 0.95) evitando errores de escala en píxeles claros. |
+| **Parámetros Agente Dinámicos** | **Resuelto** | `AgentPage.tsx` extrae dinámicamente el perfil del usuario (hectáreas, región, vertical) y la configuración activa de filtros satelitales. |
+| **Permisos de Gestión de Roles** | **Resuelto** | `POST /api/v1/roles` requiere explícitamente jerarquía autorizada y bloquea asignaciones cruzadas entre tenants. |
+| **Persistencia Auditoría Agentes** | **Resuelto** | `POST /api/v1/agent/orchestrate` registra las consultas consolidadas con su `correlation_id` en la bitácora del tenant. |
+| **Fail-Fast Credenciales Cliente** | **Resuelto** | `supabaseClient.ts` emite error explícito si faltan `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY` en producción/staging. |
 
 ---
 
@@ -67,10 +66,10 @@ cleanleafsatelites/
 │       ├── lib/                   # Clientes e integración de servicios
 │       │   ├── apiClient.ts       # Cliente HTTP centralizado inyectando Bearer JWT
 │       │   ├── authContext.tsx    # Proveedor de autenticación de sesión Supabase
-│       │   ├── supabaseClient.ts  # Cliente Supabase JS para el navegador
+│       │   ├── supabaseClient.ts  # Cliente Supabase JS con fail-fast en prod
 │       │   └── userProfile.ts     # Gestión de perfil local y vertical industrial
 │       └── pages/                 # Vistas principales de la plataforma
-│           ├── AgentPage.tsx      # Zona de Entrenamiento y Consulta de Agentes IA
+│           ├── AgentPage.tsx      # Consulta dinámica a /api/v1/agent/orchestrate
 │           ├── AuthPage.tsx       # Inicio de sesión (Google OAuth + Email/Password)
 │           ├── CopernicusWorkstationPage.tsx # Estación de Trabajo Satelital EO Browser
 │           ├── CopernicusHistoryPage.tsx     # Registro histórico de escenas satelitales
@@ -86,15 +85,15 @@ cleanleafsatelites/
 │   ├── middleware/
 │   │   └── auth.ts                # Middleware de validación de Supabase JWT
 │   ├── routes/
-│   │   └── api-v1.ts              # Router de endpoints REST v1 con /agent/orchestrate
+│   │   └── api-v1.ts              # Router REST v1 con /agent/orchestrate y roles
 │   ├── services/                  # Servicios de integración externa
 │   │   ├── copernicus-auth.ts     # Gestión y cache de tokens OAuth2 CDSE
 │   │   ├── copernicus-orchestrator.ts # Orquestador de análisis 3 pasos CDSE
-│   │   ├── orchestrator.ts        # Orquestador de Agentes Especialistas IA
+│   │   ├── orchestrator.ts        # Orquestador con validPixelRatio normalizado
 │   │   └── specialists.ts         # Motor de 6 Especialistas Agronómicos
 │   └── admin/
 │       └── supabase-client.ts     # Cliente Supabase Service Role para administración
-├── shared/                        # Módulos y tipos compartidos entre Client y Server
+├── shared/                        # Módulos y tipos compartidos entre Client and Server
 │   ├── domain-agents.ts           # Definición de schemas y tipos de los 7 Agentes
 │   ├── satellite-catalog.ts       # Catálogo de misiones satelitales (Sentinel-1/2/3)
 │   └── types.ts                   # Catálogo unificado de Roles y Entidades

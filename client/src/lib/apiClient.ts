@@ -12,9 +12,17 @@ export async function apiFetch<T = any>(
   options: RequestInit = {}
 ): Promise<ApiEnvelope<T>> {
   try {
-    // Retrieve the active Supabase JWT access token
+    // 1. Check active Supabase session token first
     const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    let token = session?.access_token;
+
+    // 2. Fallback check for demo mode session token if Supabase Auth has no active session
+    if (!token && typeof window !== "undefined") {
+      const demoToken = (window as any).__AGROPULSO_DEMO_TOKEN__;
+      if (demoToken) {
+        token = demoToken;
+      }
+    }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

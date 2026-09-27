@@ -33,10 +33,14 @@ export class DomainAgentOrchestrator {
     hasFieldPhoto: boolean;
     unexplainedVigorDrop: boolean;
   }): OrchestratorConsolidatedResponse {
+    // Normalize validPixelRatio: if provided as percentage (>1, e.g. 95), convert to ratio (0.95)
+    const normalizedValidPixelRatio =
+      params.validPixelRatio > 1 ? params.validPixelRatio / 100 : params.validPixelRatio;
+
     // 1. Consult Specialist Domain Agents
     const dataRes = this.dataAgent.consult({
       cloudCoverPct: params.cloudCoverPct,
-      validPixelRatio: params.validPixelRatio,
+      validPixelRatio: normalizedValidPixelRatio,
       ndviMean: params.ndviMean,
     });
 

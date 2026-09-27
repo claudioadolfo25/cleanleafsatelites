@@ -24,14 +24,13 @@ export async function authenticateSupabaseJWT(req: AuthenticatedRequest, res: Re
   try {
     let payload: any;
 
-    // Fail fast in staging / production if SUPABASE_URL is missing
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 
+    // In unit test suite environment, decode base64 JWT payload for testing
     if (process.env.NODE_ENV === "test") {
-      // In explicit unit tests, decode unverified base64 JWT payload for test suite execution
       const parts = token.split(".");
       if (parts.length === 3) {
-        payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+        payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
       } else {
         throw new Error("Malformed test token");
       }

@@ -50,6 +50,22 @@ apiV1Router.post("/agent/orchestrate", async (req: AuthenticatedRequest, res) =>
       unexplainedVigorDrop: Boolean(unexplainedVigorDrop),
     });
 
+    // Audit log persistence for agent consultation
+    if (process.env.NODE_ENV !== "test" && req.token) {
+      try {
+        const supabase = getSupabaseUserClient(req.token);
+        await supabase.from("bitacora_labores").insert({
+          tenant_id: req.user!.tenant_id,
+          tipo_labor: "consulta_agente_orquestador",
+          descripcion: `[Correlation ${correlation_id}] Consenso Agentes: ${result.consolidatedConfidence}. Summary: ${result.finalRecommendation.substring(0, 150)}...`,
+          fecha_realizacion: new Date().toISOString().split("T")[0],
+          registrado_por: req.user!.id,
+        });
+      } catch (auditErr) {
+        console.warn("[Agent Audit Log] Warning: unable to persist consultation audit entry", auditErr);
+      }
+    }
+
     res.json({
       data: {
         correlation_id,
@@ -292,7 +308,7 @@ apiV1Router.post("/invitaciones", async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ data: null, error: "Missing required fields: email, role" });
     }
 
-    // Only owner/admin can invite
+    // Only owner/admin/super_admin can invite
     if (req.user!.role !== "admin" && req.user!.role !== "owner" && req.user!.role !== "super_admin") {
       return res.status(403).json({ data: null, error: "Forbidden: insufficient role to send invitations" });
     }
@@ -336,7 +352,12 @@ apiV1Router.post("/roles", async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ data: null, error: "Missing required fields: user_id, role" });
     }
 
-    // Privilege escalation & tenant boundary check
+    // Role management authorization check: only owner, admin, or super_admin
+    if (req.user!.role !== "owner" && req.user!.role !== "admin" && req.user!.role !== "super_admin") {
+      return res.status(403).json({ data: null, error: "Forbidden: insufficient role privileges to manage roles" });
+    }
+
+    // Tenant boundary check
     if (tenant_id && tenant_id !== req.user!.tenant_id && req.user!.role !== "super_admin") {
       return res.status(403).json({ data: null, error: "Forbidden: cannot manage roles for another tenant" });
     }
@@ -353,6 +374,7 @@ apiV1Router.post("/roles", async (req: AuthenticatedRequest, res) => {
     const callerRank = roleHierarchy[req.user!.role] || 1;
     const targetRank = roleHierarchy[role] || 1;
 
+    // Privilege escalation check
     if (targetRank >= callerRank && req.user!.role !== "super_admin" && req.user!.role !== "owner") {
       return res.status(403).json({ data: null, error: "Forbidden: cannot assign a role equal or superior to your own" });
     }

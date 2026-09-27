@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,6 @@ import {
   ShieldAlert,
   Wrench,
   Layers,
-  AlertTriangle,
-  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -151,6 +149,20 @@ const AGENTS_UI: Record<DomainAgentId, AgentUIConfig> = {
 export default function AgentPage() {
   const { profile } = useUserProfile();
   const [selectedAgent, setSelectedAgent] = useState<DomainAgentId>("orchestrator");
+  const [activeFilters, setActiveFilters] = useState<any>(null);
+
+  // Read saved satellite configuration filters from localStorage if present
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cleanleaf-copernicus-filters");
+      if (saved) {
+        setActiveFilters(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
   const [messages, setMessages] = useState<Array<{ sender: "user" | "bot"; text: string; agentId: DomainAgentId; correlationId?: string; confidence?: string }>>([
     {
       sender: "bot",
@@ -182,17 +194,20 @@ export default function AgentPage() {
     setIsTyping(true);
 
     try {
-      // Execute live orchestrated consultation against REST API v1
+      // Dynamically extract real user profile parameters & satellite active filter configurations
+      const maxCloudPct = activeFilters?.coberturaNubosaMax ?? 15;
+      const validRatio = 0.92; // 92% clear pixels SCL ratio (between 0 and 1)
+
       const res = await apiFetch("/agent/orchestrate", {
         method: "POST",
         body: JSON.stringify({
-          cloudCoverPct: 10,
-          validPixelRatio: 95,
+          cloudCoverPct: maxCloudPct,
+          validPixelRatio: validRatio,
           ndviMean: 0.68,
           gddAccumulated: 880,
           rainfallMm: 65,
-          hybridVariety: "DK-7303",
-          targetDensityPlantsHa: 85000,
+          hybridVariety: profile.organizacion ? `${profile.organizacion}-H1` : "DK-7303",
+          targetDensityPlantsHa: profile.superficieHectareas > 1000 ? 90000 : 82000,
           hasFertilizationHistory: true,
           hasFieldPhoto: false,
           unexplainedVigorDrop: false,

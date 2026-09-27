@@ -126,7 +126,7 @@ describe("Express REST API v1 Security: eventos_pago, user_roles, invitaciones",
     expect(res2.body.error).toContain("cannot send invitations for another tenant");
   });
 
-  it("POST /api/v1/roles prevents privilege escalation and cross-tenant role assignment", async () => {
+  it("POST /api/v1/roles prevents non-admin role management, privilege escalation and cross-tenant role assignment", async () => {
     // Cross-tenant role assignment attempt
     const res1 = await request(app)
       .post("/api/v1/roles")
@@ -147,6 +147,6 @@ describe("Express REST API v1 Security: eventos_pago, user_roles, invitaciones",
         role: "owner",
       });
     expect(res2.status).toBe(403);
-    expect(res2.body.error).toContain("cannot assign a role equal or superior to your own");
+    expect(res2.body.error).toContain("insufficient role privileges");
   });
 });
