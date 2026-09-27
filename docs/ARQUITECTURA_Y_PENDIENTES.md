@@ -1,6 +1,6 @@
 # Arquitectura, Estructura Actual y Hoja de Ruta AgroPulso / Cleanleaf
 
-**Versión:** 1.2.0
+**Versión:** 1.3.0
 **Fecha:** Septiembre 2026
 **Estatus:** Diagnóstico y Especificación Técnica de Producción
 
@@ -15,6 +15,7 @@ La plataforma permite a productores e instituciones agrícolas, forestales y acu
 2. Procesar índices espectrales y radar (**NDVI, NDWI, EVI, Humedad de Suelo SAR, Temperatura LST**) usando Sentinel-1 (Radar SAR), Sentinel-2 (Óptico MSI con enmascaramiento de nubes SCL) y Sentinel-3 (OLCI / SLSTR).
 3. Recibir diagnósticos agronómicos automatizados mediante un **Ecosistema Multi-Agente IA** (1 Orquestador Central + 6 Especialistas de Dominio: Datos/Sensores, Clima, Genética/Variedades, Nutrición, Sanidad, Gestión/Mecanización).
 4. Garantizar aislamiento estricto de datos de clientes mediante **Multi-tenant RLS (Row Level Security)** respaldado en Supabase PostgreSQL + PostGIS y endpoints REST API v1 protegidos por JWT.
+5. Gestionar clientes, usuarios, invitaciones y eventos de pago mediante la **Consola de Control Administrador (`/dashboard/admin`)**.
 
 ---
 
@@ -41,12 +42,13 @@ La plataforma permite a productores e instituciones agrícolas, forestales y acu
 
 | Módulo / Funcionalidad | Estado | Detalle Técnico de la Solución |
 | --- | --- | --- |
+| **Panel Administrador UI** | **Implementado y Probado** | Creada consola de control en `/dashboard/admin` con gestión de tenants, asignación de roles, invitaciones, bitácora de auditoría y webhooks de pago. |
+| **Enrutamiento y Menú Admin** | **Implementado y Probado** | Ruta protegida en `App.tsx` y enlace con ícono de escudo en `DashboardLayout.tsx` visible condicionalmente para roles administrativos. |
 | **Propagación Token Demo** | **Resuelto** | `authContext.tsx` y `apiClient.ts` inyectan el token JWT demo (`__AGROPULSO_DEMO_TOKEN__`) en las llamadas HTTP cuando opera en modo Demo. |
 | **Normalización validPixelRatio** | **Resuelto** | `orchestrator.ts` normaliza automáticamente valores porcentuales (>1, ej: 95 -> 0.95) evitando errores de escala en píxeles claros. |
 | **Parámetros Agente Dinámicos** | **Resuelto** | `AgentPage.tsx` extrae dinámicamente el perfil del usuario (hectáreas, región, vertical) y la configuración activa de filtros satelitales. |
 | **Permisos de Gestión de Roles** | **Resuelto** | `POST /api/v1/roles` requiere explícitamente jerarquía autorizada y bloquea asignaciones cruzadas entre tenants. |
 | **Persistencia Auditoría Agentes** | **Resuelto** | `POST /api/v1/agent/orchestrate` registra las consultas consolidadas con su `correlation_id` en la bitácora del tenant. |
-| **Fail-Fast Credenciales Cliente** | **Resuelto** | `supabaseClient.ts` emite error explícito si faltan `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY` en producción/staging. |
 
 ---
 
@@ -58,10 +60,10 @@ cleanleafsatelites/
 │   ├── index.html                 # Punto de entrada HTML
 │   ├── vite.config.ts             # Configuración Vite (build outDir: dist)
 │   └── src/
-│       ├── App.tsx                # Enrutador principal de React con ProtectedRoute
+│       ├── App.tsx                # Enrutador principal de React con /dashboard/admin
 │       ├── components/            # Componentes reutilizables
 │       │   ├── ProtectedRoute.tsx # Guardián de rutas privadas
-│       │   ├── DashboardLayout.tsx# Layout principal con navegación lateral
+│       │   ├── DashboardLayout.tsx# Layout principal con ícono Admin
 │       │   └── FloatingAgentWidget.tsx # Widget flotante interactivo del Agente IA
 │       ├── lib/                   # Clientes e integración de servicios
 │       │   ├── apiClient.ts       # Cliente HTTP centralizado inyectando Bearer JWT
@@ -69,6 +71,7 @@ cleanleafsatelites/
 │       │   ├── supabaseClient.ts  # Cliente Supabase JS con fail-fast en prod
 │       │   └── userProfile.ts     # Gestión de perfil local y vertical industrial
 │       └── pages/                 # Vistas principales de la plataforma
+│           ├── AdminDashboardPage.tsx # Consola de Administración Operativa (/dashboard/admin)
 │           ├── AgentPage.tsx      # Consulta dinámica a /api/v1/agent/orchestrate
 │           ├── AuthPage.tsx       # Inicio de sesión (Google OAuth + Email/Password)
 │           ├── CopernicusWorkstationPage.tsx # Estación de Trabajo Satelital EO Browser
@@ -93,7 +96,7 @@ cleanleafsatelites/
 │   │   └── specialists.ts         # Motor de 6 Especialistas Agronómicos
 │   └── admin/
 │       └── supabase-client.ts     # Cliente Supabase Service Role para administración
-├── shared/                        # Módulos y tipos compartidos entre Client and Server
+├── shared/                        # Módulos y tipos compartidos entre Client y Server
 │   ├── domain-agents.ts           # Definición de schemas y tipos de los 7 Agentes
 │   ├── satellite-catalog.ts       # Catálogo de misiones satelitales (Sentinel-1/2/3)
 │   └── types.ts                   # Catálogo unificado de Roles y Entidades

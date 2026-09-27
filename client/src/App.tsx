@@ -18,6 +18,7 @@ import AgentPage from "./pages/AgentPage";
 import ProfilePage from "./pages/ProfilePage";
 import CopernicusWorkstationPage from "./pages/CopernicusWorkstationPage";
 import CopernicusHistoryPage from "./pages/CopernicusHistoryPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 
 function Protected({ component: Component }: { component: React.ComponentType<any> }) {
   return (
@@ -37,6 +38,7 @@ function Router() {
 
       {/* Protected Private Dashboard Routes */}
       <Route path={"/dashboard"}>{() => <Protected component={Home} />}</Route>
+      <Route path={"/dashboard/admin"}>{() => <Protected component={AdminDashboardPage} />}</Route>
       <Route path={"/dashboard/configuracion/satelites"}>{() => <Protected component={SatelliteConfiguration} />}</Route>
       <Route path={"/dashboard/copernicus/workstation"}>{() => <Protected component={CopernicusWorkstationPage} />}</Route>
       <Route path={"/dashboard/copernicus/historico"}>{() => <Protected component={CopernicusHistoryPage} />}</Route>

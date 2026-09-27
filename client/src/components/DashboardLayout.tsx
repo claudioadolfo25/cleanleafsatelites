@@ -28,10 +28,12 @@ import {
   Sliders,
   History,
   Globe,
+  Shield,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import FloatingAgentWidget from "./FloatingAgentWidget";
 import { useUserProfile } from "../lib/userProfile";
+import { useAuth } from "../lib/authContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -40,6 +42,10 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
   const { profile } = useUserProfile();
+  const { user } = useAuth();
+
+  const userRole = user?.app_metadata?.role || "admin";
+  const isAdmin = ["super_admin", "owner", "admin"].includes(userRole);
 
   const navigationItems = [
     {
@@ -48,6 +54,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: LayoutDashboard,
       description: "Vista general de predios y consumo",
     },
+    ...(isAdmin
+      ? [
+          {
+            title: "Panel Administrador",
+            url: "/dashboard/admin",
+            icon: Shield,
+            description: "Gestión de clientes, roles y auditoría",
+          },
+        ]
+      : []),
     {
       title: "EO Browser Workstation",
       url: "/dashboard/copernicus/workstation",
