@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useUserProfile, VERTICAL_DETAILS } from "../lib/userProfile";
+import { DOMAIN_AGENTS_CATALOG, DomainAgentId } from "@shared/domain-agents";
 import {
   Bot,
   User,
@@ -20,18 +21,18 @@ import {
   Building,
   Trees,
   MapPin,
-  HelpCircle,
-  RotateCcw
+  RotateCcw,
+  CloudSun,
+  Dna,
+  Sprout,
+  ShieldAlert,
+  Wrench,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
-type SpecialistPersona = "ernestocruz" | "sentinel1" | "sentinel2" | "sentinel3" | "orientador";
-
-interface Specialist {
-  id: SpecialistPersona;
-  name: string;
-  role: string;
-  description: string;
+interface AgentUIConfig {
+  id: DomainAgentId;
   badge: string;
   icon: any;
   color: string;
@@ -41,124 +42,141 @@ interface Specialist {
   initialGreeting: string;
 }
 
-const SPECIALISTS: Record<SpecialistPersona, Specialist> = {
-  orientador: {
-    id: "orientador",
-    name: "Guía de Plataforma & Orientador AgroPulso",
-    role: "Onboarding & Tutor de Navegación",
-    description: "Orientación paso a paso para configurar predios, elegir misiones satelitales y maximizar el rendimiento según tu terreno particular.",
-    badge: "Guía General",
-    icon: Compass,
-    color: "text-blue-600",
-    borderColor: "border-blue-500",
-    bgLight: "bg-blue-50/60",
-    samplePrompts: [
-      "¿Cómo configuro mi primer predio y elijo los satélites ideales?",
-      "¿Qué diferencia hay entre un informe McKinsey y uno Copernicus?",
-      "¿Cómo interpreto la máscara de nubes SCL en días lluviosos?",
-      "Recomiéndame los pasos exactos para mi terreno según mi perfil."
-    ],
-    initialGreeting: "¡Hola! Soy tu Guía de Plataforma AgroPulso. Te ayudaré a navegar el sistema, configurar tus lotes y seleccionar los mejores análisis satelitales en función de tu predio y vertical productiva."
-  },
-  ernestocruz: {
-    id: "ernestocruz",
-    name: "Don Ernesto Cruz — Asesor Agronómico",
-    role: "Agronomía de Alto Rendimiento & Nutrición de Suelos",
-    description: "Metodología inspirada en récords de rendimiento agrícola: nutrición balanceada Ca/Mg, balance foliar y maximización del potencial del suelo.",
-    badge: "Alto Rendimiento",
-    icon: Award,
+const AGENTS_UI: Record<DomainAgentId, AgentUIConfig> = {
+  orchestrator: {
+    id: "orchestrator",
+    badge: "Consenso & Trazabilidad",
+    icon: Layers,
     color: "text-emerald-700",
     borderColor: "border-emerald-600",
-    bgLight: "bg-emerald-50/60",
+    bgLight: "bg-emerald-50/70",
     samplePrompts: [
-      "Don Ernesto, con un NDVI de 0.65 en maíz V6, ¿qué nutrición foliar recomienda?",
-      "¿Cómo preparo el suelo y la relación Calcio/Magnesio para aspirar a máximo rendimiento?",
-      "¿Qué tips prácticos aplicar cuando el sensor marca estrés térmico antes de la floración?",
-      "¿Cómo correlacionar mapas de humedad radar con la fertilización nitrogenada?"
+      "¿Cuál es la recomendación consolidada para mi lote según los especialistas?",
+      "Evaluar si la etapa satelital discrepa con el calendario térmico.",
+      "Verificar alertas prioritarias no recuperables en mi ventana activa.",
     ],
-    initialGreeting: "¡Qué tal, estimado productor! Soy Ernesto Cruz. Aquí no venimos a adivinar; venimos a romper récords de rendimiento cuidando el suelo, alimentando la raíz y tomando decisiones científicas en el momento exacto. ¿Qué cultivo vamos a llevar a su máximo potencial hoy?"
+    initialGreeting:
+      "Agente Orquestador Central activo. Coordino las consultas entre los 6 agentes especialistas, aplico el motor de confianza auditable y garantizo trazabilidad de origen.",
   },
-  sentinel1: {
-    id: "sentinel1",
-    name: "Especialista Radar Sentinel-1",
-    role: "Teledetección Microondas & Humedad",
-    description: "Experto en firmas de retrodifusión radar (polarización VV/VH). Ideal para atravesar nubes, medir estructura vegetativa y humedad del suelo.",
-    badge: "Radar C-Band",
+  data_sensors: {
+    id: "data_sensors",
+    badge: "Sentinel-1/2 SAR/MSI",
     icon: Radar,
-    color: "text-indigo-600",
-    borderColor: "border-indigo-500",
-    bgLight: "bg-indigo-50/60",
+    color: "text-sky-600",
+    borderColor: "border-sky-500",
+    bgLight: "bg-sky-50/60",
     samplePrompts: [
-      "¿Qué significa un aumento en la retrodifusión Cross-Ratio (VH/VV) en mi lote?",
-      "¿Cómo detectar la humedad del suelo bajo un cielo 100% nublado?",
-      "Explicación técnica de la polarización σ⁰ VV para monitoreo de inundaciones."
+      "¿Cuál es el valor NDVI medio y el porcentaje de píxeles despejados SCL?",
+      "Fusión Sentinel-1 Radar para estimar humedad de suelo con nubes.",
+      "Estimación satelital de etapa fenológica en mi polígono.",
     ],
-    initialGreeting: "Iniciando canal Sentinel-1 SAR. La banda C de 5.4 GHz atraviesa la cobertura nubosa de tu terreno. Puedo evaluar la humedad dieléctrica del suelo y la rugosidad de la canopia sin importar el clima."
+    initialGreeting:
+      "Agente de Datos/Sensores en línea. Proceso imágenes Sentinel-1/2, calculo NDVI/NDRE/NDWI y entrego la señal física del lote junto con su nivel de confianza.",
   },
-  sentinel2: {
-    id: "sentinel2",
-    name: "Especialista Óptico Sentinel-2",
-    role: "Salud Vegetal & Espectro Multiespectral",
-    description: "Especialista en firmas espectrales visible e infrarrojo cercano (NIR/SWIR). Análisis de NDVI, NDWI, EVI y clorofila a 10m de resolución.",
-    badge: "Alta Res. 10m",
-    icon: Eye,
-    color: "text-emerald-600",
-    borderColor: "border-emerald-500",
-    bgLight: "bg-emerald-50/60",
-    samplePrompts: [
-      "¿Por qué mi índice NDWI bajó bruscamente si el NDVI se mantuvo estable?",
-      "¿Cómo usar las bandas B8A y B11 para medir el contenido hídrico del follaje (NDMI)?",
-      "Diferencia operativa entre NDVI y EVI en parcelas de alta densidad."
-    ],
-    initialGreeting: "Sensor MSI Sentinel-2 listo. Analizando resoluciones espectrales de 10 y 20 metros para detectar anomalías fotosintéticas y vigor foliar temprano en tus cultivos."
-  },
-  sentinel3: {
-    id: "sentinel3",
-    name: "Especialista Térmico Sentinel-3",
-    role: "Contexto Regional & Temperatura Terrestre",
-    description: "Especialista en temperatura de superficie de la tierra (LST) y radiometría oceánica/acuícola (OLCI/SLSTR) para macroclima y sequías.",
-    badge: "SLSTR / OLCI",
-    icon: Thermometer,
+  climate: {
+    id: "climate",
+    badge: "Meteorología & GDD",
+    icon: CloudSun,
     color: "text-amber-600",
     borderColor: "border-amber-500",
     bgLight: "bg-amber-50/60",
     samplePrompts: [
-      "¿Cómo afecta la temperatura de la superficie terrestre (LST) al estrés térmico regional?",
-      "Monitoreo de la clorofila-a y temperatura en balsas acuícolas con Sentinel-3.",
-      "Análisis macroclimático de la cuenca para prever heladas o sequía prolongada."
+      "¿Cuántos Grados Días Desarrollo (GDD) acumula el lote desde siembra?",
+      "Contraste entre etapa estimada por clima vs etapa observada por satélite.",
+      "Balance hídrico y precipitaciones acumuladas en la ventana reciente.",
     ],
-    initialGreeting: "Instrumentos OLCI y SLSTR en línea. Monitoreo la temperatura de superficie (LST) y la calidad de cuerpos de agua para contextualizar eventos climáticos a gran escala."
-  }
+    initialGreeting: "Agente de Clima listo. Monitoreo la acumulación térmica GDD y precipitaciones para proyectar el calendario fenológico esperado de tu cultivo.",
+  },
+  genetics: {
+    id: "genetics",
+    badge: "Densidad & Variedades",
+    icon: Dna,
+    color: "text-indigo-600",
+    borderColor: "border-indigo-500",
+    bgLight: "bg-indigo-50/60",
+    samplePrompts: [
+      "¿La densidad objetivo de 85,000 plantas/ha es segura para mi híbrido?",
+      "Criterios de tolerancia a acame y comportamiento de canopia.",
+      "Rango óptimo de plantas/ha según la zona de mi predio.",
+    ],
+    initialGreeting:
+      "Agente de Genética y Variedades activo. Evalúo rangos de densidad poblacional recomendable por híbrido sin favorecer marcas comerciales.",
+  },
+  nutrition: {
+    id: "nutrition",
+    badge: "Curvas N/P/K & Ventana R1",
+    icon: Sprout,
+    color: "text-emerald-600",
+    borderColor: "border-emerald-500",
+    bgLight: "bg-emerald-50/60",
+    samplePrompts: [
+      "¿Estamos en la ventana crítica no recuperable R1 de nutrición?",
+      "Curva de absorción foliar N-K para la etapa fenológica actual.",
+      "Sugerencias de nutrición balanceada Ca/Mg para el lote.",
+    ],
+    initialGreeting:
+      "Agente de Nutrición en línea. Analizo las curvas de absorción por etapa fenológica para alertar sobre ventanas críticas no recuperables como R1.",
+  },
+  health: {
+    id: "health",
+    badge: "Detección de Anomalías",
+    icon: ShieldAlert,
+    color: "text-rose-600",
+    borderColor: "border-rose-500",
+    bgLight: "bg-rose-50/60",
+    samplePrompts: [
+      "Análisis de caída focalizada de vigor no explicada por clima.",
+      "Interpretación de fotos de terreno para descartar mancha foliar.",
+      "Alerta de revisión presencial en subzonas del lote.",
+    ],
+    initialGreeting:
+      "Agente de Sanidad listo. Detecto anomalías espectrales focales y caídas atípicas de vigor para orientar inspecciones de campo oportunamente.",
+  },
+  management: {
+    id: "management",
+    badge: "Calendario Operativo",
+    icon: Wrench,
+    color: "text-teal-600",
+    borderColor: "border-teal-500",
+    bgLight: "bg-teal-50/60",
+    samplePrompts: [
+      "Checklist operativo para la etapa fenológica actual.",
+      "Calendarización de fajas y pulverización post-floración.",
+      "Programación de cosechas seguras según humedad estimada.",
+    ],
+    initialGreeting:
+      "Agente de Manejo y Mecanización activo. Planifico el calendario del ciclo operativo y genero listas de verificación para labores de campo.",
+  },
 };
 
 export default function AgentPage() {
   const { profile } = useUserProfile();
-  const [selectedSpecialist, setSelectedSpecialist] = useState<SpecialistPersona>("orientador");
-  const [messages, setMessages] = useState<Array<{ sender: "user" | "bot"; text: string; persona: SpecialistPersona }>>([
+  const [selectedAgent, setSelectedAgent] = useState<DomainAgentId>("orchestrator");
+  const [messages, setMessages] = useState<Array<{ sender: "user" | "bot"; text: string; agentId: DomainAgentId }>>([
     {
       sender: "bot",
-      text: `¡Hola ${profile.nombre}! He cargado tu perfil: **Vertical ${VERTICAL_DETAILS[profile.vertical].label}** (${profile.superficieHectareas} ha en ${profile.regionUbicacion}). ¿En qué puedo orientarte hoy?`,
-      persona: "orientador"
+      text: `¡Hola ${profile.nombre}! Soy el **Agente Orquestador Central**. Tengo cargado tu perfil: **Vertical ${VERTICAL_DETAILS[profile.vertical].label}** (${profile.superficieHectareas} ha en ${profile.regionUbicacion}). ¿Qué especialista deseas consultar hoy?`,
+      agentId: "orchestrator",
     },
   ]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  const activePersona = SPECIALISTS[selectedSpecialist];
-  const verticalInfo = VERTICAL_DETAILS[profile.vertical];
+  const activeAgentConfig = AGENTS_UI[selectedAgent];
+  const activeAgentDef = DOMAIN_AGENTS_CATALOG[selectedAgent];
 
-  const handleSelectSpecialist = (persona: SpecialistPersona) => {
-    setSelectedSpecialist(persona);
-    const spec = SPECIALISTS[persona];
-    setMessages((prev) => [...prev, { sender: "bot", text: spec.initialGreeting, persona }]);
-    toast.info(`Agente activo: ${spec.name}`);
+  const handleSelectAgent = (agentId: DomainAgentId) => {
+    setSelectedAgent(agentId);
+    const config = AGENTS_UI[agentId];
+    setMessages((prev) => [...prev, { sender: "bot", text: config.initialGreeting, agentId }]);
+    toast.info(`Agente activo: ${config.badge}`);
   };
 
   const handleSendMessage = (textToSend?: string) => {
     const query = textToSend || inputText;
     if (!query.trim()) return;
 
-    const userMsg = { sender: "user" as const, text: query, persona: selectedSpecialist };
+    const userMsg = { sender: "user" as const, text: query, agentId: selectedAgent };
     setMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputText("");
 
@@ -166,34 +184,38 @@ export default function AgentPage() {
 
     setTimeout(() => {
       let botReply = "";
-      if (selectedSpecialist === "orientador") {
-        botReply = `[Guía AgroPulso]: Para tu terreno de **${profile.superficieHectareas} ha** en **${profile.regionUbicacion}** (${profile.organizacion}), te recomiendo los siguientes pasos:
-1. **Configurar el Lote**: Ve al *Centro de Informes* y dibuja tu polígono.
-2. **Elegir Misión Satelital**: Para tu vertical **${verticalInfo.label}**, los satélites recomendados son **${verticalInfo.satellites.join(" y ")}**.
-3. **Formato de Salida**: Has configurado la preferencia de informe como **${profile.preferenciaInforme.toUpperCase()}**.
-¿Quieres que revisemos alguna variable en particular?`;
-      } else if (selectedSpecialist === "ernestocruz") {
-        botReply = `[Consejo Ernesto Cruz]: Para responder a tu consulta "${query}" en tu predio de **${profile.superficieHectareas} ha** (${profile.vertical}), el secreto está en mirar la raíz. Si combinamos el mapa NDVI con un análisis de aireación del suelo y nutrición foliar equilibrada (Relación Ca/Mg 3:1), vas a desbloquear el potencial metabólico del cultivo. ¡Recuerda que la planta responde al eslabón más débil!`;
-      } else if (selectedSpecialist === "sentinel1") {
-        botReply = `[Sentinel-1 Radar]: Analizando la firma de retrodifusión para "${query}" en tu zona (${profile.regionUbicacion}). En C-Band (5.4 GHz), los valores de VV de -12 dB a -15 dB sugieren humedad superficial óptima sin saturación. La señal radar confirma que la estructura de canopia no muestra volumen marchito.`;
-      } else if (selectedSpecialist === "sentinel2") {
-        botReply = `[Sentinel-2 Óptico]: Evaluando reflectancia de bandas B4 (Rojo) y B8 (NIR) para "${query}". Para tu actividad de **${profile.vertical}**, el índice NDVI de tu polígono indica fotosíntesis activa con píxeles limpios según la máscara SCL. Te sugiero revisar el mapa de variabilidad espacial.`;
+      if (selectedAgent === "orchestrator") {
+        botReply = `[Agente Orquestador Central]: Consolidando informe para predio de **${profile.superficieHectareas} ha** en **${profile.regionUbicacion}**:
+1. **Agente de Datos/Sensores**: Confianza ALTA (NDVI: 0.74, SCL despejado: 92%).
+2. **Agente de Clima**: GDD acumulados coinciden con floración (880 GDD).
+3. **Agente de Nutrición**: ALERTA R1 - Ventana no recuperable en marcha. Se sugiere mantener humedad a capacidad de campo y nivelar Ca/Mg.
+Origen de respuesta: Orquestador + Datos + Nutrición (Confianza: ALTA).`;
+      } else if (selectedAgent === "data_sensors") {
+        botReply = `[Agente de Datos/Sensores]: Análisis espectral ejecutado sobre ${profile.superficieHectareas} ha. NDVI medio: 0.72. Cobertura SCL con 95% píxeles válidos. Señal radar Sentinel-1 confirma rugosidad foliar homogénea.`;
+      } else if (selectedAgent === "climate") {
+        botReply = `[Agente de Clima]: Balance térmico acumulado para ${profile.regionUbicacion}: 880 GDD. Lluvia mensual acumulada: 45 mm. Etapa proyectada por calendario térmico: R1 Floración.`;
+      } else if (selectedAgent === "genetics") {
+        botReply = `[Agente de Genética/Variedades]: Criterio evaluado para la vertical ${profile.vertical}. La densidad poblacional óptima se ubica en el rango de 70,000 - 80,000 plantas/ha para maximizar arquitectura foliar sin generar vulnerabilidad de tallo.`;
+      } else if (selectedAgent === "nutrition") {
+        botReply = `[Agente de Nutrición]: Etapa activa R1 detectada. Recordatorio de regla dura: No prescribo marcas ni dosis exactas, pero la curva de absorción indica demanda pico de N y K. Mantener irrigación continua.`;
+      } else if (selectedAgent === "health") {
+        botReply = `[Agente de Sanidad]: Monitoreo de anomalías espaciales: Sin caídas atípicas bruscas de vigor. Muestra fotográfica o firma infrarroja dentro de parámetros sanos.`;
       } else {
-        botReply = `[Sentinel-3 Térmico]: La lectura de temperatura de superficie (LST) en **${profile.regionUbicacion}** muestra estabilidad térmica regional. No se detectan anomalías de estrés por calor para la ventana evaluada.`;
+        botReply = `[Agente de Manejo/Mecanización]: Checklist para la etapa R1: Revisar emisores de fertirriego, verificar fajas de pulverización y preparar maquinaria de cosecha para la ventana proyectada en 35 días.`;
       }
 
-      setMessages((prev) => [...prev, { sender: "bot", text: botReply, persona: selectedSpecialist }]);
+      setMessages((prev) => [...prev, { sender: "bot", text: botReply, agentId: selectedAgent }]);
       setIsTyping(false);
-    }, 900);
+    }, 850);
   };
 
   const resetChat = () => {
     setMessages([
       {
         sender: "bot",
-        text: `Conversación reiniciada. ¿Cómo puedo ayudarte con tu predio de **${profile.superficieHectareas} ha** en **${profile.regionUbicacion}**?`,
-        persona: selectedSpecialist
-      }
+        text: `Conversación reiniciada con el **${activeAgentDef.name}**. ¿En qué puedo colaborar para tu predio de **${profile.superficieHectareas} ha**?`,
+        agentId: selectedAgent,
+      },
     ]);
     toast.success("Conversación reiniciada");
   };
@@ -201,15 +223,15 @@ export default function AgentPage() {
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto space-y-8 pb-12">
-        {/* Header Hero Banner with User Profile Context */}
+        {/* Header Hero Banner with Domain Agent Architecture */}
         <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-slate-900 p-8 rounded-2xl text-white shadow-xl space-y-4 border border-emerald-800/30">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs font-semibold">
-                Asistente Virtual ChatGPT AgroPulso
+                Ecosistema de Agentes por Dominio
               </Badge>
               <Badge className="bg-teal-500/20 text-teal-300 border-teal-500/30 text-xs font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-teal-400" /> Contexto de Terreno Activo
+                <ShieldCheck className="w-3 h-3 text-teal-400" /> Trazabilidad & Motor de Confianza
               </Badge>
             </div>
 
@@ -220,9 +242,9 @@ export default function AgentPage() {
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2">
-              <h1 className="text-3xl font-extrabold tracking-tight">Centro de Agentes & Orientador AgroPulso</h1>
+              <h1 className="text-3xl font-extrabold tracking-tight">Ecosistema de Agentes Especialistas</h1>
               <p className="text-slate-300 text-sm max-w-2xl leading-relaxed">
-                Interactúe con nuestro guía de plataforma o consulte a nuestros agentes de física satelital y agronomía de alto rendimiento.
+                Consulte al Agente Orquestador o a los 6 especialistas por dominio (Datos, Clima, Genética, Nutrición, Sanidad, Manejo).
               </p>
             </div>
 
@@ -244,67 +266,79 @@ export default function AgentPage() {
           </div>
         </div>
 
-        {/* Specialist Selection Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {(Object.keys(SPECIALISTS) as SpecialistPersona[]).map((key) => {
-            const spec = SPECIALISTS[key];
-            const isSelected = selectedSpecialist === key;
-            const Icon = spec.icon;
+        {/* Domain Agents Grid Selector */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          {(Object.keys(AGENTS_UI) as DomainAgentId[]).map((key) => {
+            const agentConfig = AGENTS_UI[key];
+            const agentDef = DOMAIN_AGENTS_CATALOG[key];
+            const isSelected = selectedAgent === key;
+            const Icon = agentConfig.icon;
 
             return (
               <Card
                 key={key}
                 className={`cursor-pointer transition-all shadow-xs ${
-                  isSelected ? `border-2 ${spec.borderColor} ring-2 ring-emerald-500/20 bg-emerald-50/30` : "border-slate-200 hover:border-emerald-300"
+                  isSelected ? `border-2 ${agentConfig.borderColor} ring-2 ring-emerald-500/20 bg-emerald-50/40` : "border-slate-200 hover:border-emerald-300"
                 }`}
-                onClick={() => handleSelectSpecialist(key)}
+                onClick={() => handleSelectAgent(key)}
               >
-                <CardHeader className="p-3 pb-2">
+                <CardHeader className="p-2.5 pb-1">
                   <div className="flex items-center justify-between">
-                    <div className={`p-1.5 rounded-lg bg-white ${spec.color} shadow-xs border border-slate-100`}>
+                    <div className={`p-1.5 rounded-lg bg-white ${agentConfig.color} shadow-xs border border-slate-100`}>
                       <Icon className="w-4 h-4" />
                     </div>
-                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0">
-                      {spec.badge}
-                    </Badge>
                   </div>
-                  <CardTitle className="text-xs font-bold text-slate-900 mt-1.5 leading-snug">{spec.name}</CardTitle>
+                  <CardTitle className="text-xs font-bold text-slate-900 mt-1.5 leading-tight">{agentDef.name}</CardTitle>
                 </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  <p className="text-[11px] text-slate-500 line-clamp-2">{spec.role}</p>
+                <CardContent className="p-2.5 pt-0">
+                  <Badge variant="outline" className="text-[8px] font-bold px-1 py-0 truncate w-full block text-center">
+                    {agentConfig.badge}
+                  </Badge>
                 </CardContent>
               </Card>
             );
           })}
         </div>
 
-        {/* Main ChatGPT-Style Chat Container */}
+        {/* Main Agent Chat Window */}
         <Card className="border-slate-200/80 shadow-md">
-          <CardHeader className={`border-b border-slate-100 rounded-t-xl ${activePersona.bgLight} p-5`}>
+          <CardHeader className={`border-b border-slate-100 rounded-t-xl ${activeAgentConfig.bgLight} p-5`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl bg-white shadow-xs border border-slate-200 ${activePersona.color}`}>
-                  <activePersona.icon className="w-6 h-6" />
+                <div className={`p-2.5 rounded-xl bg-white shadow-xs border border-slate-200 ${activeAgentConfig.color}`}>
+                  <activeAgentConfig.icon className="w-6 h-6" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-bold text-slate-900">{activePersona.name}</CardTitle>
+                  <CardTitle className="text-lg font-bold text-slate-900">{activeAgentDef.name}</CardTitle>
                   <CardDescription className="text-xs font-semibold text-slate-600">
-                    {activePersona.role} — {activePersona.description}
+                    {activeAgentDef.role} — {activeAgentDef.knowledgeDomain}
                   </CardDescription>
                 </div>
               </div>
-              <Badge className="bg-emerald-800 text-white text-xs px-3 py-1">Agente Activo</Badge>
+              <Badge className="bg-emerald-800 text-white text-xs px-3 py-1">Especialista Activo</Badge>
             </div>
           </CardHeader>
 
           <CardContent className="p-6 space-y-6">
+            {/* Prohibitions & Hard Rules Badge */}
+            <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-xs space-y-1">
+              <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block">
+                Reglas y Límites de Conocimiento Asignado:
+              </span>
+              <ul className="list-disc list-inside text-slate-600 space-y-0.5">
+                {activeAgentDef.prohibitions.map((p, idx) => (
+                  <li key={idx}>{p}</li>
+                ))}
+              </ul>
+            </div>
+
             {/* Contextual Suggested Prompts */}
             <div className="space-y-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-700" /> Consultas Sugeridas para este Agente:
+                <Sparkles className="w-3.5 h-3.5 text-emerald-700" /> Consultas Recomendadas:
               </span>
               <div className="flex flex-wrap gap-2">
-                {activePersona.samplePrompts.map((prompt, idx) => (
+                {activeAgentConfig.samplePrompts.map((prompt, idx) => (
                   <Button
                     key={idx}
                     variant="outline"
@@ -342,7 +376,7 @@ export default function AgentPage() {
                     }`}
                   >
                     <div className="font-bold text-[10px] opacity-75 mb-1 flex items-center gap-1">
-                      {msg.sender === "user" ? "Usted (" + profile.nombre + ")" : SPECIALISTS[msg.persona].name}
+                      {msg.sender === "user" ? "Usted (" + profile.nombre + ")" : DOMAIN_AGENTS_CATALOG[msg.agentId].name}
                     </div>
                     <div className="whitespace-pre-line text-xs font-normal">{msg.text}</div>
                   </div>
@@ -351,7 +385,7 @@ export default function AgentPage() {
 
               {isTyping && (
                 <div className="flex items-center gap-2 text-xs text-emerald-800 font-medium animate-pulse p-2 bg-emerald-50 rounded-lg w-fit">
-                  <Bot className="w-4 h-4" /> {activePersona.name} está procesando su consulta y datos de terreno...
+                  <Bot className="w-4 h-4" /> {activeAgentDef.name} está procesando su consulta y base de conocimiento...
                 </div>
               )}
             </div>
@@ -365,7 +399,7 @@ export default function AgentPage() {
               className="flex gap-2 pt-2"
             >
               <Input
-                placeholder={`Escriba su consulta o duda sobre su predio para ${activePersona.name}...`}
+                placeholder={`Escriba su consulta técnica para ${activeAgentDef.name}...`}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 className="flex-1 text-xs py-2.5 h-10"
