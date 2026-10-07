@@ -13,6 +13,13 @@ export type SentinelMeasurement = {
   valor: number;
   unidad: string;
   fecha_adquisicion: Date;
+  data_source?: string;
+  provenance?: {
+    provider: string;
+    mode: "live" | "mock" | "cache";
+    confidence: number;
+    badge_label: string;
+  };
 };
 
 export function resolveTier(hectares: number): Tier {
@@ -51,6 +58,13 @@ function measurement(
     valor: stableValue(`${predioId}:${satellite}:${variable}`, definition.rango[0], definition.rango[1]),
     unidad: definition.unidad,
     fecha_adquisicion: new Date(),
+    data_source: "copernicus_stac_mock",
+    provenance: {
+      provider: "Copernicus CDSE (Mock Provider)",
+      mode: "mock",
+      confidence: 0.85,
+      badge_label: "SINTÉTICO (ENTORNO SIN CREDENCIALES CDSE)",
+    },
   };
 }
 
