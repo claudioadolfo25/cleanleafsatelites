@@ -185,7 +185,6 @@ create table if not exists soil_samples (
 );
 
 -- JWT claims are used here to avoid recursive reads from users during RLS evaluation.
--- The Supabase auth hook sets tenant_id and role claims after login.
 create or replace function get_current_tenant_id() returns uuid
 language sql security definer stable set search_path = public as $$
   select coalesce(
@@ -201,6 +200,22 @@ language sql security definer stable set search_path = public as $$
     nullif(nullif(current_setting('request.jwt.claims', true), '')::json ->> 'role', ''),
     nullif(nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'role', '')
   );
+$$;
+
+-- Explicit role rank hierarchy for strict privilege escalation guards
+create or replace function get_role_rank(role_name text) returns integer
+language sql immutable strict as $$
+  select case role_name
+    when 'super_admin' then 100
+    when 'plataforma_admin' then 100
+    when 'owner' then 80
+    when 'admin' then 60
+    when 'admin_tenant' then 60
+    when 'agronomo' then 40
+    when 'agricultor' then 20
+    when 'viewer' then 10
+    else 0
+  end;
 $$;
 
 alter table tenants enable row level security;
@@ -235,16 +250,16 @@ drop policy if exists workflow_logs_isolation on workflow_logs;
 drop policy if exists weather_cache_isolation on weather_cache;
 drop policy if exists soil_samples_isolation on soil_samples;
 
-create policy tenants_isolation on tenants for all using (id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'));
+create policy tenants_isolation on tenants for all using (id = get_current_tenant_id() or get_role_rank(get_current_role()) >= 100);
 create policy planes_read on planes for select using (true);
-create policy users_isolation on users for select using (tenant_id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'));
+create policy users_isolation on users for select using (tenant_id = get_current_tenant_id() or get_role_rank(get_current_role()) >= 100);
 
--- Strict WITH CHECK guard: Non-admin users cannot alter their role column
+-- Strict WITH CHECK role hierarchy guard: Users cannot assign a role higher than their own rank
 create policy users_update_role_guard on users for update
-  using (tenant_id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'))
+  using (tenant_id = get_current_tenant_id() or get_role_rank(get_current_role()) >= 100)
   with check (
-    (get_current_role() in ('owner', 'admin', 'admin_tenant', 'super_admin', 'plataforma_admin'))
-    or (role = get_current_role())
+    get_role_rank(get_current_role()) >= 60
+    and get_role_rank(role) <= get_role_rank(get_current_role())
   );
 
 create policy predios_isolation on predios for all using (tenant_id = get_current_tenant_id());
@@ -254,8 +269,8 @@ create policy informes_isolation on informes for all using (tenant_id = get_curr
 create policy mediciones_isolation on mediciones for all using (tenant_id = get_current_tenant_id());
 create policy consumo_isolation on consumo for all using (tenant_id = get_current_tenant_id());
 create policy alertas_isolation on alertas for all using (tenant_id = get_current_tenant_id());
-create policy api_keys_isolation on api_keys for all using (tenant_id = get_current_tenant_id() and get_current_role() in ('owner', 'admin', 'admin_tenant', 'super_admin', 'plataforma_admin'));
-create policy workflow_logs_isolation on workflow_logs for all using (tenant_id = get_current_tenant_id() and get_current_role() in ('owner', 'admin', 'admin_tenant', 'super_admin', 'plataforma_admin'));
+create policy api_keys_isolation on api_keys for all using (tenant_id = get_current_tenant_id() and get_role_rank(get_current_role()) >= 60);
+create policy workflow_logs_isolation on workflow_logs for all using (tenant_id = get_current_tenant_id() and get_role_rank(get_current_role()) >= 60);
 create policy weather_cache_isolation on weather_cache for all using (tenant_id = get_current_tenant_id());
 create policy soil_samples_isolation on soil_samples for all using (tenant_id = get_current_tenant_id());
 

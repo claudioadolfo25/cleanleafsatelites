@@ -9,7 +9,6 @@ apiV1Router.get("/health", (_req: Request, res: Response) => {
     data: { status: "ok", version: "v1", timestamp: new Date().toISOString() },
     error: null,
     provenance: {
-      data_source: "estimated",
       badge_label: "API V1 STUB / HEALTH",
       confidence: 1.0,
     },

@@ -36,7 +36,7 @@ export class MockCopernicusProvider implements EarthObservationProvider {
     const measurement = await querySentinel(request.predioId, request.satellite, request.variable);
     return {
       ...measurement,
-      data_source: hasCredentials ? "cdse_live" : "synthetic",
+      data_source: "synthetic",
     };
   }
 }

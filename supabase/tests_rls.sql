@@ -13,7 +13,8 @@ ON CONFLICT (id) DO NOTHING;
 -- Setup test users
 INSERT INTO users (id, tenant_id, role, email)
 VALUES
-  ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'owner', 'admin@tenant-a.cl'),
+  ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'owner', 'owner@tenant-a.cl'),
+  ('v1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'viewer', 'viewer@tenant-a.cl'),
   ('b2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'agricultor', 'user@tenant-b.cl')
 ON CONFLICT (id) DO NOTHING;
 
@@ -24,7 +25,7 @@ VALUES
   ('p2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'Predio Canal Chacao (B)', 120.0)
 ON CONFLICT (id) DO NOTHING;
 
--- Verify Tenant A reads only Tenant A predios
+-- Test 1: Verify Tenant A reads only Tenant A predios
 SET LOCAL request.jwt.claims = '{"app_metadata": {"tenant_id": "11111111-1111-1111-1111-111111111111", "role": "owner"}}';
 SET LOCAL ROLE authenticated;
 
@@ -38,7 +39,7 @@ BEGIN
   END IF;
 END $$;
 
--- Verify Tenant B reads only Tenant B predios
+-- Test 2: Verify Tenant B reads only Tenant B predios
 SET LOCAL request.jwt.claims = '{"app_metadata": {"tenant_id": "22222222-2222-2222-2222-222222222222", "role": "agricultor"}}';
 
 DO $$
@@ -51,7 +52,35 @@ BEGIN
   END IF;
 END $$;
 
--- Verify Anonymous reads 0 predios
+-- Test 3: Privilege Escalation Guard Test - Viewer attempting to elevate role to owner/admin
+SET LOCAL request.jwt.claims = '{"app_metadata": {"tenant_id": "11111111-1111-1111-1111-111111111111", "role": "viewer"}}';
+
+DO $$
+DECLARE
+  updated_rows integer;
+BEGIN
+  UPDATE users SET role = 'owner' WHERE id = 'v1111111-1111-1111-1111-111111111111';
+  GET DIAGNOSTICS updated_rows = ROW_COUNT;
+  IF updated_rows != 0 THEN
+    RAISE EXCEPTION 'RLS SECURITY FAIL: Viewer escalated role to owner! Updated rows: %', updated_rows;
+  END IF;
+END $$;
+
+-- Test 4: Privilege Escalation Guard Test - Agricultor attempting to elevate role to admin_tenant
+SET LOCAL request.jwt.claims = '{"app_metadata": {"tenant_id": "22222222-2222-2222-2222-222222222222", "role": "agricultor"}}';
+
+DO $$
+DECLARE
+  updated_rows integer;
+BEGIN
+  UPDATE users SET role = 'admin_tenant' WHERE id = 'b2222222-2222-2222-2222-222222222222';
+  GET DIAGNOSTICS updated_rows = ROW_COUNT;
+  IF updated_rows != 0 THEN
+    RAISE EXCEPTION 'RLS SECURITY FAIL: Agricultor escalated role to admin_tenant! Updated rows: %', updated_rows;
+  END IF;
+END $$;
+
+-- Test 5: Verify Anonymous reads 0 predios
 SET LOCAL ROLE anon;
 
 DO $$
