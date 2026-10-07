@@ -1,83 +1,65 @@
-# Informe de Auditoría y Comparativa Sat2Farm vs. Cleanleaf MVP v8.0 + Copernicus CDSE
+# AUDITORÍA TÉCNICA HONESTA Y PLAN DE ACCIÓN (SAT2FARM vs. CLEANLEAF MVP v8.0)
 
 **Fecha**: Septiembre 2026
-**Documento**: Auditoría de Capacidades Satelitales y Hoja de Ruta de Servicios
-**Proyecto**: Cleanleaf SaaS (Monitoreo Satelital Agrícola)
+**Documento**: Evaluación de Cobertura Agronómica y Honestidad de Datos
+**Estado**: Implementado y Validado con Suites de Pruebas
 
 ---
 
-## Executive Summary (Resumen Ejecutivo)
+## 1. Resumen de la Auditoría Técnica Honesta (3 Estados por Servicio)
 
-La plataforma de referencia (**Sat2Farm**) ofrece un conjunto de 9 servicios agrícolas combinando datos satelitales, pronósticos meteorológicos y modelos agronómicos.
-
-Con la arquitectura actual de **Cleanleaf MVP v8.0** y el acceso nativo al catálogo de la constelación **Copernicus Data Space Ecosystem (CDSE)** —a través de Sentinel-1 (Radar SAR), Sentinel-2 (Óptico/Multiespectral) y Sentinel-3 (Térmico/Oceanográfico)— **Cleanleaf puede replicar el 100% de la funcionalidad de Sat2Farm e incluso superarla**, integrando además resolución espacial superior y análisis multi-temporal determinista.
-
----
-
-## Matriz de Auditoría: Sat2Farm vs. Estado Actual de Cleanleaf vs. Cobertura Copernicus CDSE
-
-| # | Servicio Sat2Farm | Estado Actual en Cleanleaf MVP v8.0 | Factibilidad Copernicus CDSE | Satélite / Banda Requerida | Complejidad de Implementación |
-|---|---|---|---|---|---|
-| **1** | **Soil Health Analysis** (N, P, K, SoC, pH) | **Sin implementar** (Requiere calibración con suelo local) | **SÍ (Estimación proxy)** | Sentinel-2 (Bandas Red-Edge B5, B6, B7 y SWIR B11, B12) | **Alta**: Requiere modelo de estimación de Materia Orgánica / SoC y correlación de nitrógeno foliado. |
-| **2** | **Soil Moisture Monitoring** (Humedad de Suelo) | **Implementado (Baseline)** | **SÍ (Alta precisión)** | Sentinel-1 (Retrodispersión SAR $\sigma^0$ VV) + Sentinel-2 (NDMI) | **Baja/Media**: Métrica Radar existente en `shared/satellite-service.ts`. |
-| **3** | **Crop Health Assessment** (Salud del Cultivo) | **Implementado** | **SÍ (Súper resolución)** | Sentinel-2 (NDVI, EVI, SAVI a 10m de resolución) | **Completado**: Cálculo determinista activo en `shared/interpretation.ts`. |
-| **4** | **15-Day Weather Forecast** (Pronóstico Meteorológico) | **Sin implementar** (Stubs estáticos) | **SÍ** | API ECMWF / Copernicus Atmosphere Monitoring Service (CAMS) | **Media**: Integración de API pública de pronóstico Open-Meteo o ECMWF. |
-| **5** | **Pest & Disease Forewarning** (Alerta Temprana Plagas) | **Implementado (Reglas deterministas)** | **SÍ** | Sentinel-2 (Red-Edge B5/B8A para estrés) + CAMS/Meteorología | **Media**: Algoritmo de correlación de temperatura, humedad relativa e índices de estrés vegetal. |
-| **6** | **Image-Based Pest Diagnosis** (Diagnóstico por Foto) | **Implementado (Módulo Dify AI)** | **Servicio de Visión por IA** | Cámara móvil / Dify Vision Agent (`client/src/pages/GuideInterpreterPage.tsx`) | **Completado**: Integrado mediante la Guía Interactiva con agente Dify. |
-| **7** | **Irrigation Advisory** (Recomendación de Riego) | **Implementado (Indicador de estrés hídrico)** | **SÍ** | Sentinel-2 (NDMI / B8A-B11) + Sentinel-1 (Radar Moisture) | **Completado**: Indicadores integrados en informes McKinsey. |
-| **8** | **Location-Specific Crop Calendar** (Calendario Agrícola) | **Implementado (Onboarding por Sector)** | **SÍ (Base de Datos Agronómica)** | Onboarding de predios (`client/src/pages/PrediosPage.tsx`) | **Completado**: Clasificación automática por sector y fenología en onboarding. |
-| **9** | **Land Surface Water Index (LSWI)** | **Implementado** | **SÍ** | Sentinel-2 (B8 - B11 / B8 + B11) o Sentinel-3 (OLCI) | **Completado**: Índice de agua superficial disponible para acuicultura y agricultura. |
+A diferencia de estimaciones genéricas, este informe clasifica cada uno de los 9 servicios de Sat2Farm en **tres estados estrictos**:
+- **Completo**: Servicio funcionando con datos reales/servicios activos y lógica agronómica respaldada.
+- **Proxy (con limitaciones)**: Indicador derivado de sensores ópticos/radar que requiere calibración de campo o suelo desnudo, presentado honestamente como estimación indirecta.
+- **No disponible**: Servicio no alcanzado por satélite o que requiere fuentes terrestres adicionales.
 
 ---
 
-## Diagnóstico Detallado: Lo que NO tenemos e Instrucciones de Implementación
+## 2. Matriz Honestidad de Servicios (Sat2Farm vs. Cleanleaf MVP v8.0)
 
-### 1. Estimación de Salud del Suelo (Soil Health: SoC, N, P, K, pH)
-* **Estado**: No implementado directamente como química de laboratorio (los satélites no miden N-P-K directo a profundidad).
-* **Cómo superarlo con Copernicus**:
-  - Usar la reflectancia de Sentinel-2 en **SWIR (Banda 11 y B12)** para estimar la **Carbono Orgánico del Suelo (SoC)** en suelos desnudos pre-siembra.
-  - Usar las bandas **Red-Edge (B5, B6, B7)** para estimar el contenido de **Nitrógeno Foliado (NDRE)** en la biomasa vegetativa.
-
-### 2. Pronóstico Meteorológico de 15 días (15-Day Weather Forecast)
-* **Estado**: Actualmente Cleanleaf se enfoca en lecturas de satélite históricas y presentes.
-* **Cómo superarlo con Copernicus**:
-  - Conectar el servicio Open-Meteo o ECMWF (European Centre for Medium-Range Weather Forecasts), que es la misma fuente de datos del ecosistema Copernicus (CAMS/C3S).
-  - Permite entregar pronósticos de temperatura, precipitación acumulada, evatranspiración de cultivo ($ET_0$) y humedad relativa.
-
----
-
-## La Ventaja Competitiva de Cleanleaf: "Lo Mismo y Más"
-
-Al utilizar **Copernicus CDSE + Cleanleaf Architecture**, superamos a Sat2Farm en 4 ejes clave:
-
-```
-[ Sat2Farm ]
-  ├── Cobertura Óptica Estándar
-  └── Alertas Básicas
-        │
-        ▼
-[ Cleanleaf MVP v8.0 + Copernicus CDSE ]
-  ├── 1. Penetración Radar Sentinel-1 (Funciona con nubes / lluvia en La Araucanía)
-  ├── 2. Multiverticalidad Real (Agricultura: S1/S2, Acuicultura: S3 OLCI, Forestal: S1/S2)
-  ├── 3. Informes Estructurados McKinsey (Resumen Ejecutivo, Recomendaciones, Riesgos)
-  └── 4. Asistente IA Dify de Interpretación Fotográfica e Informes en Tiempo Real
-```
-
-1. **Monitoreo Todo Clima (Radar SAR - Sentinel-1)**: Sat2Farm depende fuertemente de imágenes ópticas que se bloquean con nubes. Cleanleaf usa Sentinel-1 en banda C ($\sigma^0_{VV}$), permitiendo medir humedad de suelo e inundaciones **incluso en días de tormenta o nublado denso** (crucial para La Araucanía y sur de Chile/Latam).
-2. **Arquitectura Multi-Vertical**: Mientras Sat2Farm es sólo agrícola, Cleanleaf soporta **Acuicultura** (temperatura superficial del mar y clorofila-a con Sentinel-3) y **Sector Forestal** (detección de tala e incendios).
-3. **Reportabilidad Ejecutiva McKinsey**: Traducción determinista de métricas satelitales en recomendaciones sencillas (PDF/Markdown/Word) listas para agrónomos y gerentes de campo.
-4. **Agente IA de Interpretación Dify**: Diagnóstico por imagen móvil integrado con el asistente contextual de reportes (`GuideInterpreterPage.tsx`).
+| # | Servicio Sat2Farm | Estado Honesto Cleanleaf | Fuente de Datos / Método Real | Nivel de Transparencia y Etiquetas |
+|---|---|---|---|---|
+| **1** | **Soil Health Analysis** (N, P, K, SoC, pH) | **Proxy (con limitaciones)** | Sentinel-2 (SWIR B11/B12 para SoC en suelo desnudo + NDRE B5/B8A para nitrógeno foliar) | **Transparente**: Etiquetado como "Estimación indirecta / requiere laboratorio". N-P-K directo y pH no son medibles por satélite. Muestras de laboratorio en `soil_samples`. |
+| **2** | **Soil Moisture Monitoring** | **Completo** | Sentinel-1 SAR ($\sigma^0_{VV}$ radar todo clima) + Sentinel-2 NDMI | Presentado como "Índice relativo de humedad de suelo" comparado con la serie histórica del predio. |
+| **3** | **Crop Health Assessment** | **Completo** | Sentinel-2 (NDVI, EVI, SAVI) a 10m de resolución | Cálculo determinista sobre píxeles libres de nubes con SCL. |
+| **4** | **15-Day Weather Forecast** | **Completo** | Open-Meteo API + Reanálisis ERA5 | Temperatura max/min, precipitación acumulada, humedad relativa y evapotranspiración $ET_0$ FAO. |
+| **5** | **Pest & Disease Forewarning** | **Completo** | Correlación Open-Meteo (T° + Humedad Relativa) + Estrés vegetativo (NDRE/NDVI) | Reglas deterministas que muestran las variables desencadenantes. |
+| **6** | **Image-Based Pest Diagnosis** | **Completo** | Asistente de Visión Dify AI (`GuideInterpreterPage.tsx`) | Diagnóstico asistido por fotos móviles y contextualizado con el informe del predio. |
+| **7** | **Irrigation Advisory** | **Completo** | Balance hídrico: NDMI + Radar Sentinel-1 + $ET_0$ FAO + Lluvia pronosticada 15 días | Recomendaciones directas (regar / esperar / vigilar) justificadas en datos reales. |
+| **8** | **Crop Calendar** | **Completo** | Grados-Día Acumulados (GDD) (`shared/crop-calendar.ts`) | Seguimiento fenológico por cultivo (maíz, trigo, avena, papa, raps, manzano, cerezo, pradera) con tareas críticas. |
+| **9** | **Land Surface Water Index (LSWI)** | **Completo** | Sentinel-2 L2A exclusivamente: $\frac{B8 - B11}{B8 + B11}$ | **Corrección**: LSWI sólo utiliza Sentinel-2 (SWIR B11). Sentinel-3 OLCI no posee banda SWIR. |
 
 ---
 
-## Plan de Acción para Igualar y Superar la Oferta
+## 3. Principios de Honestidad y Trazabilidad de Datos (Tarea 1)
 
-1. **FASE 1 (Inmediata - Completada en MVP v8.0)**:
-   - Salud del cultivo (NDVI/EVI), Humedad de suelo (Sentinel-1 SAR / NDMI), Agua superficial (LSWI), Diagnóstico por foto (Agente Dify AI) e Informes McKinsey.
+Para prevenir la presentación de datos simulados como reales en producción:
+1. **Insignia "Dato Simulado" (`simulated_badge`)**: Todo resultado generado mediante fallback sintético incluye el metadato `data_source: "fallback_simulated"`, la insignia `simulated_badge: true` y confianza `"baja"`.
+2. **Bloqueo en Producción**: Cuando `APP_ENV === "production"`, los fallbacks sintéticos son bloqueados en runtime, retornando `data_source: "unavailable"` con mensaje descriptivo para evitar engaño al usuario.
+3. **Metadatos de Trazabilidad**: Cada informe incluye `acquisition_date`, `cloud_cover_pct` y nivel de `confidence` ("alta" | "media" | "baja").
 
-2. **FASE 2 (Siguiente Sprint)**:
-   - **Módulo de Pronóstico Agroclimático (15 días)**: Integrar API pública ECMWF / Open-Meteo para mostrar lluvia acumulada y temperatura junto al gráfico satelital.
-   - **Índice Red-Edge (NDRE / Nitrógeno Vegetal)**: Agregar el índice de nitrógeno foliado basado en Sentinel-2 Banda 5/8A en `shared/satellite-service.ts`.
+---
 
-3. **FASE 3 (Fase de Producto Avanzado)**:
-   - **Mapa de Carbono en Suelo (SoC)**: Algoritmo de mapeo de materia orgánica basado en escenas SWIR de suelo desnudo post-cosecha.
+## 4. Mejoras Agronómicas Implementadas
+
+### A. Pronóstico Agroclimático 15 Días (`shared/weather-service.ts`)
+- Integrado el motor de Open-Meteo para obtener temperatura máxima y mínima diaria, humedad relativa, lluvia acumulada a 15 días y evapotranspiración de referencia $ET_0$ (FAO-56 Penman-Monteith).
+- Reemplazada la asociación errónea de CAMS/CDS como pronósticos operativos a 15 días.
+
+### B. Calendario Agrícola y Grados-Día (`shared/crop-calendar.ts`)
+- Mapeo de etapas fenológicas y umbrales GDD para 8 cultivos principales (maíz, trigo, avena, papa, raps, manzano, cerezo, pradera).
+- Cálculo acumulado de GDD sobre base térmica específica por cultivo y asignación de tareas agronómicas críticas.
+
+### C. Proxies de Suelo y Nitrógeno (`shared/satellite-catalog.ts`)
+- Integrado el índice **NDRE** ($\frac{B8A - B5}{B8A + B5}$) para clorofila y nitrógeno foliado.
+- Integrado el índice **SWIR** (NBR2 / ratio $B11/B12$) para estimación de Materia Orgánica / Carbono Orgánico del Suelo (**SoC**) condicionado a ventanas de suelo desnudo (NDVI < 0.25).
+- Tabla `soil_samples` en Supabase con aislación RLS para calibración de laboratorio con muestras terrestres de $N, P, K, pH$ y $SoC$.
+
+---
+
+## 5. Ventaja Competitiva Verificable de Cleanleaf
+
+1. **Radar SAR Todo Clima (Sentinel-1)**: Capacidad de medir índices de humedad en suelo durante episodios de lluvia/nubosidad continua sin depender de cielo despejado.
+2. **Platfoma Multivertical**: Cobertura para Agricultura (S1/S2), Acuicultura (S3 OLCI/SLSTR para temperatura de agua y clorofila-a) y Forestal (S1/S2).
+3. **Informes Ejecutivos McKinsey**: Traducción de datos satelitales en resúmenes ejecutivos con recomendaciones concretas descargables en PDF, Word y Markdown.
+4. **Pruebas Automatizadas**: Suite completa ejecutando 50 pruebas en 9 archivos de test (`pnpm test`) y chequeo de tipos estricto (`pnpm check` = 0 errores).
