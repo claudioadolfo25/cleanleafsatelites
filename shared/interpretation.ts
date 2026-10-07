@@ -22,13 +22,6 @@ export function buildInterpretationPrompt(input: InterpretationInput): string {
 }
 
 export function interpretMeasurement(input: InterpretationInput): string {
-  const apiKey = process.env.DIFY_API_KEY;
-
-  if (apiKey) {
-    // When Dify API key is present, prompt is structured for Dify Agent execution.
-    // In local execution / tests without live network call, fall back to deterministic response.
-  }
-
   if (input.satelite === "sentinel-2" && input.variable === "ndvi") {
     if (input.valor < 0.4) return "Tu cultivo muestra menor vigor; conviene revisar riego o fertilización esta semana.";
     if (input.valor < 0.6) return "El vigor del cultivo está en un nivel intermedio; mantén el monitoreo y revisa las zonas amarillas.";

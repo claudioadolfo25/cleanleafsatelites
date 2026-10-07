@@ -25,12 +25,12 @@ describe("Honest Data Traceability & Production Enforcements (Tarea 1)", () => {
 
 describe("Open-Meteo 15-Day Weather Forecast Service (Tarea 2)", () => {
   it("fetches weather forecast or returns fallback structure with 15-16 days", async () => {
-    const forecast = await fetch15DayWeatherForecast(-38.73, -72.59);
+    const forecast = await fetch15DayWeatherForecast(-38.73, -72.59, { timeoutMs: 2500 });
     expect(forecast.days.length).toBeGreaterThanOrEqual(15);
     expect(forecast.summary.total_precipitation_15d_mm).toBeGreaterThanOrEqual(0);
     expect(forecast.days[0]).toHaveProperty("et0_fao_evapotranspiration_mm");
     expect(forecast.days[0]).toHaveProperty("temp_max_c");
-  });
+  }, 10000);
 });
 
 describe("Crop Calendar & Growing Degree Days Engine (Tarea 5)", () => {

@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Plus, Building2, Trees, Droplet } from "lucide-react";
+import { MapPin, Plus, Building2, Trees, Droplet, CloudSun, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import { CROP_CALENDARS, CropType } from "@shared/crop-calendar";
 
 interface Predio {
   id: string;
@@ -17,6 +18,8 @@ interface Predio {
   ubicacion: string;
   sateliteAsignado: string;
   tier: string;
+  cultivo?: CropType;
+  fechaSiembra?: string;
 }
 
 const INITIAL_PREDIOS: Predio[] = [
@@ -56,6 +59,8 @@ export default function PrediosPage() {
   const [sector, setSector] = useState<"agricultura" | "acuicultura" | "forestal">("agricultura");
   const [superficie, setSuperficie] = useState("");
   const [ubicacion, setUbicacion] = useState("");
+  const [cultivo, setCultivo] = useState<CropType>("maiz");
+  const [fechaSiembra, setFechaSiembra] = useState("2026-01-15");
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +87,8 @@ export default function PrediosPage() {
       ubicacion,
       sateliteAsignado: satelite,
       tier,
+      cultivo,
+      fechaSiembra,
     };
 
     setPredios([newPredio, ...predios]);
@@ -168,6 +175,30 @@ export default function PrediosPage() {
                     placeholder="Ej: Temuco, La Araucanía"
                     value={ubicacion}
                     onChange={(e) => setUbicacion(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cultivo">Cultivo Principal</Label>
+                  <Select value={cultivo} onValueChange={(val: any) => setCultivo(val)}>
+                    <SelectTrigger id="cultivo">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(CROP_CALENDARS).map((c) => (
+                        <SelectItem key={c.crop} value={c.crop}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fechaSiembra">Fecha de Siembra / Inicio</Label>
+                  <Input
+                    id="fechaSiembra"
+                    type="date"
+                    value={fechaSiembra}
+                    onChange={(e) => setFechaSiembra(e.target.value)}
                   />
                 </div>
               </div>

@@ -24,7 +24,7 @@ export async function fetch15DayWeatherForecast(
   lon: number,
   options?: { apiKey?: string; timeoutMs?: number }
 ): Promise<WeatherForecastResult> {
-  const timeoutMs = options?.timeoutMs ?? 8000;
+  const timeoutMs = options?.timeoutMs ?? 3000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
