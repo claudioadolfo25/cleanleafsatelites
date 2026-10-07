@@ -3,39 +3,96 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import SatelliteConfiguration from "./pages/SatelliteConfiguration";
 import ReportsDashboard from "./pages/ReportsDashboard";
 import ReportDetail from "./pages/ReportDetail";
+import UserProfile from "./pages/UserProfile";
+import GuideInterpreterPage from "./pages/GuideInterpreterPage";
+import PrediosPage from "./pages/PrediosPage";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
-      <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
-      <Route path={"/dashboard/informes"} component={ReportsDashboard} />
+      <Route path={"/login"} component={Login} />
+      <Route path={"/registro"} component={Register} />
+      <Route path={"/"}>
+        {() => (
+          <DashboardLayout>
+            <Home />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard"}>
+        {() => (
+          <DashboardLayout>
+            <Home />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/predios"}>
+        {() => (
+          <DashboardLayout>
+            <PrediosPage />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/guias/interpretar-informes"}>
+        {() => (
+          <DashboardLayout>
+            <GuideInterpreterPage />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/configuracion"}>
+        {() => (
+          <DashboardLayout>
+            <UserProfile />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/configuracion/perfil"}>
+        {() => (
+          <DashboardLayout>
+            <UserProfile />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/configuracion/satelites"}>
+        {() => (
+          <DashboardLayout>
+            <SatelliteConfiguration />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/informes/:id"}>
+        {() => (
+          <DashboardLayout>
+            <ReportDetail />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dashboard/informes"}>
+        {() => (
+          <DashboardLayout>
+            <ReportsDashboard />
+          </DashboardLayout>
+        )}
+      </Route>
       <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />

@@ -17,6 +17,9 @@ import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
 import { getReport, listReports } from "@shared/report-catalog";
+import { fetch15DayWeatherForecast } from "@shared/weather-service";
+import { getCurrentPhenologyStage, CropType } from "@shared/crop-calendar";
+import { createTraceableMetadata } from "@shared/data-traceability";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -172,6 +175,19 @@ export const appRouter = router({
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
     resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
+    weatherForecast: publicProcedure
+      .input(z.object({ lat: z.number(), lon: z.number() }))
+      .query(async ({ input }) => {
+        const forecast = await fetch15DayWeatherForecast(input.lat, input.lon);
+        return createTraceableMetadata(forecast, { source: "open_meteo", confidence: "alta" });
+      }),
+    cropStage: publicProcedure
+      .input(z.object({ crop: z.string(), plantingDate: z.string(), lat: z.number(), lon: z.number() }))
+      .query(async ({ input }) => {
+        const forecast = await fetch15DayWeatherForecast(input.lat, input.lon);
+        const stage = getCurrentPhenologyStage(input.crop as CropType, input.plantingDate, forecast.days);
+        return createTraceableMetadata(stage, { source: "open_meteo", confidence: "alta" });
+      }),
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({

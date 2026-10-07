@@ -5,15 +5,18 @@ export type InterpretationInput = {
   variable: string;
   valor: number;
   unidad: string;
+  sector?: string;
 };
 
 export function buildInterpretationPrompt(input: InterpretationInput): string {
+  const sector = input.sector ?? "agricultura";
   return [
-    "Eres el agente de Interpretación de Cleanleaf.",
-    "Explica el resultado en lenguaje simple, sin jerga técnica innecesaria.",
+    `Eres el agente de Interpretación de Cleanleaf especializado en ${sector}.`,
+    "Explica el resultado en lenguaje simple y directo para toma de decisiones sectoriales.",
     `Fuente: ${input.satelite}`,
     `Variable: ${input.variable}`,
     `Valor: ${input.valor} ${input.unidad}`,
+    `Sector: ${sector}`,
     "Distingue explícitamente entre vigor óptico, humedad radar y temperatura/clorofila oceánica.",
   ].join("\n");
 }

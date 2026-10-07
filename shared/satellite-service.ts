@@ -4,6 +4,7 @@ import {
   type SatelliteId,
 } from "./satellite-catalog";
 import { getTierForSuperficie, type ProcessingTier } from "./satellite-router";
+import { copernicusProvider } from "../src/lib/copernicus";
 
 export type Tier = ProcessingTier;
 
@@ -27,43 +28,16 @@ export function tierLabel(tier: Tier): string {
   }[tier];
 }
 
-function stableValue(seed: string, min: number, max: number): number {
-  const hash = Array.from(seed).reduce((accumulator, character) => {
-    return (accumulator * 31 + character.charCodeAt(0)) % 10_000;
-  }, 17);
-  const normalized = hash / 10_000;
-  return Number((min + normalized * (max - min)).toFixed(2));
-}
-
-function measurement(
-  predioId: string,
-  satellite: SatelliteId,
-  variable: string,
-): SentinelMeasurement {
-  const definition = getVariablesPorSatelite(satellite).find(item => item.variable === variable);
-  if (!definition) {
-    throw new Error(`${variable} no es una variable disponible en ${satelliteCatalog[satellite].nombre}`);
-  }
-
-  return {
-    satelite: satellite,
-    variable,
-    valor: stableValue(`${predioId}:${satellite}:${variable}`, definition.rango[0], definition.rango[1]),
-    unidad: definition.unidad,
-    fecha_adquisicion: new Date(),
-  };
-}
-
 export async function querySentinel1(predioId: string, variable = "sigma0_vv"): Promise<SentinelMeasurement> {
-  return measurement(predioId, "sentinel-1", variable);
+  return copernicusProvider.query(predioId, "sentinel-1", variable);
 }
 
 export async function querySentinel2(predioId: string, variable = "ndvi"): Promise<SentinelMeasurement> {
-  return measurement(predioId, "sentinel-2", variable);
+  return copernicusProvider.query(predioId, "sentinel-2", variable);
 }
 
 export async function querySentinel3(predioId: string, variable = "sst"): Promise<SentinelMeasurement> {
-  return measurement(predioId, "sentinel-3", variable);
+  return copernicusProvider.query(predioId, "sentinel-3", variable);
 }
 
 export function querySentinel(
