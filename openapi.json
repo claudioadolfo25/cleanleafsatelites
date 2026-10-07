@@ -1,14 +1,14 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "AgroPulso / Cleanleaf REST API v1",
+    "title": "AgroPulso REST API",
     "version": "1.0.0",
-    "description": "Especificación de API REST v1 para la plataforma agrotech AgroPulso. Todos los endpoints de consulta de datos satelitales y climáticos incluyen el sobre obligatorio de datos con provenance."
+    "description": "API REST versionada /api/v1 para el monitoreo agrícola satelital multi-tenant AgroPulso."
   },
   "servers": [
     {
-      "url": "https://agropulso.vercel.app/api/v1",
-      "description": "Servidor Producción / Staging Vercel Serverless"
+      "url": "/api/v1",
+      "description": "Base API V1"
     }
   ],
   "components": {
@@ -16,49 +16,7 @@
       "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Token JWT de Supabase Auth conteniendo app_metadata con tenant_id y role"
-      }
-    },
-    "schemas": {
-      "Provenance": {
-        "type": "object",
-        "required": ["data_source", "badge_label", "confidence"],
-        "properties": {
-          "data_source": {
-            "type": "string",
-            "enum": ["cdse_live", "synthetic", "estimated"]
-          },
-          "badge_label": {
-            "type": "string",
-            "example": "SINTÉTICO (ENTORNO SIN CREDENCIALES CDSE)"
-          },
-          "confidence": {
-            "type": "number",
-            "example": 0.85
-          }
-        }
-      },
-      "ApiResponseEnvelope": {
-        "type": "object",
-        "required": ["data", "error"],
-        "properties": {
-          "data": {
-            "type": "object",
-            "nullable": true
-          },
-          "error": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "code": { "type": "string" },
-              "message": { "type": "string" }
-            }
-          },
-          "provenance": {
-            "$ref": "#/components/schemas/Provenance"
-          }
-        }
+        "bearerFormat": "JWT"
       }
     }
   },
@@ -70,87 +28,76 @@
   "paths": {
     "/health": {
       "get": {
-        "summary": "Estado de salud del servicio API v1",
+        "summary": "Health check del servidor API",
         "responses": {
-          "200": {
-            "description": "API operativa",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEnvelope"
-                }
-              }
-            }
-          }
+          "200": { "description": "OK" }
         }
+      }
+    },
+    "/predios": {
+      "get": {
+        "summary": "Listar predios del tenant activo",
+        "responses": { "200": { "description": "Lista de predios" } }
+      },
+      "post": {
+        "summary": "Crear predio con polígono",
+        "responses": { "201": { "description": "Predio creado" } }
       }
     },
     "/solicitudes": {
       "post": {
-        "summary": "Crear nueva solicitud de análisis satelital",
-        "responses": {
-          "200": {
-            "description": "Solicitud procesada o ingresada en cola",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEnvelope"
-                }
-              }
-            }
-          }
-        }
+        "summary": "Solicitar análisis satelital",
+        "responses": { "202": { "description": "Solicitud encolada" } }
       }
     },
-    "/agent/orchestrate": {
+    "/informes": {
+      "get": {
+        "summary": "Listar informes generados",
+        "responses": { "200": { "description": "Lista de informes" } }
+      }
+    },
+    "/informes/{id}": {
+      "get": {
+        "summary": "Obtener detalle de un informe",
+        "responses": { "200": { "description": "Detalle del informe" } }
+      }
+    },
+    "/alertas": {
+      "get": {
+        "summary": "Listar alertas agronómicas",
+        "responses": { "200": { "description": "Lista de alertas" } }
+      }
+    },
+    "/bitacora": {
+      "get": {
+        "summary": "Obtener bitácora de labores",
+        "responses": { "200": { "description": "Historial de labores" } }
+      },
       "post": {
-        "summary": "Consulta orquestada a los 6 Agentes Especialistas de IA",
-        "responses": {
-          "200": {
-            "description": "Consulta multi-agente completada con auditoría y correlation_id",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEnvelope"
-                }
-              }
-            }
-          }
-        }
+        "summary": "Registrar labor agrícola",
+        "responses": { "201": { "description": "Labor registrada" } }
       }
     },
-    "/weather/forecast": {
+    "/ciclos": {
       "get": {
-        "summary": "Pronóstico meteorológico Open-Meteo de 15 días con FAO ET0",
-        "responses": {
-          "200": {
-            "description": "Datos de pronóstico con provenance de Open-Meteo",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEnvelope"
-                }
-              }
-            }
-          }
-        }
+        "summary": "Obtener ciclos de campaña",
+        "responses": { "200": { "description": "Lista de ciclos" } }
+      },
+      "post": {
+        "summary": "Crear nuevo ciclo de campaña",
+        "responses": { "201": { "description": "Ciclo creado" } }
       }
     },
-    "/crop-calendar/stage": {
+    "/catalogo/satelites": {
       "get": {
-        "summary": "Seguimiento fenológico GDD por cultivo",
-        "responses": {
-          "200": {
-            "description": "Etapa fenológica y labores agronómicas con provenance",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseEnvelope"
-                }
-              }
-            }
-          }
-        }
+        "summary": "Obtener catálogo de satélites habilitados por vertical",
+        "responses": { "200": { "description": "Catálogo satelital" } }
+      }
+    },
+    "/consumo": {
+      "get": {
+        "summary": "Obtener consumo mensual procesado por tenant",
+        "responses": { "200": { "description": "Registro de consumo" } }
       }
     }
   }

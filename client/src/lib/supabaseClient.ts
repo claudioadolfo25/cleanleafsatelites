@@ -1,12 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+const isProductionOrStaging = import.meta.env.PROD || import.meta.env.MODE === "staging";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  if (import.meta.env.MODE !== "test") {
-    console.error("CRITICAL_CONFIG_ERROR: SUPABASE_URL and SUPABASE_ANON_KEY must be configured.");
-  }
+if (isProductionOrStaging && (!supabaseUrl || !supabaseAnonKey)) {
+  throw new Error("[FATAL Supabase] VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY son obligatorias en entorno de producción.");
 }
 
 export const supabase = createClient(

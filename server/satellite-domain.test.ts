@@ -11,7 +11,7 @@ import {
   resolveTier,
 } from "@shared/satellite-service";
 import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
-import { validatePlanLimits } from "@shared/plan-limits";
+import { validatePlanLimits, planCatalog } from "@shared/plan-limits";
 import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
 import { guidanceForNeed, satelliteGuidance } from "@shared/satellite-guidance";
@@ -234,7 +234,6 @@ describe("máquina de estados", () => {
     expect(() => assertTransition("procesando", "completado")).not.toThrow();
   });
 });
-
 
 describe("guía de elección satelital", () => {
   it("recomienda Sentinel-2 para vigor y Sentinel-1 como respaldo con nubosidad", () => {
