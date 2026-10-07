@@ -13,7 +13,7 @@ export function useAuth(options?: UseAuthOptions) {
   // navigate — never during render. startLogin() mints a one-time nonce + writes
   // the state cookie, so calling it per render would overwrite the cookie and
   // desync it from an in-flight login's `state`.
-  const { redirectOnUnauthenticated = false, redirectPath } = options ?? {};
+  const { redirectOnUnauthenticated = false } = options ?? {};
   const utils = trpc.useUtils();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
@@ -30,69 +30,58 @@ export function useAuth(options?: UseAuthOptions) {
   const logout = useCallback(async () => {
     try {
       await logoutMutation.mutateAsync();
-    } catch (error: unknown) {
-      if (
-        error instanceof TRPCClientError &&
-        error.data?.code === "UNAUTHORIZED"
-      ) {
+    } catch (error) {
+      if (error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED") {
         return;
       }
       throw error;
-    } finally {
-      // Clear the Preview auto-login token mirrored into sessionStorage, so
-      // header-based sessions (Safari ITP / WebView) are logged out too. The
-      // backend cookie is cleared by the logout mutation.
-      try {
-        sessionStorage.removeItem("manus-cookie");
-      } catch {}
-      utils.auth.me.setData(undefined, null);
-      await utils.auth.me.invalidate();
     }
-  }, [logoutMutation, utils]);
+  }, [logoutMutation]);
 
   const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
+    if (meQuery.isLoading) {
+      return {
+        user: null,
+        loading: true,
+        error: null,
+        isAuthenticated: false,
+      };
+    }
+
+    if (meQuery.error) {
+      return {
+        user: null,
+        loading: false,
+        error: meQuery.error,
+        isAuthenticated: false,
+      };
+    }
+
+    if (meQuery.data) {
+      return {
+        user: meQuery.data,
+        loading: false,
+        error: null,
+        isAuthenticated: true,
+      };
+    }
+
     return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
+      user: null,
+      loading: false,
+      error: null,
+      isAuthenticated: false,
     };
-  }, [
-    meQuery.data,
-    meQuery.error,
-    meQuery.isLoading,
-    logoutMutation.error,
-    logoutMutation.isPending,
-  ]);
+  }, [meQuery.isLoading, meQuery.error, meQuery.data]);
 
   useEffect(() => {
-    if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
-    if (state.user) return;
-    if (typeof window === "undefined") return;
-    if (redirectPath && window.location.pathname === redirectPath) return;
-
-    // Navigate at this moment only. startLogin() mints the nonce + cookie itself.
-    if (redirectPath) {
-      window.location.href = redirectPath;
-    } else {
+    if (!state.loading && !state.isAuthenticated && redirectOnUnauthenticated) {
       startLogin();
     }
-  }, [
-    redirectOnUnauthenticated,
-    redirectPath,
-    logoutMutation.isPending,
-    meQuery.isLoading,
-    state.user,
-  ]);
+  }, [state.loading, state.isAuthenticated, redirectOnUnauthenticated]);
 
   return {
     ...state,
-    refresh: () => meQuery.refetch(),
     logout,
   };
 }

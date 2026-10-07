@@ -1,49 +1,56 @@
-import "dotenv/config";
+import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
-import net from "net";
-import { createApp } from "../app";
-import { serveStatic, setupVite } from "./vite";
+import { apiV1Router } from "../routes/api-v1";
 
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
+const app = express();
 
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
+// Basic JSON and URL encoded body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-async function startServer() {
-  const app = createApp();
-  const server = createServer(app);
+// CORS middleware with strict origin validation and Vary header
+app.use((req, res, next) => {
+  res.setHeader("Vary", "Origin");
 
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : process.env.NODE_ENV === "test"
+    ? ["*"]
+    : ["https://agropulso.vercel.app"];
+
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes("*")) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
   }
+  next();
+});
 
+// Register versioned Express REST API routes
+app.use("/api/v1", apiV1Router);
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  res.status(status).json({ message });
+});
+
+const server = createServer(app);
+const port = process.env.PORT || 5000;
+
+if (process.env.NODE_ENV !== "test") {
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    console.log(`[AgroPulso API] Serving REST v1 on port ${port}`);
   });
 }
 
-startServer().catch(console.error);
+export { app, server };
