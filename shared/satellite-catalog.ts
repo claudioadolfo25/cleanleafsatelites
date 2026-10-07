@@ -45,6 +45,8 @@ export const satelliteCatalog: Record<SatelliteId, SatelliteDefinition> = {
       { variable: "ndmi", unidad: "ratio", rango: [-1, 1], descripcion: "Humedad de follaje" },
       { variable: "evi", unidad: "ratio", rango: [0, 1], descripcion: "Vigor en alta biomasa" },
       { variable: "savi", unidad: "ratio", rango: [0, 1], descripcion: "Vigor corregido por suelo" },
+      { variable: "ndre", unidad: "ratio", rango: [0, 1], descripcion: "Clorofila y nitrógeno foliado (Red-Edge B5/B8A)" },
+      { variable: "soc_swir", unidad: "index", rango: [0, 100], descripcion: "Estimación de Materia Orgánica / Carbono del Suelo (SWIR B11/B12)" },
     ],
   },
   "sentinel-3": {
