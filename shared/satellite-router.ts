@@ -4,8 +4,7 @@ const DEFAULT_TIER1_MAX_HA = 50;
 const DEFAULT_TIER2_MAX_HA = 5000;
 
 function configuredLimit(key: string, fallback: number): number {
-  const raw = typeof process !== "undefined" && process?.env ? process.env[key] : undefined;
-  const value = Number(raw);
+  const value = Number(process.env[key]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 

@@ -4,51 +4,19 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { AuthProvider } from "./lib/authContext";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import Landing3DPage from "./pages/Landing3DPage";
-import AuthPage from "./pages/AuthPage";
 import Home from "./pages/Home";
 import SatelliteConfiguration from "./pages/SatelliteConfiguration";
 import ReportsDashboard from "./pages/ReportsDashboard";
 import ReportDetail from "./pages/ReportDetail";
-import SupportPage from "./pages/SupportPage";
-import GuideInterpreterPage from "./pages/GuideInterpreterPage";
-import AgentPage from "./pages/AgentPage";
-import ProfilePage from "./pages/ProfilePage";
-import CopernicusWorkstationPage from "./pages/CopernicusWorkstationPage";
-import CopernicusHistoryPage from "./pages/CopernicusHistoryPage";
-import AdminDashboardPage from "./pages/AdminDashboardPage";
-
-function Protected({ component: Component }: { component: React.ComponentType<any> }) {
-  return (
-    <ProtectedRoute>
-      <Component />
-    </ProtectedRoute>
-  );
-}
 
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      {/* Public Routes */}
-      <Route path={"/"} component={Landing3DPage} />
-      <Route path={"/login"} component={AuthPage} />
-      <Route path={"/auth"} component={AuthPage} />
-
-      {/* Protected Private Dashboard Routes */}
-      <Route path={"/dashboard"}>{() => <Protected component={Home} />}</Route>
-      <Route path={"/dashboard/admin"}>{() => <Protected component={AdminDashboardPage} />}</Route>
-      <Route path={"/dashboard/configuracion/satelites"}>{() => <Protected component={SatelliteConfiguration} />}</Route>
-      <Route path={"/dashboard/copernicus/workstation"}>{() => <Protected component={CopernicusWorkstationPage} />}</Route>
-      <Route path={"/dashboard/copernicus/historico"}>{() => <Protected component={CopernicusHistoryPage} />}</Route>
-      <Route path={"/dashboard/informes/:id"}>{() => <Protected component={ReportDetail} />}</Route>
-      <Route path={"/dashboard/informes"}>{() => <Protected component={ReportsDashboard} />}</Route>
-      <Route path={"/dashboard/soporte"}>{() => <Protected component={SupportPage} />}</Route>
-      <Route path={"/dashboard/guias/interpretar-informes"}>{() => <Protected component={GuideInterpreterPage} />}</Route>
-      <Route path={"/dashboard/agente"}>{() => <Protected component={AgentPage} />}</Route>
-      <Route path={"/dashboard/perfil"}>{() => <Protected component={ProfilePage} />}</Route>
-
+      <Route path={"/"} component={Home} />
+      <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
+      <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
+      <Route path={"/dashboard/informes"} component={ReportsDashboard} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -56,16 +24,22 @@ function Router() {
   );
 }
 
+// NOTE: About Theme
+// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
+//   to keep consistent foreground/background color across components
+// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
+
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
-        <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </AuthProvider>
+      <ThemeProvider
+        defaultTheme="light"
+        // switchable
+      >
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

@@ -83,15 +83,8 @@ const environmentKey: Record<Vertical, string> = {
   forestal: "CLEANLEAF_SATELITES_HABILITADOS_FORESTAL",
 };
 
-function getEnvVar(key: string): string | undefined {
-  if (typeof process !== "undefined" && process?.env) {
-    return process.env[key];
-  }
-  return undefined;
-}
-
 export function getSatelitesHabilitados(vertical: Vertical): SatelliteId[] {
-  const raw = getEnvVar(environmentKey[vertical]);
+  const raw = process.env[environmentKey[vertical]];
   if (!raw) return fallbackEnabled[vertical];
 
   const parsed = raw
@@ -113,7 +106,7 @@ export type SatelliteConfigurationStatus = {
 };
 
 export function getSatelliteConfigurationStatus(vertical: Vertical): SatelliteConfigurationStatus {
-  const raw = getEnvVar(environmentKey[vertical]);
+  const raw = process.env[environmentKey[vertical]];
   const effective = getSatelitesHabilitados(vertical);
   if (!raw) {
     return {

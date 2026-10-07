@@ -1,161 +1,27 @@
-import { useState } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import VariableChart from "@/components/VariableChart";
-import ReportDownloadActions from "@/components/ReportDownloadActions";
-import type { SatelliteId } from "@shared/satellite-catalog";
-import type { ReportRecord } from "@shared/report-catalog";
-import { Calendar, MapPin, Layers, ShieldCheck, ArrowLeft, Activity, CheckCircle2, Cloud } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { satelliteCatalog } from "@shared/satellite-catalog";
+import type { AnalysisStatus } from "@shared/analysis-state";
+import { ArrowLeft, Check, CheckCircle2, Circle, Clock3, FileBarChart2, History, Info, MapPinned, RefreshCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { Link, useRoute } from "wouter";
+import ReportDownloadActions from "@/components/ReportDownloadActions";
+import { toast } from "sonner";
 
-const mockReportRecord: ReportRecord = {
-  id: "lote-maiz-a1",
-  tenantId: "demo-tenant-1",
-  predioId: "predio-el-olivar",
-  predioNombre: "Fundo El Olivar — Lote Maíz A1",
-  fechaDesde: "2026-09-01",
-  fechaHasta: "2026-09-14",
-  generatedAt: "2026-09-14T12:00:00Z",
-  satellites: ["sentinel-2"],
-  variables: ["NDVI", "NDWI"],
-  status: "completado",
-  progress: 100,
-  currentStep: "Informe listo",
-  alertLevel: "normal",
-  summary: "El vigor vegetativo promedio en Lote Maíz A1 alcanzó un NDVI de 0.3774 con 100% de píxeles despejados de nubosidad.",
-  recommendation: "El lote muestra desarrollo vegetativo consistente. Se recomienda mantener el programa de riego actual y revisar nuevamente en 5 días.",
-  trace: [],
-  metrics: [
-    { label: "NDVI Promedio", value: "0.3774", comparison: "Estable" },
-    { label: "Superficie", value: "25 ha", comparison: "Lote Maíz A1" },
-  ],
-};
+const steps: Array<{ status: AnalysisStatus; label: string }> = [{ status: "pendiente", label: "Solicitud recibida" }, { status: "en_cola", label: "En cola" }, { status: "procesando", label: "Procesando fuente" }, { status: "completado", label: "Informe listo" }];
+const statusLabel: Record<AnalysisStatus, string> = { borrador: "Borrador", pendiente: "Solicitud recibida", en_cola: "En cola", procesando: "Procesando", completado: "Informe listo", error_reintentable: "Fallo temporal", error_final: "Fallo definitivo", requiere_revision: "Requiere revisión", cancelado: "Cancelado" };
 
 export default function ReportDetail() {
   const [, params] = useRoute("/dashboard/informes/:id");
-  const reportId = params?.id || "lote-maiz-a1";
-  const [selectedSatellite, setSelectedSatellite] = useState<SatelliteId>("sentinel-2");
-
-  const sampleData = {
-    "sentinel-2": [
-      { fecha: "01 Aug", valor: 0.32 },
-      { fecha: "15 Aug", valor: 0.45 },
-      { fecha: "01 Sep", valor: 0.58 },
-      { fecha: "14 Sep", valor: 0.3774 },
-      { fecha: "21 Sep", valor: 0.65 },
-    ]
-  };
-
-  return (
-    <DashboardLayout>
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Navigation Top Bar */}
-        <div className="flex items-center justify-between">
-          <Link href="/dashboard/informes">
-            <Button variant="ghost" className="text-slate-600 hover:text-slate-900 gap-1.5 text-xs font-medium">
-              <ArrowLeft className="w-4 h-4" /> Volver al Centro de Informes
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300 text-xs">
-              ID: {reportId}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Header Hero Banner */}
-        <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 p-8 rounded-2xl text-white shadow-xl space-y-4">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-emerald-300 border-emerald-500/50 bg-emerald-950">
-                  Fundo El Olivar
-                </Badge>
-                <span className="text-xs text-emerald-200/80 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Multi-Tenant PostGIS Polygon
-                </span>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Lote Maíz A1 — Informe Satelital</h1>
-              <p className="text-emerald-100/90 text-sm flex items-center gap-3">
-                <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-emerald-400" /> Cultivo: Maíz (25 ha)</span>
-                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-emerald-400" /> Captura: 2026-09-14</span>
-                <span className="flex items-center gap-1"><Cloud className="w-3.5 h-3.5 text-emerald-400" /> Nubes: 0.14%</span>
-              </p>
-            </div>
-
-            <ReportDownloadActions report={mockReportRecord} compact={true} />
-          </div>
-        </div>
-
-        {/* Statistical Summary Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-emerald-200 bg-emerald-50/30">
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs font-bold uppercase text-slate-500">NDVI Promedio</CardDescription>
-              <CardTitle className="text-3xl font-black text-emerald-900">0.3774</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-emerald-800 font-medium">Salud Vegetal Moderada</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs font-bold uppercase text-slate-500">Rango Registrado</CardDescription>
-              <CardTitle className="text-2xl font-bold text-slate-900">-0.10 a 0.96</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-slate-500">Mínimo (Agua/Sombra) a Máximo Vigor</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs font-bold uppercase text-slate-500">Confianza Píxel Clear</CardDescription>
-              <CardTitle className="text-2xl font-bold text-emerald-800 flex items-center gap-1.5">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" /> 100% Alta
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-slate-500">Máscara SCL sin interferencias</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs font-bold uppercase text-slate-500">Motor Procesador</CardDescription>
-              <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-1.5">
-                <Layers className="w-5 h-5 text-teal-700" /> Statistical API
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-slate-500">Copernicus CDSE Tier 1</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Temporal Evolution Chart */}
-        <Card className="border-slate-200/80 shadow-md">
-          <CardHeader>
-            <CardTitle className="text-xl text-slate-900 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-emerald-700" />
-              Evolución Temporal de NDVI (Vigor Vegetal)
-            </CardTitle>
-            <CardDescription>
-              Serie temporal de mediciones espectrales Sentinel-2 L2A sobre el polígono del lote.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <VariableChart
-              data={sampleData}
-              selectedSatellite={selectedSatellite}
-              onSatelliteChange={setSelectedSatellite}
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </DashboardLayout>
-  );
+  const query = trpc.cleanleaf.reports.getById.useQuery({ id: params?.id ?? "" });
+  const report = query.data;
+  if (query.isLoading) return <div className="min-h-screen bg-[#f7f7f2] p-8"><div className="mx-auto max-w-5xl space-y-5"><div className="h-12 animate-pulse rounded-xl bg-stone-200" /><div className="h-48 animate-pulse rounded-2xl bg-stone-200" /></div></div>;
+  if (!report) return <div className="min-h-screen bg-[#f7f7f2] p-8 text-center"><p className="font-semibold text-stone-700">No encontramos este informe.</p><Link href="/dashboard/informes" className="mt-3 inline-block text-sm font-semibold text-emerald-700">Volver a mis informes</Link></div>;
+  const currentStep = report.status === "error_reintentable" || report.status === "error_final" ? 2 : report.status === "requiere_revision" ? 0 : steps.findIndex(step => step.status === report.status);
+  const isError = report.status === "error_reintentable" || report.status === "error_final";
+  const progressColor = isError ? "bg-red-500" : report.status === "requiere_revision" ? "bg-orange-500" : report.progress >= 100 ? "bg-emerald-600" : report.progress >= 67 ? "bg-lime-500" : report.progress >= 34 ? "bg-amber-500" : "bg-red-500";
+  return <div className="min-h-screen bg-[#f7f7f2] text-stone-800"><header className="sticky top-0 z-20 border-b border-[#e6e7dd]/90 bg-[#f7f7f2]/95 px-4 py-4 backdrop-blur-xl sm:px-8"><div className="mx-auto flex max-w-5xl items-center justify-between"><Link href="/dashboard/informes" className="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 hover:text-emerald-800"><ArrowLeft size={16} /> Todos los informes</Link><span className="text-xs font-medium text-stone-400">Trazabilidad de informe</span></div></header><main className="mx-auto max-w-5xl px-4 py-8 sm:px-8 lg:py-10"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><div className="mb-3 flex items-center gap-2 text-emerald-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100"><FileBarChart2 size={15} /></span><span className="text-xs font-bold uppercase tracking-[0.14em]">Cleanleaf Intelligence</span></div><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Informe · {report.predioNombre}</h1><p className="mt-3 text-sm text-stone-500">{report.fechaDesde} — {report.fechaHasta} · generado {report.generatedAt.replace("T", " ").replace("Z", " UTC")}</p></div><Badge className={`w-fit px-3 py-1.5 text-xs ${report.status === "completado" ? "bg-emerald-100 text-emerald-700" : isError ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{statusLabel[report.status]}</Badge></div>
+  <section className="mt-8 rounded-2xl border border-stone-200 bg-white p-5 shadow-[0_18px_45px_-38px_rgba(56,75,44,.5)] sm:p-7"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-400">Progreso verificable</p><p className="mt-1 text-lg font-bold text-stone-800">{report.currentStep}</p></div><span className={`text-3xl font-bold ${report.status === "completado" ? "text-emerald-600" : isError ? "text-red-600" : report.progress >= 67 ? "text-lime-600" : report.progress >= 34 ? "text-amber-600" : "text-red-600"}`}>{report.progress}%</span></div><div className="mt-5 h-3 overflow-hidden rounded-full bg-stone-100"><div className={`h-full rounded-full transition-all duration-700 ${progressColor}`} style={{ width: `${report.progress}%` }} /></div><div className="mt-6 grid gap-4 sm:grid-cols-4">{steps.map((step, index) => { const done = report.status === "completado" ? true : index < currentStep; const active = step.status === report.status || (isError && index === currentStep) || (report.status === "requiere_revision" && index === currentStep); return <div key={step.status} className="flex items-center gap-2 sm:block"><span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${done ? "bg-emerald-100 text-emerald-700" : active ? "bg-amber-100 text-amber-700" : "bg-stone-100 text-stone-400"}`}>{done ? <Check size={15} /> : active ? <Clock3 size={15} /> : <Circle size={12} />}</span><p className={`mt-0 text-xs font-semibold sm:mt-2 ${done ? "text-emerald-700" : "text-stone-500"}`}>{step.label}</p></div>; })}</div>{report.status === "requiere_revision" ? <div className="mt-5 flex gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs leading-5 text-orange-900"><TriangleAlert size={15} className="mt-0.5 shrink-0" /><span>Este informe necesita evaluación antes de iniciar el procesamiento regional. No se consumió cuota y no se muestra una falsa barra de avance.</span></div> : null}{isError ? <div className="mt-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-900 sm:flex-row sm:items-center sm:justify-between"><span><TriangleAlert size={15} className="mr-2 inline" />{report.currentStep}. Puedes reintentar con una fuente alternativa.</span><Button onClick={() => toast.info("Reintento preparado", { description: "El siguiente paso será crear una nueva solicitud sin duplicar consumo." })} size="sm" className="rounded-lg bg-red-700 text-xs hover:bg-red-800"><RefreshCcw size={13} className="mr-1.5" />Reintentar</Button></div> : null}</section>
+  <div className="mt-6 grid gap-6 lg:grid-cols-[1.45fr_.85fr]"><div className="space-y-6"><section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"><div className="flex items-center gap-2"><Sparkles size={17} className="text-emerald-700" /><h2 className="text-lg font-bold text-stone-800">Resumen ejecutivo</h2></div><p className="mt-4 text-base leading-7 text-stone-600">{report.summary}</p><div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4"><p className="text-xs font-bold uppercase tracking-[0.1em] text-emerald-800">Recomendación</p><p className="mt-2 text-sm leading-6 text-stone-700">{report.recommendation}</p></div></section><section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-7"><div className="flex items-center gap-2"><FileBarChart2 size={17} className="text-sky-700" /><h2 className="text-lg font-bold text-stone-800">Métricas observadas</h2></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{report.metrics.map(metric => <div key={metric.label} className="rounded-xl bg-stone-50 p-4"><p className="text-xs text-stone-400">{metric.label}</p><p className="mt-2 text-xl font-bold text-stone-800">{metric.value}</p><p className="mt-1 text-[11px] leading-4 text-stone-500">{metric.comparison}</p></div>)}</div><p className="mt-5 flex gap-2 text-xs leading-5 text-stone-500"><Info size={14} className="mt-0.5 shrink-0 text-sky-700" />Las métricas deben interpretarse junto con la fuente, fecha, calidad de escena y observaciones de campo.</p></section></div><aside className="space-y-6"><section className="rounded-2xl border border-stone-200 bg-white p-5"><div className="flex items-center gap-2"><MapPinned size={16} className="text-emerald-700" /><h2 className="font-bold text-stone-800">Ficha del análisis</h2></div><dl className="mt-4 space-y-3 text-xs"><div className="flex justify-between gap-3"><dt className="text-stone-400">Predio</dt><dd className="font-semibold text-stone-700">{report.predioNombre}</dd></div><div className="flex justify-between gap-3"><dt className="text-stone-400">Fuentes</dt><dd className="text-right font-semibold text-stone-700">{report.satellites.map(id => satelliteCatalog[id].nombre).join(", ")}</dd></div><div className="flex justify-between gap-3"><dt className="text-stone-400">Variables</dt><dd className="text-right font-semibold text-stone-700">{report.variables.join(", ")}</dd></div><div className="flex justify-between gap-3"><dt className="text-stone-400">ID trazable</dt><dd className="max-w-[150px] break-all text-right font-mono text-[10px] text-stone-500">{report.id}</dd></div></dl><div className="mt-5"><ReportDownloadActions report={report} /></div></section><section className="rounded-2xl border border-stone-200 bg-white p-5"><div className="flex items-center gap-2"><History size={16} className="text-emerald-700" /><h2 className="font-bold text-stone-800">Trazabilidad</h2></div><div className="mt-5 space-y-0">{report.trace.map((event, index) => <div key={`${event.at}-${event.status}`} className="relative flex gap-3 pb-5 last:pb-0"><div className="relative flex w-4 justify-center"><span className={`z-10 mt-1 h-3 w-3 rounded-full border-2 border-white ${event.status === "completado" ? "bg-emerald-500" : event.status.includes("error") ? "bg-red-500" : "bg-amber-500"}`} />{index < report.trace.length - 1 ? <span className="absolute top-4 h-full w-px bg-stone-200" /> : null}</div><div className="min-w-0"><p className="text-xs font-bold text-stone-700">{event.message}</p><p className="mt-1 text-[11px] leading-4 text-stone-500">{event.detail}</p><p className="mt-1 text-[10px] text-stone-400">{event.actor} · {event.at.replace("T", " ").replace("Z", " UTC")}</p></div></div>)}</div></section></aside></div>
+  </main></div>;
 }
