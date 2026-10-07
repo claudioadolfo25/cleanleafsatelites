@@ -222,6 +222,7 @@ alter table soil_samples enable row level security;
 drop policy if exists tenants_isolation on tenants;
 drop policy if exists planes_read on planes;
 drop policy if exists users_isolation on users;
+drop policy if exists users_update_role_guard on users;
 drop policy if exists predios_isolation on predios;
 drop policy if exists suscripciones_isolation on suscripciones;
 drop policy if exists solicitudes_isolation on solicitudes_analisis;
@@ -236,7 +237,16 @@ drop policy if exists soil_samples_isolation on soil_samples;
 
 create policy tenants_isolation on tenants for all using (id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'));
 create policy planes_read on planes for select using (true);
-create policy users_isolation on users for all using (tenant_id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'));
+create policy users_isolation on users for select using (tenant_id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'));
+
+-- Strict WITH CHECK guard: Non-admin users cannot alter their role column
+create policy users_update_role_guard on users for update
+  using (tenant_id = get_current_tenant_id() or get_current_role() in ('super_admin', 'plataforma_admin'))
+  with check (
+    (get_current_role() in ('owner', 'admin', 'admin_tenant', 'super_admin', 'plataforma_admin'))
+    or (role = get_current_role())
+  );
+
 create policy predios_isolation on predios for all using (tenant_id = get_current_tenant_id());
 create policy suscripciones_isolation on suscripciones for all using (tenant_id = get_current_tenant_id());
 create policy solicitudes_isolation on solicitudes_analisis for all using (tenant_id = get_current_tenant_id());

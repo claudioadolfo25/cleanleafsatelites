@@ -13,7 +13,7 @@ export type SentinelMeasurement = {
   valor: number;
   unidad: string;
   fecha_adquisicion: Date;
-  data_source?: string;
+  data_source?: "cdse_live" | "synthetic" | "estimated";
   provenance?: {
     provider: string;
     mode: "live" | "mock" | "cache";
@@ -58,7 +58,7 @@ function measurement(
     valor: stableValue(`${predioId}:${satellite}:${variable}`, definition.rango[0], definition.rango[1]),
     unidad: definition.unidad,
     fecha_adquisicion: new Date(),
-    data_source: "copernicus_stac_mock",
+    data_source: "synthetic",
     provenance: {
       provider: "Copernicus CDSE (Mock Provider)",
       mode: "mock",

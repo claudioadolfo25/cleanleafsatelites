@@ -1,0 +1,157 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AgroPulso / Cleanleaf REST API v1",
+    "version": "1.0.0",
+    "description": "Especificación de API REST v1 para la plataforma agrotech AgroPulso. Todos los endpoints de consulta de datos satelitales y climáticos incluyen el sobre obligatorio de datos con provenance."
+  },
+  "servers": [
+    {
+      "url": "https://agropulso.vercel.app/api/v1",
+      "description": "Servidor Producción / Staging Vercel Serverless"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT de Supabase Auth conteniendo app_metadata con tenant_id y role"
+      }
+    },
+    "schemas": {
+      "Provenance": {
+        "type": "object",
+        "required": ["data_source", "badge_label", "confidence"],
+        "properties": {
+          "data_source": {
+            "type": "string",
+            "enum": ["cdse_live", "synthetic", "estimated"]
+          },
+          "badge_label": {
+            "type": "string",
+            "example": "SINTÉTICO (ENTORNO SIN CREDENCIALES CDSE)"
+          },
+          "confidence": {
+            "type": "number",
+            "example": 0.85
+          }
+        }
+      },
+      "ApiResponseEnvelope": {
+        "type": "object",
+        "required": ["data", "error"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "nullable": true
+          },
+          "error": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Estado de salud del servicio API v1",
+        "responses": {
+          "200": {
+            "description": "API operativa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/solicitudes": {
+      "post": {
+        "summary": "Crear nueva solicitud de análisis satelital",
+        "responses": {
+          "200": {
+            "description": "Solicitud procesada o ingresada en cola",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/orchestrate": {
+      "post": {
+        "summary": "Consulta orquestada a los 6 Agentes Especialistas de IA",
+        "responses": {
+          "200": {
+            "description": "Consulta multi-agente completada con auditoría y correlation_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/weather/forecast": {
+      "get": {
+        "summary": "Pronóstico meteorológico Open-Meteo de 15 días con FAO ET0",
+        "responses": {
+          "200": {
+            "description": "Datos de pronóstico con provenance de Open-Meteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crop-calendar/stage": {
+      "get": {
+        "summary": "Seguimiento fenológico GDD por cultivo",
+        "responses": {
+          "200": {
+            "description": "Etapa fenológica y labores agronómicas con provenance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

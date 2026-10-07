@@ -18,8 +18,26 @@ export interface EarthObservationProvider {
 
 export class MockCopernicusProvider implements EarthObservationProvider {
   async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement> {
+    const isProduction =
+      (typeof process !== "undefined" && process?.env?.NODE_ENV === "production") ||
+      (typeof process !== "undefined" && process?.env?.APP_ENV === "production");
+
+    const hasCredentials =
+      Boolean(typeof process !== "undefined" && process?.env?.COPERNICUS_CLIENT_ID) &&
+      Boolean(typeof process !== "undefined" && process?.env?.COPERNICUS_CLIENT_SECRET);
+
+    if (isProduction && !hasCredentials) {
+      throw new Error(
+        "CDSE_CREDENTIALS_MISSING_IN_PRODUCTION: Se requieren COPERNICUS_CLIENT_ID y COPERNICUS_CLIENT_SECRET para procesar consultas en entorno de producción."
+      );
+    }
+
     const { querySentinel } = await import("./satellite-service");
-    return querySentinel(request.predioId, request.satellite, request.variable);
+    const measurement = await querySentinel(request.predioId, request.satellite, request.variable);
+    return {
+      ...measurement,
+      data_source: hasCredentials ? "cdse_live" : "synthetic",
+    };
   }
 }
 
