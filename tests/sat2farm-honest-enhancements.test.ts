@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTraceableMetadata } from "../shared/data-traceability";
 import { fetch15DayWeatherForecast } from "../shared/weather-service";
 import { calculateGDD, getCurrentPhenologyStage } from "../shared/crop-calendar";
@@ -25,12 +25,30 @@ describe("Honest Data Traceability & Production Enforcements (Tarea 1)", () => {
 
 describe("Open-Meteo 15-Day Weather Forecast Service (Tarea 2)", () => {
   it("fetches weather forecast or returns fallback structure with 15-16 days", async () => {
+    // Mock fetch response for offline test execution
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        daily: {
+          time: Array.from({ length: 16 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`),
+          temperature_2m_max: Array.from({ length: 16 }, () => 22.5),
+          temperature_2m_min: Array.from({ length: 16 }, () => 10.0),
+          precipitation_sum: Array.from({ length: 16 }, () => 1.2),
+          relative_humidity_2m_mean: Array.from({ length: 16 }, () => 65),
+          et0_fao_evapotranspiration: Array.from({ length: 16 }, () => 3.2),
+          wind_speed_10m_max: Array.from({ length: 16 }, () => 15.0),
+        },
+      }),
+    }));
+
     const forecast = await fetch15DayWeatherForecast(-38.73, -72.59, { timeoutMs: 2500 });
     expect(forecast.days.length).toBeGreaterThanOrEqual(15);
     expect(forecast.summary.total_precipitation_15d_mm).toBeGreaterThanOrEqual(0);
     expect(forecast.days[0]).toHaveProperty("et0_fao_evapotranspiration_mm");
     expect(forecast.days[0]).toHaveProperty("temp_max_c");
-  }, 10000);
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("Crop Calendar & Growing Degree Days Engine (Tarea 5)", () => {
