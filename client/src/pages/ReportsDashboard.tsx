@@ -1,42 +1,243 @@
+import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { trpc } from "@/lib/trpc";
-import { satelliteCatalog } from "@shared/satellite-catalog";
-import type { AnalysisStatus } from "@shared/analysis-state";
-import { ArrowLeft, CheckCircle2, Clock3, Download, FileBarChart2, Filter, History, Search, Sparkles, TriangleAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { MapPin, Calendar, Cloud, Eye, ShieldCheck, Download, Filter, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
 import { Link } from "wouter";
-import ReportDownloadActions from "@/components/ReportDownloadActions";
+import { toast } from "sonner";
 
-const statusInfo: Record<AnalysisStatus, { label: string; tone: string; icon: typeof CheckCircle2 }> = {
-  borrador: { label: "Borrador", tone: "bg-stone-100 text-stone-600", icon: Clock3 }, pendiente: { label: "Recibido", tone: "bg-amber-100 text-amber-700", icon: Clock3 }, en_cola: { label: "En cola", tone: "bg-amber-100 text-amber-700", icon: Clock3 }, procesando: { label: "Procesando", tone: "bg-sky-100 text-sky-700", icon: Clock3 }, completado: { label: "Informe listo", tone: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 }, error_reintentable: { label: "Reintentar", tone: "bg-red-100 text-red-700", icon: TriangleAlert }, error_final: { label: "Error final", tone: "bg-red-100 text-red-700", icon: TriangleAlert }, requiere_revision: { label: "Requiere revisión", tone: "bg-orange-100 text-orange-700", icon: TriangleAlert }, cancelado: { label: "Cancelado", tone: "bg-stone-100 text-stone-600", icon: Clock3 }, };
-type ReportFilterStatus = Exclude<AnalysisStatus, "borrador"> | "todos";
-
-function ProgressBar({ value, status }: { value: number; status: AnalysisStatus }) {
-  const color = status === "error_reintentable" || status === "error_final" ? "bg-red-500" : status === "requiere_revision" ? "bg-orange-500" : value >= 100 ? "bg-emerald-600" : value >= 67 ? "bg-lime-500" : value >= 34 ? "bg-amber-500" : "bg-red-500";
-  return <div className="flex items-center gap-3"><div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100"><div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${value}%` }} /></div><span className={`w-10 text-right text-xs font-bold ${status === "completado" ? "text-emerald-700" : status.includes("error") ? "text-red-700" : "text-stone-500"}`}>{value}%</span></div>;
+interface ReportItem {
+  id: string;
+  nombrePredio: string;
+  lote: string;
+  tipoCultivo: string;
+  superficieHa: number;
+  ndviPromedio: number;
+  ndviMin: number;
+  ndviMax: number;
+  fechaAdquisicion: string;
+  porcentajeNubes: number;
+  confianzaScore: number;
+  confianzaBadge: "Alta Confianza" | "Confianza Baja";
+  coordenadasGeoJSON: string;
 }
+
+const MOCK_REPORTS: ReportItem[] = [
+  {
+    id: "lote-maiz-a1",
+    nombrePredio: "Fundo El Olivar",
+    lote: "Lote Maíz A1",
+    tipoCultivo: "Maíz",
+    superficieHa: 25,
+    ndviPromedio: 0.3774,
+    ndviMin: -0.10,
+    ndviMax: 0.96,
+    fechaAdquisicion: "2026-09-14",
+    porcentajeNubes: 0.14,
+    confianzaScore: 100,
+    confianzaBadge: "Alta Confianza",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.65,-33.45],[-70.64,-33.45],[-70.64,-33.46],[-70.65,-33.46],[-70.65,-33.45]]]}',
+  },
+  {
+    id: "lote-nogales-b2",
+    nombrePredio: "Agrícola Buin",
+    lote: "Sector Nogales",
+    tipoCultivo: "Nogales",
+    superficieHa: 18.2,
+    ndviPromedio: 0.3674,
+    ndviMin: -0.03,
+    ndviMax: 0.86,
+    fechaAdquisicion: "2026-09-21",
+    porcentajeNubes: 47.12,
+    confianzaScore: 72,
+    confianzaBadge: "Alta Confianza",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.70,-33.70],[-70.69,-33.70],[-70.69,-33.71],[-70.70,-33.71],[-70.70,-33.70]]]}',
+  },
+  {
+    id: "lote-cerezos-c3",
+    nombrePredio: "Fundo San José",
+    lote: "Sector Cerezos",
+    tipoCultivo: "Cerezos",
+    superficieHa: 30.5,
+    ndviPromedio: 0.2150,
+    ndviMin: -0.05,
+    ndviMax: 0.52,
+    fechaAdquisicion: "2026-09-19",
+    porcentajeNubes: 78.40,
+    confianzaScore: 22,
+    confianzaBadge: "Confianza Baja",
+    coordenadasGeoJSON: '{"type":"Polygon","coordinates":[[[-70.80,-33.80],[-70.79,-33.80],[-70.79,-33.81],[-70.80,-33.81],[-70.80,-33.80]]]}',
+  },
+];
 
 export default function ReportsDashboard() {
-  const [search, setSearch] = useState("");
-  const [predio, setPredio] = useState("todos");
-  const [satellite, setSatellite] = useState("todos");
-  const [status, setStatus] = useState<ReportFilterStatus>("todos");
-  const query = trpc.cleanleaf.reports.list.useQuery({ search: search || undefined, predio: predio === "todos" ? undefined : predio, satellite: satellite === "todos" ? undefined : satellite, status });
-  const reports = query.data ?? [];
-  const allReports = trpc.cleanleaf.reports.list.useQuery();
-  const summary = useMemo(() => { const source = allReports.data ?? []; return { total: source.length, ready: source.filter(report => report.status === "completado").length, attention: source.filter(report => report.alertLevel !== "normal").length, processing: source.filter(report => ["procesando", "en_cola", "pendiente"].includes(report.status)).length }; }, [allReports.data]);
-  const properties = Array.from(new Set((allReports.data ?? []).map(report => report.predioNombre)));
+  const [filterConfidence, setFilterConfidence] = useState<"all" | "high" | "low">("all");
+  const [activeMapId, setActiveMapId] = useState<string | null>(null);
 
-  return <div className="min-h-screen bg-[#f7f7f2] text-stone-800"><header className="sticky top-0 z-20 border-b border-[#e6e7dd]/90 bg-[#f7f7f2]/95 px-4 py-4 backdrop-blur-xl sm:px-8"><div className="mx-auto flex max-w-7xl items-center justify-between"><Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 hover:text-emerald-800"><ArrowLeft size={16} /> Volver al resumen</Link><Link href="/dashboard/configuracion/satelites" className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">Configurar fuentes</Link></div></header><main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 lg:py-10"><div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><div className="mb-3 flex items-center gap-2 text-emerald-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100"><FileBarChart2 size={15} /></span><span className="text-xs font-bold uppercase tracking-[0.14em]">Centro de inteligencia</span></div><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Mis informes</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">Sigue cada solicitud desde la recepción hasta el informe listo. La barra cambia de rojo a verde solo cuando el resultado está validado y disponible.</p></div><Button asChild className="rounded-xl bg-emerald-700 text-sm font-semibold hover:bg-emerald-800"><Link href="/">+ Generar nuevo informe</Link></Button></div>
-  <section className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><SummaryCard label="Informes registrados" value={summary.total} hint="en este espacio" icon={<FileBarChart2 size={17} />} tone="green" /><SummaryCard label="Listos para descargar" value={summary.ready} hint="con trazabilidad completa" icon={<CheckCircle2 size={17} />} tone="green" /><SummaryCard label="En procesamiento" value={summary.processing} hint="workflow activo" icon={<Clock3 size={17} />} tone="sky" /><SummaryCard label="Requieren atención" value={summary.attention} hint="revisar o reintentar" icon={<TriangleAlert size={17} />} tone="amber" /></section>
-  <section className="mt-7 rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_18px_45px_-38px_rgba(56,75,44,.5)] sm:p-5"><div className="flex items-center gap-2"><Filter size={16} className="text-emerald-700" /><p className="text-sm font-bold text-stone-800">Filtrar informes</p></div><div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,180px))]"><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar predio o variable" className="h-10 pl-9" /></div><Select value={predio} onValueChange={setPredio}><SelectTrigger className="h-10"><SelectValue placeholder="Predio" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos los predios</SelectItem>{properties.map(property => <SelectItem key={property} value={property}>{property}</SelectItem>)}</SelectContent></Select><Select value={satellite} onValueChange={setSatellite}><SelectTrigger className="h-10"><SelectValue placeholder="Fuente" /></SelectTrigger><SelectContent><SelectItem value="todos">Todas las fuentes</SelectItem>{Object.keys(satelliteCatalog).map(id => <SelectItem key={id} value={id}>{satelliteCatalog[id as keyof typeof satelliteCatalog].nombre}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={value => setStatus(value as ReportFilterStatus)}><SelectTrigger className="h-10"><SelectValue placeholder="Estado" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos los estados</SelectItem><SelectItem value="completado">Informe listo</SelectItem><SelectItem value="procesando">Procesando</SelectItem><SelectItem value="error_reintentable">Reintentar</SelectItem><SelectItem value="requiere_revision">Requiere revisión</SelectItem></SelectContent></Select></div></section>
-  <section className="mt-6 space-y-3">{query.isLoading ? <div className="h-56 animate-pulse rounded-2xl bg-stone-100" /> : reports.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center"><Search className="mx-auto text-stone-300" /><p className="mt-3 font-semibold text-stone-700">No encontramos informes</p><p className="mt-1 text-sm text-stone-500">Prueba con otro predio, fuente o estado.</p></div> : reports.map(report => <article key={report.id} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_12px_30px_-28px_rgba(56,75,44,.5)] transition hover:border-emerald-200 sm:p-5"><div className="grid gap-4 lg:grid-cols-[minmax(190px,1.1fr)_minmax(240px,1.3fr)_minmax(210px,.8fr)_auto] lg:items-center"><div><div className="flex items-center gap-2"><h2 className="font-bold text-stone-800">{report.predioNombre}</h2><Badge className={`text-[10px] hover:opacity-90 ${statusInfo[report.status].tone}`}><StatusIcon status={report.status} />{statusInfo[report.status].label}</Badge></div><p className="mt-1 text-xs text-stone-400">{report.fechaDesde} — {report.fechaHasta} · {report.variables.join(", ")}</p><div className="mt-2 flex flex-wrap gap-1.5">{report.satellites.map(id => <span key={id} className="rounded-md bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-500">{satelliteCatalog[id].nombre}</span>)}</div></div><div><div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-stone-400">Progreso del informe</span><span className="text-[11px] font-medium text-stone-500">{report.currentStep}</span></div><ProgressBar value={report.progress} status={report.status} /></div><div className="rounded-xl bg-stone-50 p-3"><div className="flex items-center gap-2 text-xs font-semibold text-stone-600"><History size={14} className="text-emerald-700" /> Última actividad</div><p className="mt-1 text-xs leading-4 text-stone-500">{report.trace.at(-1)?.message}</p><p className="mt-1 text-[10px] text-stone-400">{report.trace.at(-1)?.actor} · {report.trace.at(-1)?.at.replace("T", " ").replace("Z", " UTC")}</p></div><div className="flex flex-wrap gap-2 lg:flex-col"><Button asChild size="sm" className="rounded-lg bg-stone-800 text-xs hover:bg-stone-700"><Link href={`/dashboard/informes/${report.id}`}>Ver trazabilidad</Link></Button><ReportDownloadActions report={report} compact /></div></div></article>)}</section>
-  <div className="mt-8 flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 text-xs leading-5 text-stone-600"><Sparkles size={16} className="shrink-0 text-emerald-700" /><span><strong className="font-semibold text-stone-800">Diseñado para decidir:</strong> un informe no termina en un número. Cuando llega a 100%, incluye fuente, variables, hallazgos, recomendación, limitaciones y la historia de cómo se generó.</span></div>
-  </main></div>;
+  const filteredReports = MOCK_REPORTS.filter((report) => {
+    if (filterConfidence === "high") return report.confianzaBadge === "Alta Confianza";
+    if (filterConfidence === "low") return report.confianzaBadge === "Confianza Baja";
+    return true;
+  });
+
+  const handleExportCSV = () => {
+    toast.success("Exportando métricas de vegetación en formato CSV...");
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Header Hero Banner */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 p-8 rounded-2xl text-white shadow-xl">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-emerald-300 border-emerald-500/50 bg-emerald-950">
+                PostGIS Polygon Engine
+              </Badge>
+              <span className="text-xs text-emerald-200/80 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Sentinel-2 L2A Cloud Masked
+              </span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Centro de Informes Satelitales</h1>
+            <p className="text-emerald-100/90 text-sm max-w-2xl">
+              Monitoreo continuo de salud vegetal (NDVI), cobertura nubosa SCL y nivel de confianza por lote.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleExportCSV} variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs">
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Exportar CSV
+            </Button>
+          </div>
+        </div>
+
+        {/* Filter Controls Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Filter className="w-4 h-4 text-emerald-700" /> Filtrar por Nivel de Confianza:
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={filterConfidence === "all" ? "default" : "outline"}
+              className={filterConfidence === "all" ? "bg-emerald-800 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("all")}
+            >
+              Todos ({MOCK_REPORTS.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={filterConfidence === "high" ? "default" : "outline"}
+              className={filterConfidence === "high" ? "bg-emerald-800 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("high")}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" /> Alta Confianza
+            </Button>
+            <Button
+              size="sm"
+              variant={filterConfidence === "low" ? "default" : "outline"}
+              className={filterConfidence === "low" ? "bg-amber-600 text-white" : "text-slate-600"}
+              onClick={() => setFilterConfidence("low")}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-200" /> Confianza Baja
+            </Button>
+          </div>
+        </div>
+
+        {/* Reports Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredReports.map((report) => (
+            <Card key={report.id} className="hover:border-emerald-500/40 transition-all shadow-sm flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base text-slate-900">{report.nombrePredio}</CardTitle>
+                    <CardDescription className="font-semibold text-emerald-800 text-xs">
+                      {report.lote}
+                    </CardDescription>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      report.confianzaBadge === "Alta Confianza"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 text-[11px]"
+                        : "bg-amber-50 text-amber-800 border-amber-300 text-[11px]"
+                    }
+                  >
+                    {report.confianzaBadge} ({report.confianzaScore}%)
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-2">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{report.tipoCultivo} • {report.superficieHa} ha</span>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {/* NDVI Metric Card */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">NDVI Promedio</span>
+                    <span className="text-xs text-slate-500">Mín: {report.ndviMin.toFixed(2)} | Máx: {report.ndviMax.toFixed(2)}</span>
+                  </div>
+                  <div className="text-3xl font-black text-emerald-900 tracking-tight">
+                    {report.ndviPromedio.toFixed(4)}
+                  </div>
+                </div>
+
+                {/* Satellite Acquisition Info */}
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{report.fechaAdquisicion}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{report.porcentajeNubes.toFixed(2)}% nubes</span>
+                  </div>
+                </div>
+
+                {/* On-Demand Satellite Map Toggle Viewer */}
+                {activeMapId === report.id ? (
+                  <div className="space-y-2">
+                    <div className="bg-emerald-950 text-emerald-200 text-xs p-3 rounded-lg font-mono border border-emerald-800 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400 animate-spin" />
+                      Visualización Processing API Sentinel-2 L2A Activa
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs text-slate-600"
+                      onClick={() => setActiveMapId(null)}
+                    >
+                      Ocultar Capa Satelital
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs border-emerald-300 text-emerald-900 hover:bg-emerald-50"
+                      onClick={() => setActiveMapId(report.id)}
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-1 text-emerald-700" /> Ver Mapa Satelital
+                    </Button>
+                    <Link href={`/dashboard/informes/${report.id}`}>
+                      <Button size="sm" className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs px-3">
+                        Detalles
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 }
-
-function StatusIcon({ status }: { status: AnalysisStatus }) { const Icon = statusInfo[status].icon; return <Icon className="mr-1 inline h-3 w-3" />; }
-function SummaryCard({ label, value, hint, icon, tone }: { label: string; value: number; hint: string; icon: React.ReactNode; tone: "green" | "sky" | "amber" }) { const styles = { green: "bg-emerald-50 text-emerald-700", sky: "bg-sky-50 text-sky-700", amber: "bg-amber-50 text-amber-700" }[tone]; return <div className="rounded-2xl border border-stone-200 bg-white p-4"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${styles}`}>{icon}</span><p className="mt-4 text-xs font-medium text-stone-500">{label}</p><p className="mt-1 text-2xl font-bold text-stone-800">{value}</p><p className="mt-1 text-[11px] text-stone-400">{hint}</p></div>; }

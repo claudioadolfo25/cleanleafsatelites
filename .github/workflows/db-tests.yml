@@ -1,0 +1,44 @@
+name: Database Isolation Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  db-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply Migrations and Run RLS Test Suite
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgrespassword
+        run: |
+          psql -f supabase/tests/bootstrap_auth.sql
+          psql -f supabase/migrations/20260924000000_init_schema.sql
+          psql -f supabase/migrations/20260924000001_postgis_predios.sql
+          psql -f supabase/migrations/20260924000002_domain_extensions.sql
+          psql -f supabase/migrations/20260924000003_auth_hooks.sql
+          psql -f supabase/tests_rls.sql
