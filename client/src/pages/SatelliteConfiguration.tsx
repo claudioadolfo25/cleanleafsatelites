@@ -19,6 +19,8 @@ function activeForVertical(vertical: ConfigSector): SatelliteId[] {
   return activeForMvp;
 }
 
+import DashboardLayout from "@/components/DashboardLayout";
+
 export default function SatelliteConfiguration() {
   const [vertical, setVertical] = useState<ConfigSector>("agricultura");
   const [need, setNeed] = useState<NeedId>("nubosidad");
@@ -68,11 +70,9 @@ export default function SatelliteConfiguration() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f7f2] text-stone-800">
-      <header className="sticky top-0 z-20 border-b border-[#e6e7dd]/90 bg-[#f7f7f2]/95 px-4 py-4 backdrop-blur-xl sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4"><Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 hover:text-emerald-800"><ArrowLeft size={16} /> Volver al resumen</Link><span className="text-xs font-medium text-stone-400">Configuración de fuentes</span></div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:py-12">
+    <DashboardLayout>
+      <div className="min-h-screen bg-[#f7f7f2] text-stone-800">
+        <main className="mx-auto max-w-6xl px-2 py-4 sm:px-4 lg:py-6">
         <div className="max-w-3xl"><div className="mb-3 flex items-center gap-2 text-emerald-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100"><Sparkles size={15} /></span><span className="text-xs font-bold uppercase tracking-[0.14em]">Monitoreo inteligente</span></div><h1 className="font-serif text-4xl leading-tight tracking-[-0.04em] text-stone-800 sm:text-5xl">Configura tus fuentes satelitales con claridad.</h1><p className="mt-4 max-w-2xl text-sm leading-6 text-stone-500">No necesitas saber de teledetección. Cuéntanos qué quieres entender y te mostraremos qué fuente conviene, qué puede medir y cuándo cambiar a otra.</p></div>
         <div className="mt-8 grid gap-4 rounded-2xl border border-stone-200 bg-white p-4 sm:grid-cols-[180px_1fr] sm:p-5"><div><label className="text-xs font-bold uppercase tracking-[0.12em] text-stone-400">Tu sector</label><Select value={vertical} onValueChange={value => setVertical(value as ConfigSector)}><SelectTrigger className="mt-2 h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="agricultura">Agricultura</SelectItem><SelectItem value="acuicultura">Acuicultura</SelectItem><SelectItem value="forestal">Forestal</SelectItem><SelectItem value="emergencias">Emergencias</SelectItem></SelectContent></Select></div><div><p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-400">¿Qué necesitas resolver?</p><div className="mt-2 flex flex-wrap gap-2">{visibleNeeds.map(option => <button key={option.id} onClick={() => setNeed(option.id)} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${need === option.id ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-stone-200 bg-stone-50 text-stone-500 hover:border-emerald-300"}`}>{option.label}</button>)}</div></div></div>
         <section className="mt-6 rounded-2xl border border-emerald-200 bg-[#eef7e9] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm"><Sparkles size={18} /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-bold text-stone-800">Recomendación para: {recommendation.label}</h2><Badge className="bg-emerald-700 text-[10px] text-white hover:bg-emerald-700">Por necesidad</Badge></div><p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">{recommendation.explanation}</p><div className="mt-3 flex flex-wrap gap-2">{recommendation.recommendations.map(id => <span key={id} className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-800">{satelliteCatalog[id].nombre} · {satelliteGuidance[id].type}</span>)}</div></div></div><Button onClick={applyRecommendation} className="shrink-0 rounded-xl bg-emerald-700 text-xs font-semibold hover:bg-emerald-800">Aplicar recomendación</Button></div></section>
@@ -81,5 +81,6 @@ export default function SatelliteConfiguration() {
         <div className="mt-8 flex flex-col-reverse gap-3 border-t border-stone-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><Link href="/" className="inline-flex items-center justify-center gap-1 text-sm font-semibold text-stone-500 hover:text-stone-800">Cancelar <ChevronRight size={15} /></Link><Button onClick={save} className="h-11 rounded-xl bg-emerald-700 px-5 text-sm font-semibold hover:bg-emerald-800"><Save className="mr-2 h-4 w-4" />Guardar configuración</Button></div>
       </main>
     </div>
+    </DashboardLayout>
   );
 }
