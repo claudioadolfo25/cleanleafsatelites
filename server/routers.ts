@@ -12,7 +12,8 @@ import { interpretMeasurement } from "@shared/interpretation";
 import { getCopernicusResources, type Sector } from "@shared/copernicus-catalog";
 import { validateSatelliteVariable } from "@shared/analysis-validation";
 import { assertTransition, type AnalysisStatus } from "@shared/analysis-state";
-import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation-provider";
+import { buildAnalysisReport } from "@shared/observation-provider";
+import { copernicusCDSEProvider, copernicusTokenManager } from "./copernicus";
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
@@ -76,7 +77,7 @@ const analysisInput = z.object({
 
 type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
-const observationProvider = new MockCopernicusProvider();
+const observationProvider = copernicusCDSEProvider;
 
 async function createAnalysisRequest(input: AnalysisInput) {
   const satellites = input.satellites as SatelliteId[];
@@ -175,7 +176,18 @@ export const appRouter = router({
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
-    health: publicProcedure.query(() => ({ data: { api: "v1", status: "ok", mode: "stub" }, error: null })),
+    health: publicProcedure.query(() => {
+      const isConfigured = copernicusTokenManager.isConfigured();
+      return {
+        data: {
+          api: "v1",
+          status: isConfigured ? "ok" : "degraded",
+          mode: isConfigured ? "copernicus_live" : "unavailable",
+          catalogAuthConfigured: isConfigured,
+        },
+        error: null,
+      };
+    }),
     solicitudes: router({
       create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {

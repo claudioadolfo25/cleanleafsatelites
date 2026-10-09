@@ -190,7 +190,9 @@ describe("agente de interpretación", () => {
 describe("API v1 multi-plataforma", () => {
   it("devuelve un envelope JSON estable para health y onboarding", async () => {
     const caller = appRouter.createCaller({} as never);
-    await expect(caller.apiV1.health()).resolves.toMatchObject({ data: { api: "v1", status: "ok" }, error: null });
+    const healthResult = await caller.apiV1.health();
+    expect(healthResult.data.api).toBe("v1");
+    expect(["ok", "degraded"]).toContain(healthResult.data.status);
     await expect(caller.apiV1.onboarding.createTenant({ organizationName: "Campo Demo", planId: "piloto" })).resolves.toMatchObject({ data: { estado: "trial", planId: "piloto" }, error: null });
   });
 
