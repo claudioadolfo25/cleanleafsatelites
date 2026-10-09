@@ -167,6 +167,23 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("react") || id.includes("react-dom") || id.includes("wouter")) {
+              return "vendor-react";
+            }
+            if (id.includes("recharts")) {
+              return "vendor-charts";
+            }
+            if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+              return "vendor-ui";
+            }
+          }
+        },
+      },
+    },
   },
   server: {
     host: true,

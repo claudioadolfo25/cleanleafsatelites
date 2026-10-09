@@ -2,6 +2,7 @@ import type { SatelliteId } from "./satellite-catalog";
 import type { Tier } from "./satellite-service";
 import { interpretMeasurement } from "./interpretation";
 import type { SentinelMeasurement } from "./satellite-service";
+import { resolveDataTraceability, type DataSourceType } from "./data-traceability";
 
 export type SatelliteQueryRequest = {
   predioId: string;
@@ -13,13 +14,44 @@ export type SatelliteQueryRequest = {
 };
 
 export interface EarthObservationProvider {
-  query(request: SatelliteQueryRequest): Promise<SentinelMeasurement>;
+  query(request: SatelliteQueryRequest): Promise<SentinelMeasurement & {
+    data_source?: DataSourceType;
+    confidence?: number;
+    acquired_at?: string;
+    cloud_cover?: number;
+  }>;
 }
 
 export class MockCopernicusProvider implements EarthObservationProvider {
-  async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement> {
+  async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement & {
+    data_source?: DataSourceType;
+    confidence?: number;
+    acquired_at?: string;
+    cloud_cover?: number;
+  }> {
     const { querySentinel } = await import("./satellite-service");
-    return querySentinel(request.predioId, request.satellite, request.variable);
+    const raw = await querySentinel(request.predioId, request.satellite, request.variable);
+    const traceability = resolveDataTraceability(false, "MockCopernicusProvider", raw.fecha_adquisicion ? raw.fecha_adquisicion.toISOString() : undefined);
+
+    if (traceability.data_source === "unavailable") {
+      return {
+        ...raw,
+        valor: 0,
+        unidad: "N/A",
+        data_source: "unavailable",
+        confidence: 0,
+        acquired_at: new Date().toISOString(),
+        cloud_cover: 0,
+      };
+    }
+
+    return {
+      ...raw,
+      data_source: "simulated",
+      confidence: traceability.confidence,
+      acquired_at: traceability.acquired_at,
+      cloud_cover: traceability.cloud_cover,
+    };
   }
 }
 

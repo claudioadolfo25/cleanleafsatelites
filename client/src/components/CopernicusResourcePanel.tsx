@@ -19,7 +19,13 @@ export default function CopernicusResourcePanel({ sector, resources }: Props) {
           <div key={resource.id} className="rounded-xl border border-white/80 bg-white/80 p-3">
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs font-semibold leading-4 text-slate-800">{resource.nombre}</p>
-              {resource.enabled ? <Badge className="bg-emerald-100 text-[10px] text-emerald-700 hover:bg-emerald-100">MVP</Badge> : <LockKeyhole size={13} className="mt-0.5 shrink-0 text-slate-400" />}
+              {resource.id === "cdse-statistical" ? (
+                <Badge className="bg-emerald-100 text-[10px] text-emerald-800 hover:bg-emerald-100">Real / CDSE</Badge>
+              ) : resource.enabled ? (
+                <Badge className="bg-amber-100 text-[10px] text-amber-800 hover:bg-amber-100">Simulado</Badge>
+              ) : (
+                <Badge className="bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100">Declarado</Badge>
+              )}
             </div>
             <p className="mt-1 text-[11px] leading-4 text-slate-500">{resource.necesidades.slice(0, 3).join(" · ")}</p>
             <a href={resource.endpointOficial} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 hover:text-sky-900">Ver fuente oficial <ExternalLink size={11} /></a>

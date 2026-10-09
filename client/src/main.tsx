@@ -18,6 +18,12 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  const portalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
+  if (!portalUrl) {
+    console.warn("[Auth] VITE_OAUTH_PORTAL_URL is not configured. Redirect to login skipped to avoid loop.");
+    return;
+  }
+
   startLogin();
 };
 

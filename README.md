@@ -75,5 +75,7 @@ Cleanleaf no trata Copernicus solo como una lista de satélites. `shared/coperni
 
 Referencias oficiales: [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/), [Sentinel-1](https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-1), [Sentinel-2](https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-2) y [servicios Copernicus](https://dataspace.copernicus.eu/copernicus-services).
 
-### Cliente OAuth2 Copernicus (Tellus)
+### Cliente OAuth2 Copernicus (Tellus) y APIs de Catálogo
 Cleanleaf se conecta con el programa Copernicus mediante el cliente OAuth2 oficial **Tellus** (`ID: sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535`). El servidor administra los tokens de acceso `client_credentials` con caché y refresco automático sin exponer secretos al cliente web.
+
+Las búsquedas en el catálogo satelital utilizan el estándar **STAC v1** (`https://stac.dataspace.copernicus.eu/v1/search`) y OData, cumpliendo con la baja de OpenSearch y el nuevo formato ISO 8601 UTC con sufijo `Z` y precisión de 6 decimales.
