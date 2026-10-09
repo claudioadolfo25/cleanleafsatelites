@@ -60,3 +60,17 @@ Respuesta esperada:
   }
 }
 ```
+
+## Copernicus Catalog y análisis satelital
+
+Configura estas variables en Render (solo en el servidor, nunca como `VITE_*`):
+
+| Variable | Valor recomendado | Uso |
+|---|---|---|
+| `COPERNICUS_MODE` | `mock` o `live` | `live` activa análisis CDSE; `mock` mantiene datos sintéticos para demo |
+| `COPERNICUS_CLIENT_ID` | ID oficial | Cliente OAuth2 CDSE |
+| `COPERNICUS_CLIENT_SECRET` | secreto privado | Token OAuth2; obligatorio para Catalog y Statistical API |
+| `COPERNICUS_TOKEN_URL` | endpoint OIDC CDSE | Emisión del token |
+| `COPERNICUS_CATALOG_URL` | `https://sh.dataspace.copernicus.eu/catalog/v1/search` | Búsqueda STAC Catalog |
+
+La aplicación no realiza llamadas anónimas: si falta el secreto, el health informa `catalogAuthConfigured=false` y la interfaz explica qué variable falta.
