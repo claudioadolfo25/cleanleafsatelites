@@ -207,7 +207,6 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
       return this.fallbackProvider.query(request);
     }
 
-    // Tier surface limits check
     if (request.tier === "tier3_regional") {
       const mockBase = await this.fallbackProvider.query(request);
       return {
@@ -290,7 +289,6 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           }
 
           const responseData = await response.json();
-          // Extract statistical value from CDSE response
           const intervals = responseData?.data ?? [];
           const lastInterval = intervals[intervals.length - 1];
           const meanValue = lastInterval?.outputs?.default?.bands?.B0?.stats?.mean ?? 0.62;

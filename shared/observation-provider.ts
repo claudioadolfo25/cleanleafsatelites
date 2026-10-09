@@ -11,6 +11,7 @@ export type SatelliteQueryRequest = {
   tier: Tier;
   periodFrom?: string;
   periodTo?: string;
+  bbox?: [number, number, number, number];
 };
 
 export interface EarthObservationProvider {
@@ -62,7 +63,7 @@ export type AnalysisReport = {
   predioNombre: string;
   tier: Tier;
   periodo: { desde: string; hasta: string };
-  fuentes: Array<{ satelite: SatelliteId; variable: string; unidad: string }>;
+  fuentes: Array<{ satelite: SatelliteId; variable: string; unidad: string; data_source?: string }>;
   resumen: string;
   hallazgos: Array<{ tipo: string; severidad: "baja" | "media" | "alta"; fuente: SatelliteId; variable: string; valor_actual: number }>;
   recomendaciones: string[];
@@ -83,11 +84,11 @@ export function buildAnalysisReport(input: { id: string; predioId: string; predi
     predioNombre: input.predioNombre,
     tier: input.tier,
     periodo: { desde: periodFrom, hasta: periodTo },
-    fuentes: [{ satelite: measurement.satelite, variable: measurement.variable, unidad: measurement.unidad }],
+    fuentes: [{ satelite: measurement.satelite, variable: measurement.variable, unidad: measurement.unidad, data_source: measurement.data_source }],
     resumen: interpretation,
     hallazgos: [{ tipo: "lectura_actual", severidad: measurement.valor < 0.3 && measurement.variable === "ndvi" ? "alta" : "baja", fuente: measurement.satelite, variable: measurement.variable, valor_actual: measurement.valor }],
     recomendaciones: ["Comparar este resultado con observaciones de terreno y la lectura anterior."],
-    limitaciones: ["Resultado generado por proveedor mock hasta conectar Copernicus CDSE en staging."],
+    limitaciones: measurement.data_source === "copernicus_cdse" ? ["Resultado obtenido desde Copernicus CDSE; validar con observaciones de terreno."] : ["Resultado generado por proveedor simulado hasta activar Copernicus CDSE en modo live."],
     mediciones: [measurement],
     generado_en: new Date().toISOString(),
   };

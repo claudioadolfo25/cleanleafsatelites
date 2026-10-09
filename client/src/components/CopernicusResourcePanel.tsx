@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Layers3, LockKeyhole } from "lucide-react";
+import { ExternalLink, Layers3 } from "lucide-react";
 import type { CopernicusResource, Sector } from "@shared/copernicus-catalog";
 
 type Props = { sector: Sector; resources: CopernicusResource[] };

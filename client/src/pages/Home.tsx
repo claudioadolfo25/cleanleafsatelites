@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
@@ -14,6 +15,7 @@ import {
   MapPinned,
   Plus,
   Radar,
+  RefreshCw,
   ScanLine,
   Sparkles,
   TrendingUp,
@@ -45,7 +47,7 @@ const satelliteMeta = {
 };
 
 export default function Home() {
-  const { data, isLoading } = trpc.cleanleaf.dashboard.useQuery();
+  const { data, isLoading, isError, error, refetch } = trpc.cleanleaf.dashboard.useQuery();
   const [selectedSatellite, setSelectedSatellite] = useState<"sentinel-2" | "sentinel-1">("sentinel-2");
   const [selectedPredio, setSelectedPredio] = useState("Las Quinas");
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -54,8 +56,32 @@ export default function Home() {
   const chartData = data?.measurements[selectedSatellite] ?? [];
   const selectedProperty = useMemo(() => data?.predios.find(predio => predio.nombre === selectedPredio) ?? data?.predios[0], [data?.predios, selectedPredio]);
 
-  if (isLoading || !data || !selectedProperty) {
+  if (isLoading) {
     return <DashboardSkeleton />;
+  }
+
+  if (isError || !data || !selectedProperty) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f7f2] p-6 text-center">
+        <div className="mx-auto max-w-md rounded-3xl border border-stone-200 bg-white p-8 shadow-xl">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <AlertCircle size={28} />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-stone-800">No se pudieron cargar los datos</h2>
+          <p className="mt-2 text-sm leading-6 text-stone-500">
+            {error?.message || "Ocurrió un problema de conexión con el servidor satelital."}
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Button onClick={() => refetch()} className="rounded-xl bg-emerald-700 font-medium hover:bg-emerald-800">
+              <RefreshCw className="mr-2 h-4 w-4" /> Reintentar
+            </Button>
+            <Button variant="outline" asChild className="rounded-xl border-stone-200">
+              <a href="/login">Ir a Iniciar Sesión</a>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const alertCount = data.alerts.filter(alert => alert.nivel === "atención").length;

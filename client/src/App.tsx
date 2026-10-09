@@ -1,41 +1,43 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import SatelliteConfiguration from "./pages/SatelliteConfiguration";
-import ReportsDashboard from "./pages/ReportsDashboard";
-import ReportDetail from "./pages/ReportDetail";
 
-function Router() {
-  // make sure to consider if you need authentication for certain routes
+const Home = lazy(() => import("./pages/Home"));
+const SatelliteConfiguration = lazy(() => import("./pages/SatelliteConfiguration"));
+const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
+const ReportDetail = lazy(() => import("./pages/ReportDetail"));
+
+function RouteFallback() {
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
-      <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
-      <Route path={"/dashboard/informes"} component={ReportsDashboard} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <div className="flex min-h-screen items-center justify-center bg-[#f7f7f2]">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent" />
+    </div>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
+function Router() {
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path={"/"} component={Home} />
+        <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
+        <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
+        <Route path={"/dashboard/informes"} component={ReportsDashboard} />
+        <Route path={"/404"} component={NotFound} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
+  );
+}
 
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />

@@ -3,19 +3,19 @@ import {
   getSatelitesHabilitados,
   getSatelliteConfigurationStatus,
   validarSatelitesSolicitados,
-} from "@shared/satellite-catalog";
+} from "../shared/satellite-catalog";
 import {
   querySentinel1,
   querySentinel2,
   querySentinel3,
   resolveTier,
-} from "@shared/satellite-service";
-import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
-import { validatePlanLimits } from "@shared/plan-limits";
-import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
-import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
-import { guidanceForNeed, satelliteGuidance } from "@shared/satellite-guidance";
-import { getReport, listReports } from "@shared/report-catalog";
+} from "../shared/satellite-service";
+import { getTierForSuperficie, processingModeForTier } from "../shared/satellite-router";
+import { validatePlanLimits } from "../shared/plan-limits";
+import { getActiveCopernicusResources, getCopernicusResources } from "../shared/copernicus-catalog";
+import { buildInterpretationPrompt, interpretMeasurement } from "../shared/interpretation";
+import { guidanceForNeed, satelliteGuidance } from "../shared/satellite-guidance";
+import { getReport, listReports } from "../shared/report-catalog";
 import { appRouter } from "./routers";
 
 describe("catálogo satelital por vertical", () => {
@@ -231,7 +231,7 @@ describe("catálogo Copernicus multi-sector", () => {
 
 describe("máquina de estados", () => {
   it("rechaza transiciones inválidas y acepta el camino completo", async () => {
-    const { assertTransition } = await import("@shared/analysis-state");
+    const { assertTransition } = await import("../shared/analysis-state");
     expect(() => assertTransition("completado", "procesando")).toThrow("INVALID_STATE_TRANSITION");
     expect(() => assertTransition("procesando", "completado")).not.toThrow();
   });

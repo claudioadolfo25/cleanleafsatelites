@@ -16,7 +16,7 @@ import { buildAnalysisReport } from "@shared/observation-provider";
 import { copernicusCDSEProvider, copernicusTokenManager } from "./copernicus";
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
-import { querySentinel, tierLabel } from "@shared/satellite-service";
+import { tierLabel } from "@shared/satellite-service";
 import { getReport, listReports } from "@shared/report-catalog";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";

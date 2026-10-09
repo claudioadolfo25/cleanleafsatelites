@@ -46,7 +46,6 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     expect(token.expiresAt).toBeGreaterThan(Date.now());
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
-    // Calling again should return cached token without making another HTTP request
     const cachedToken = await manager.fetchAccessToken();
     expect(cachedToken.accessToken).toBe("mock-jwt-access-token-xyz");
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -60,7 +59,7 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
       predioId: "predio-1",
       satellite: "sentinel-2",
       variable: "ndvi",
-      tier: "tier1_predial",
+      tier: "tier1_predio",
     });
 
     expect(result.satelite).toBe("sentinel-2");
@@ -81,7 +80,7 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
       predioId: "predio-1",
       satellite: "sentinel-2",
       variable: "ndvi",
-      tier: "tier1_predial",
+      tier: "tier1_predio",
     });
 
     expect(result.satelite).toBe("sentinel-2");
