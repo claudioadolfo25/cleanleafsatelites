@@ -23,6 +23,8 @@ const tierFromHectares = (hectares: number) => {
 export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFormProps) {
   const [predio, setPredio] = useState("Las Quinas");
   const [hectareas, setHectareas] = useState("42");
+  const [lat, setLat] = useState("-38.65");
+  const [lng, setLng] = useState("-72.55");
   const [satellites, setSatellites] = useState<SatelliteId[]>(["sentinel-2"]);
   const [selectedVariables, setSelectedVariables] = useState<Record<string, string>>({ "sentinel-2": "ndvi" });
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
@@ -67,10 +69,10 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
     <form className="space-y-5" onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
         <div className="space-y-2">
-          <Label htmlFor="predio" className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Predio</Label>
+          <Label htmlFor="predio" className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Predio / Terreno</Label>
           <div className="relative">
             <MapPinned className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            <Input id="predio" value={predio} onChange={event => setPredio(event.target.value)} className="h-11 border-stone-200 bg-stone-50 pl-9 text-stone-800 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20" />
+            <Input id="predio" value={predio} onChange={event => setPredio(event.target.value)} placeholder="Ej. El Aromo" className="h-11 border-stone-200 bg-stone-50 pl-9 text-stone-800 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20" />
           </div>
         </div>
         <div className="space-y-2">
@@ -79,6 +81,24 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
             <Input id="hectareas" inputMode="numeric" value={hectareas} onChange={event => setHectareas(event.target.value)} className="h-11 border-stone-200 bg-stone-50 pr-9 text-stone-800 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20" />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-stone-400">ha</span>
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">Ubicación del Terreno (Coordenadas Lat / Lng)</Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-stone-400">Latitud</span>
+            <Input value={lat} onChange={e => setLat(e.target.value)} placeholder="-38.65" className="h-10 border-stone-200 bg-stone-50 text-xs" />
+          </div>
+          <div className="space-y-1">
+            <span className="text-[11px] font-medium text-stone-400">Longitud</span>
+            <Input value={lng} onChange={e => setLng(e.target.value)} placeholder="-72.55" className="h-10 border-stone-200 bg-stone-50 text-xs" />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={() => { setLat("-38.65"); setLng("-72.55"); setPredio("Valle Central Araucanía"); }} className="text-[11px] text-stone-600">Preset: Araucanía (-38.65, -72.55)</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { setLat("-33.45"); setLng("-70.66"); setPredio("Valle Central"); }} className="text-[11px] text-stone-600">Preset: Valle Central (-33.45, -70.66)</Button>
         </div>
       </div>
 
