@@ -7,4 +7,7 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  copernicusClientId: process.env.COPERNICUS_CLIENT_ID ?? "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535",
+  copernicusClientSecret: process.env.COPERNICUS_CLIENT_SECRET ?? "",
+  copernicusTokenUrl: process.env.COPERNICUS_TOKEN_URL ?? "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
 };
