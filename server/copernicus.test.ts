@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { CopernicusTokenManager, CopernicusCDSEProvider } from "./copernicus";
+import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError } from "./copernicus";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -52,23 +52,19 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back gracefully when client secret is missing", async () => {
+  it("fails explicitly when client secret is missing", async () => {
     const manager = new CopernicusTokenManager(DEFAULT_CLIENT_ID, "", TEST_TOKEN_URL);
     const provider = new CopernicusCDSEProvider(manager);
 
-    const result = await provider.query({
+    await expect(provider.query({
       predioId: "predio-1",
       satellite: "sentinel-2",
       variable: "ndvi",
       tier: "tier1_predial",
-    });
-
-    expect(result.satelite).toBe("sentinel-2");
-    expect(result.variable).toBe("ndvi");
-    expect(typeof result.valor).toBe("number");
+    })).rejects.toBeInstanceOf(CopernicusUnavailableError);
   });
 
-  it("falls back to mock if token request fails with network error", async () => {
+  it("propagates a token/network failure instead of returning mock data", async () => {
     const manager = new CopernicusTokenManager(DEFAULT_CLIENT_ID, TEST_SECRET, TEST_TOKEN_URL);
     const provider = new CopernicusCDSEProvider(manager);
 
@@ -77,14 +73,11 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
       vi.fn().mockRejectedValue(new Error("Network connection error"))
     );
 
-    const result = await provider.query({
+    await expect(provider.query({
       predioId: "predio-1",
       satellite: "sentinel-2",
       variable: "ndvi",
       tier: "tier1_predial",
-    });
-
-    expect(result.satelite).toBe("sentinel-2");
-    expect(result.variable).toBe("ndvi");
+    })).rejects.toThrow("Network connection error");
   });
 });

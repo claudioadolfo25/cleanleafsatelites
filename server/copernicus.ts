@@ -1,6 +1,5 @@
 import { ENV } from "./_core/env";
 import {
-  MockCopernicusProvider,
   type EarthObservationProvider,
   type SatelliteQueryRequest,
 } from "../shared/observation-provider";
@@ -24,6 +23,12 @@ export class CopernicusRateLimitError extends Error {
   }
 }
 
+export class CopernicusUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CopernicusUnavailableError";
+  }
+}
 export class CopernicusTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -180,7 +185,6 @@ function evaluatePixel(samples) {
 }
 
 export class CopernicusCDSEProvider implements EarthObservationProvider {
-  private fallbackProvider = new MockCopernicusProvider();
   private statsApiUrl = "https://sh.dataspace.copernicus.eu/api/v1/statistics";
   private resultCache = new Map<string, { data: any; expiresAt: number }>();
   private searchSTAC = buildSTACSender();
@@ -192,8 +196,11 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
   }
 
   public async searchCatalog(request: STACItemSearchRequest) {
-    const token = this.tokenManager.isConfigured() ? await this.tokenManager.fetchAccessToken() : null;
-    return this.searchSTAC(request, token?.accessToken);
+    if (!this.tokenManager.isConfigured()) {
+      throw new CopernicusUnavailableError("Copernicus no está configurado: falta COPERNICUS_CLIENT_SECRET.");
+    }
+    const token = await this.tokenManager.fetchAccessToken();
+    return this.searchSTAC(request, token.accessToken);
   }
 
   async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement & {
@@ -204,19 +211,12 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
     status_code?: string;
   }> {
     if (!this.tokenManager.isConfigured()) {
-      return this.fallbackProvider.query(request);
+      throw new CopernicusUnavailableError("Copernicus no está conectado: configura COPERNICUS_CLIENT_SECRET y COPERNICUS_MODE=live.");
     }
 
     // Tier surface limits check
     if (request.tier === "tier3_regional") {
-      const mockBase = await this.fallbackProvider.query(request);
-      return {
-        ...mockBase,
-        status_code: "en_cola",
-        data_source: "unavailable",
-        confidence: 0,
-        acquired_at: new Date().toISOString(),
-      };
+      throw new CopernicusUnavailableError("El análisis regional requiere procesamiento batch; no se generará un dato simulado.");
     }
 
     const cacheKey = `${request.predioId}:${request.satellite}:${request.variable}:${request.tier}:${request.periodFrom ?? ""}:${request.periodTo ?? ""}`;
@@ -321,13 +321,13 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
       }
 
       if (lastError) throw lastError;
-      return this.fallbackProvider.query(request);
+      throw new CopernicusUnavailableError("Copernicus no devolvió datos para esta consulta.");
     } catch (error) {
       console.warn(
-        "[CopernicusCDSEProvider] Statistical API error or fallback required:",
+        "[CopernicusCDSEProvider] Statistical API no disponible:",
         error instanceof Error ? error.message : error
       );
-      return this.fallbackProvider.query(request);
+      throw error;
     }
   }
 }

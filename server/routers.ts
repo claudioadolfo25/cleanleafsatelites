@@ -80,10 +80,18 @@ const analysisInput = z.object({
 
 type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
-const copernicusMode = process.env.COPERNICUS_MODE ?? "mock";
-const observationProvider: EarthObservationProvider = copernicusMode === "live" && copernicusCDSEProvider.getTokenManager().isConfigured()
-  ? copernicusCDSEProvider
-  : new MockCopernicusProvider();
+const copernicusMode = process.env.COPERNICUS_MODE ?? "live";
+const isTestRuntime = process.env.NODE_ENV === "test";
+class CopernicusUnavailableProvider implements EarthObservationProvider {
+  async query(): Promise<never> {
+    throw new Error("Copernicus no está conectado. Configura COPERNICUS_MODE=live y COPERNICUS_CLIENT_SECRET.");
+  }
+}
+const observationProvider: EarthObservationProvider = isTestRuntime
+  ? new MockCopernicusProvider()
+  : copernicusMode === "live" && copernicusCDSEProvider.getTokenManager().isConfigured()
+    ? copernicusCDSEProvider
+    : new CopernicusUnavailableProvider();
 const catalogClient = createCatalogClient({
   getAccessToken: async () => copernicusCDSEProvider.getTokenManager().isConfigured()
     ? (await copernicusCDSEProvider.getTokenManager().fetchAccessToken()).accessToken
@@ -209,7 +217,7 @@ export const appRouter = router({
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
-    health: publicProcedure.query(() => ({ data: { api: "v1", status: "ok", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : "mock", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
+    health: publicProcedure.query(() => ({ data: { api: "v1", status: observationProvider === copernicusCDSEProvider || isTestRuntime ? "ok" : "degraded", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : isTestRuntime ? "test_mock" : "unavailable", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
     solicitudes: router({
       create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {
