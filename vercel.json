@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "outputDirectory": "dist/public",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/manus-storage/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|manus-storage/|assets/|favicon\\.ico|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
