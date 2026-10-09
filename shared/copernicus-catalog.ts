@@ -1,3 +1,5 @@
+import { COPERNICUS_ENDPOINTS } from "./copernicus-api";
+
 export type Sector = "agricultura" | "acuicultura" | "forestal" | "emergencias";
 export type ResourcePhase = "mvp" | "fase_2";
 export type CopernicusSourceId = "cdse-statistical" | "cmems" | "clms" | "cems" | "cds" | "cams";
@@ -11,6 +13,8 @@ export type CopernicusResource = {
   variables: string[];
   descripcion: string;
   endpointOficial: string;
+  stacEndpoint?: string;
+  odataEndpoint?: string;
   phase: ResourcePhase;
   enabled: boolean;
 };
@@ -25,6 +29,8 @@ export const copernicusResources: CopernicusResource[] = [
     variables: ["NDVI", "NDWI", "NDMI", "σ⁰ VV/VH", "SST", "clorofila-a"],
     descripcion: "Fuente principal del MVP para consultas agregadas por polígono sin descargar imágenes completas.",
     endpointOficial: "https://dataspace.copernicus.eu/",
+    stacEndpoint: COPERNICUS_ENDPOINTS.STAC_V1,
+    odataEndpoint: COPERNICUS_ENDPOINTS.ODATA_V1,
     phase: "mvp",
     enabled: true,
   },
@@ -97,3 +103,5 @@ export function getCopernicusResources(sector: Sector, includeFuture = true): Co
 export function getActiveCopernicusResources(sector: Sector): CopernicusResource[] {
   return getCopernicusResources(sector, false);
 }
+
+export * from "./copernicus-api";
