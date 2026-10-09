@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "../shared/const";
 import {
   getSatelitesHabilitados,
   getSatelliteConfigurationStatus,
@@ -7,16 +7,19 @@ import {
   validarSatelitesSolicitados,
   type SatelliteId,
   type Vertical,
-} from "@shared/satellite-catalog";
-import { interpretMeasurement } from "@shared/interpretation";
-import { getCopernicusResources, type Sector } from "@shared/copernicus-catalog";
-import { validateSatelliteVariable } from "@shared/analysis-validation";
-import { assertTransition, type AnalysisStatus } from "@shared/analysis-state";
-import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation-provider";
-import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
-import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
-import { querySentinel, tierLabel } from "@shared/satellite-service";
-import { getReport, listReports } from "@shared/report-catalog";
+} from "../shared/satellite-catalog";
+import { interpretMeasurement } from "../shared/interpretation";
+import { getCopernicusResources, type Sector } from "../shared/copernicus-catalog";
+import { validateSatelliteVariable } from "../shared/analysis-validation";
+import { assertTransition, type AnalysisStatus } from "../shared/analysis-state";
+import { buildAnalysisReport, MockCopernicusProvider, type EarthObservationProvider } from "../shared/observation-provider";
+import { copernicusCDSEProvider } from "./copernicus";
+import { createCatalogClient } from "./catalog-client";
+import { validatePlanLimits, type PlanId } from "../shared/plan-limits";
+import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "../shared/satellite-router";
+import { querySentinel, tierLabel } from "../shared/satellite-service";
+import { getReport, listReports } from "../shared/report-catalog";
+import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -72,11 +75,28 @@ const analysisInput = z.object({
   planId: planSchema.default("piloto"),
   haMesUsadas: z.number().nonnegative().default(0),
   prediosActivos: z.number().int().nonnegative().default(1),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
 });
 
 type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
-const observationProvider = new MockCopernicusProvider();
+const copernicusMode = process.env.COPERNICUS_MODE ?? "live";
+const isTestRuntime = process.env.NODE_ENV === "test";
+class CopernicusUnavailableProvider implements EarthObservationProvider {
+  async query(): Promise<never> {
+    throw new Error("Copernicus no está conectado. Configura COPERNICUS_MODE=live y COPERNICUS_CLIENT_SECRET.");
+  }
+}
+const observationProvider: EarthObservationProvider = isTestRuntime
+  ? new MockCopernicusProvider()
+  : copernicusMode === "live" && copernicusCDSEProvider.getTokenManager().isConfigured()
+    ? copernicusCDSEProvider
+    : new CopernicusUnavailableProvider();
+const catalogClient = createCatalogClient({
+  getAccessToken: async () => copernicusCDSEProvider.getTokenManager().isConfigured()
+    ? (await copernicusCDSEProvider.getTokenManager().fetchAccessToken()).accessToken
+    : undefined,
+});
 
 async function createAnalysisRequest(input: AnalysisInput) {
   const satellites = input.satellites as SatelliteId[];
@@ -124,7 +144,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
   const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
   assertTransition(history[0], history[1]);
   assertTransition(history[1], history[2]);
-  const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo });
+  const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo, bbox: input.bbox });
   const report = buildAnalysisReport({ id, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
   history.push("completado");
   assertTransition(history[2], history[3]);
@@ -161,7 +181,13 @@ export const appRouter = router({
     }),
   }),
   cleanleaf: router({
-    dashboard: publicProcedure.query(() => demoDashboard),
+    dashboard: publicProcedure.query(({ ctx }) => {
+      const isPublic = process.env.DEMO_PUBLIC_DASHBOARD !== "false";
+      if (!isPublic && !ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Sesión requerida para acceder al dashboard." });
+      }
+      return demoDashboard;
+    }),
     reports: router({
       list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
       getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
@@ -172,10 +198,26 @@ export const appRouter = router({
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
     resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
+    catalogSearch: publicProcedure.input(z.object({
+      bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+      datetime: z.string().optional(),
+      collections: z.array(z.string().min(1)).min(1).max(5),
+      limit: z.number().int().min(1).max(100).optional(),
+      next: z.number().int().min(0).max(10000).optional(),
+      filter: z.union([z.record(z.string(), z.unknown()), z.string()]).optional(),
+      filterLang: z.enum(["cql2-json", "cql2-text"]).optional(),
+      fields: z.object({ include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional() }).optional(),
+      distinct: z.string().optional(),
+    })).mutation(async ({ input }) => {
+      if (!copernicusCDSEProvider.getTokenManager().isConfigured()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configura COPERNICUS_CLIENT_SECRET en Render para consultar escenas reales de Catalog." });
+      }
+      return catalogClient(input);
+    }),
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
-    health: publicProcedure.query(() => ({ data: { api: "v1", status: "ok", mode: "stub" }, error: null })),
+    health: publicProcedure.query(() => ({ data: { api: "v1", status: observationProvider === copernicusCDSEProvider || isTestRuntime ? "ok" : "degraded", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : isTestRuntime ? "test_mock" : "unavailable", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
     solicitudes: router({
       create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {
