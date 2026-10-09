@@ -8,7 +8,7 @@ import { createContext } from "./_core/context";
 export function createApp(): Express {
   const app = express();
 
-  // Trust Vercel reverse proxy for protocol (x-forwarded-proto) and client IP
+  // Trust Render reverse proxy for x-forwarded-proto and client IP
   app.set("trust proxy", 1);
 
   // Configure body parser with larger size limit for file uploads
@@ -19,9 +19,9 @@ export function createApp(): Express {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
 
-  // Health check route returning status and presence booleans for critical env vars (never raw secrets)
+  // Health check route returning status and boolean checks for critical env vars (never raw values)
   app.get("/api/health", (_req: Request, res: Response) => {
-    const envStatus = {
+    const envChecks = {
       supabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
       supabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
       copernicusClientId: Boolean(process.env.COPERNICUS_CLIENT_ID),
@@ -32,11 +32,11 @@ export function createApp(): Express {
       status: "ok",
       service: "agropulso-cleanleaf-api",
       timestamp: new Date().toISOString(),
-      env: envStatus,
+      checks: envChecks,
     });
   });
 
-  // tRPC API middleware - mounted at both /api/trpc and /trpc for Vercel rewrite compatibility
+  // tRPC API middleware
   const trpcMiddleware = createExpressMiddleware({
     router: appRouter,
     createContext,
@@ -44,6 +44,16 @@ export function createApp(): Express {
 
   app.use("/api/trpc", trpcMiddleware);
   app.use("/trpc", trpcMiddleware);
+
+  // Fallback 404 handler for any unhandled /api/* routes (must return JSON, never HTML)
+  app.use("/api/*", (_req: Request, res: Response) => {
+    res.status(404).json({
+      error: {
+        code: "NOT_FOUND",
+        message: "API route not found",
+      },
+    });
+  });
 
   return app;
 }

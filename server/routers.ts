@@ -17,6 +17,7 @@ import { validatePlanLimits, type PlanId } from "../shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "../shared/satellite-router";
 import { querySentinel, tierLabel } from "../shared/satellite-service";
 import { getReport, listReports } from "../shared/report-catalog";
+import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -161,7 +162,13 @@ export const appRouter = router({
     }),
   }),
   cleanleaf: router({
-    dashboard: publicProcedure.query(() => demoDashboard),
+    dashboard: publicProcedure.query(({ ctx }) => {
+      const isPublic = process.env.DEMO_PUBLIC_DASHBOARD !== "false";
+      if (!isPublic && !ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Sesión requerida para acceder al dashboard." });
+      }
+      return demoDashboard;
+    }),
     reports: router({
       list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
       getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
