@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS, OAUTH_STATE_COOKIE, decodeOAuthState } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS, OAUTH_STATE_COOKIE, decodeOAuthState } from "../../shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
@@ -20,9 +20,6 @@ export function registerOAuthRoutes(app: Express) {
       return;
     }
 
-    // CSRF guard: the nonce in `state` must match the one-time cookie that
-    // startLogin set in the browser that began this login. An attacker can
-    // forge `state`, but cannot plant this cookie in the victim's browser.
     const { nonce } = decodeOAuthState(state);
     const expectedNonce = parseCookieHeader(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
     if (!nonce || nonce !== expectedNonce) {
@@ -56,7 +53,12 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/");
+      // Determine redirect origin based on host / x-forwarded-host header
+      const host = (req.headers["x-forwarded-host"] || req.headers.host || "") as string;
+      const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https") as string;
+      const redirectTarget = host ? `${proto}://${host}/` : "/";
+
+      res.redirect(302, redirectTarget);
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });

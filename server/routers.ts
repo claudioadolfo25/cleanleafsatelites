@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "../shared/const";
 import {
   getSatelitesHabilitados,
   getSatelliteConfigurationStatus,
@@ -7,16 +7,16 @@ import {
   validarSatelitesSolicitados,
   type SatelliteId,
   type Vertical,
-} from "@shared/satellite-catalog";
-import { interpretMeasurement } from "@shared/interpretation";
-import { getCopernicusResources, type Sector } from "@shared/copernicus-catalog";
-import { validateSatelliteVariable } from "@shared/analysis-validation";
-import { assertTransition, type AnalysisStatus } from "@shared/analysis-state";
-import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation-provider";
-import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
-import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
-import { querySentinel, tierLabel } from "@shared/satellite-service";
-import { getReport, listReports } from "@shared/report-catalog";
+} from "../shared/satellite-catalog";
+import { interpretMeasurement } from "../shared/interpretation";
+import { getCopernicusResources, type Sector } from "../shared/copernicus-catalog";
+import { validateSatelliteVariable } from "../shared/analysis-validation";
+import { assertTransition, type AnalysisStatus } from "../shared/analysis-state";
+import { buildAnalysisReport, MockCopernicusProvider } from "../shared/observation-provider";
+import { validatePlanLimits, type PlanId } from "../shared/plan-limits";
+import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "../shared/satellite-router";
+import { querySentinel, tierLabel } from "../shared/satellite-service";
+import { getReport, listReports } from "../shared/report-catalog";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
