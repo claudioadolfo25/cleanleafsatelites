@@ -12,7 +12,18 @@ import {
 } from "@shared/satellite-service";
 import { getTierForSuperficie, processingModeForTier } from "@shared/satellite-router";
 import { validatePlanLimits } from "@shared/plan-limits";
-import { getActiveCopernicusResources, getCopernicusResources } from "@shared/copernicus-catalog";
+import {
+  getActiveCopernicusResources,
+  getCopernicusResources,
+  COPERNICUS_ENDPOINTS,
+  formatCopernicusDateTime,
+  createODataSubscriptionPayload,
+  validatePaginationLimit,
+  normalizeEvictionDate,
+  normalizeGeometry,
+  buildODataProductsUrl,
+  buildStacSearchUrl,
+} from "@shared/copernicus-catalog";
 import { buildInterpretationPrompt, interpretMeasurement } from "@shared/interpretation";
 import { guidanceForNeed, satelliteGuidance } from "@shared/satellite-guidance";
 import { getReport, listReports } from "@shared/report-catalog";
@@ -212,7 +223,7 @@ describe("API v1 multi-plataforma", () => {
   });
 });
 
-describe("catálogo Copernicus multi-sector", () => {
+describe("catálogo Copernicus multi-sector y adaptadores de API CDSE", () => {
   it("mantiene CDSE Statistical como fuente MVP para agricultura y deja CMEMS fuera", () => {
     const resources = getCopernicusResources("agricultura");
     expect(resources.map(resource => resource.id)).toContain("cdse-statistical");
@@ -225,6 +236,66 @@ describe("catálogo Copernicus multi-sector", () => {
     expect(resources.map(resource => resource.id)).toContain("cmems");
     expect(resources.find(resource => resource.id === "cmems")?.enabled).toBe(false);
   });
+
+  it("configura la URL canonical de STAC v1 https://stac.dataspace.copernicus.eu/v1/", () => {
+    expect(COPERNICUS_ENDPOINTS.STAC_V1).toBe("https://stac.dataspace.copernicus.eu/v1/");
+    const cdseRes = getCopernicusResources("agricultura").find(r => r.id === "cdse-statistical");
+    expect(cdseRes?.stacEndpoint).toBe("https://stac.dataspace.copernicus.eu/v1/");
+    expect(cdseRes?.odataEndpoint).toBe("https://catalogue.dataspace.copernicus.eu/odata/v1/");
+  });
+
+  it("formatea DateTimeOffset en ISO 8601 UTC con sufijo 'Z' y 6 dígitos de precisión", () => {
+    const formatted = formatCopernicusDateTime("2024-06-04T12:03:49.113620+00:00");
+    expect(formatted).toBe("2024-06-04T12:03:49.113620Z");
+    expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+  });
+
+  it("requiere SubscriptionType obligatorio en minúsculas ('pull' o 'push')", () => {
+    const payload = createODataSubscriptionPayload({
+      FilterParam: "Collection/Name eq 'SENTINEL-1'",
+      SubscriptionType: "pull",
+    });
+    expect(payload.SubscriptionType).toBe("pull");
+    expect(payload.StageOrder).toBe(true);
+    expect(payload.Status).toBe("running");
+
+    expect(() =>
+      createODataSubscriptionPayload({
+        FilterParam: "Collection/Name eq 'SENTINEL-1'",
+        SubscriptionType: "INVALID" as never,
+      }),
+    ).toThrow("Invalid SubscriptionType");
+  });
+
+  it("aplica el límite de paginación de 10,000 elementos en OData y STAC", () => {
+    const validPaging = validatePaginationLimit(9900, 20);
+    expect(validPaging.valid).toBe(true);
+    expect(validPaging.exceeded).toBe(false);
+
+    const exceededPaging = validatePaginationLimit(10001, 20);
+    expect(exceededPaging.valid).toBe(false);
+    expect(exceededPaging.exceeded).toBe(true);
+    expect(exceededPaging.warning).toContain("exceeds maximum Copernicus Catalog API limit");
+
+    const { pagination } = buildODataProductsUrl({ skip: 10005 });
+    expect(pagination.exceeded).toBe(true);
+
+    const stacRes = buildStacSearchUrl({ page: 600, limit: 20 });
+    expect(stacRes.url).toContain("stac.dataspace.copernicus.eu/v1/search");
+    expect(stacRes.pagination.exceeded).toBe(true);
+  });
+
+  it("normaliza EvictionDate a '9999-12-31T23:59:59.999Z' cuando es nulo o vacío", () => {
+    expect(normalizeEvictionDate("")).toBe("9999-12-31T23:59:59.999Z");
+    expect(normalizeEvictionDate(null)).toBe("9999-12-31T23:59:59.999Z");
+    expect(normalizeEvictionDate("2025-12-31T00:00:00Z")).toBe("2025-12-31T00:00:00Z");
+  });
+
+  it("normaliza geometrías vacías a null", () => {
+    expect(normalizeGeometry([])).toBeNull();
+    expect(normalizeGeometry(null)).toBeNull();
+    expect(normalizeGeometry({ type: "Polygon", coordinates: [] })).toEqual({ type: "Polygon", coordinates: [] });
+  });
 });
 
 describe("máquina de estados", () => {
@@ -234,7 +305,6 @@ describe("máquina de estados", () => {
     expect(() => assertTransition("procesando", "completado")).not.toThrow();
   });
 });
-
 
 describe("guía de elección satelital", () => {
   it("recomienda Sentinel-2 para vigor y Sentinel-1 como respaldo con nubosidad", () => {
