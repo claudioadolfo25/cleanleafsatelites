@@ -16,7 +16,7 @@ describe("Copernicus Catalog API", () => {
       limit: 100,
       next: 10000,
       filter: "eo:cloud_cover < 60",
-      filterLang: "cql2-text",
+      "filter-lang": "cql2-text",
       fields: { include: ["id", "properties.datetime"] },
       distinct: "properties.datetime",
     });
@@ -37,8 +37,11 @@ describe("Copernicus Catalog API", () => {
       datetime: "2019-12-10T00:00:00Z/2019-12-10T23:59:59Z",
       collections: ["sentinel-1-grd"],
       limit: 5,
+      filter: "eo:cloud_cover < 60",
+      filterLang: "cql2-text",
     });
     expect(result.features).toEqual([]);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body as string)["filter-lang"]).toBe("cql2-text");
     expect(fetchImpl).toHaveBeenCalledWith("https://catalog.test/search", expect.objectContaining({
       method: "POST",
       headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
