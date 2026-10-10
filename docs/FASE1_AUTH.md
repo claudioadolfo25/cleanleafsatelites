@@ -5,6 +5,8 @@
 La Fase 1 establece la puerta de entrada principal y el sistema de autenticación de Cleanleaf Satélites, garantizando el aislamiento por usuario mediante Supabase Row Level Security (RLS) y protegiendo todas las rutas bajo `/dashboard`.
 
 ### 1. Componentes Desarrollados
+
+> La aplicación no usa un proyecto Supabase ficticio. Si faltan `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY`, el login muestra un error de configuración y las rutas protegidas no permiten el acceso.
 - **Landing Page Pública (`/`) — `client/src/pages/LandingPage.tsx`**:
   - Presentación de la propuesta de valor centrada en Copernicus CDSE y los 4 sectores principales (Agrícola, Forestal, Emergencias, Acuícola).
   - Botón dinámico de acceso ("Ingresar" si es visita anónima, "Ir al Dashboard" si la sesión está activa).
@@ -55,6 +57,8 @@ Para habilitar el envío real de códigos OTP por SMS a teléfonos móviles (ej.
 ---
 
 ## Verificación de Aceptación (Fase 1)
+
+Las pruebas automatizadas cubren la ausencia de credenciales ficticias y el bloqueo de la autenticación cuando faltan variables reales. La creación de una cuenta real, SMS OTP y Google OAuth deben verificarse con un proyecto Supabase configurado.
 
 1. **Página Principal pública**: Acceso en `/` sin requerir autenticación previa.
 2. **Autenticación 3 Vías**: Formularios de Correo/Contraseña, Teléfono SMS y Google OAuth operativos en `/auth`.

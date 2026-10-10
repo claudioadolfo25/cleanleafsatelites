@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Satellite, ShieldCheck, ArrowRight, Activity, Cloud, Eye, User, LogOut } from "lucide-react";
@@ -10,6 +10,7 @@ export default function LandingPage() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
@@ -24,6 +25,7 @@ export default function LandingPage() {
   }, []);
 
   const handleLogout = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     setUser(null);
   };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
 interface ProtectedRouteProps {
   component: React.ComponentType<any>;
@@ -14,9 +14,14 @@ export default function ProtectedRoute({ component: Component, ...rest }: Protec
 
   useEffect(() => {
     let mounted = true;
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      setLocation("/auth");
+      return () => { mounted = false; };
+    }
 
     async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase!.auth.getSession();
       if (!mounted) return;
 
       if (session?.user) {
@@ -30,7 +35,7 @@ export default function ProtectedRoute({ component: Component, ...rest }: Protec
 
     checkAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase!.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
         setAuthenticated(true);

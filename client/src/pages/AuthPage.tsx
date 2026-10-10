@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,30 +30,36 @@ export default function AuthPage() {
     setErrorMsg(null);
     setSuccessMsg(null);
   };
+  const requireSupabase = () => {
+    if (isSupabaseConfigured && supabase) return true;
+    setErrorMsg("La autenticación aún no está configurada. Define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el despliegue.");
+    return false;
+  };
 
   // 1. Correo + Contraseña
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+    if (!requireSupabase()) return;
     setLoading(true);
 
     try {
       if (emailMode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase!.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
         setLocation("/dashboard");
       } else if (emailMode === "register") {
-        const { error } = await supabase.auth.signUp({
+        const { error } = await supabase!.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
         setSuccessMsg("Registro exitoso. Si la confirmación por correo está activa, revisa tu bandeja de entrada.");
       } else if (emailMode === "reset") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase!.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/auth?reset=true`,
         });
         if (error) throw error;
@@ -70,11 +76,12 @@ export default function AuthPage() {
   const handleSendSmsOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+    if (!requireSupabase()) return;
     setLoading(true);
 
     try {
       const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase!.auth.signInWithOtp({
         phone: formattedPhone,
       });
       if (error) throw error;
@@ -93,11 +100,12 @@ export default function AuthPage() {
   const handleVerifySmsOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
+    if (!requireSupabase()) return;
     setLoading(true);
 
     try {
       const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
-      const { error } = await supabase.auth.verifyOtp({
+      const { error } = await supabase!.auth.verifyOtp({
         phone: formattedPhone,
         token: otpToken,
         type: "sms",
@@ -114,10 +122,11 @@ export default function AuthPage() {
   // 3. Google OAuth
   const handleGoogleAuth = async () => {
     clearMessages();
+    if (!requireSupabase()) return;
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase!.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
