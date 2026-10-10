@@ -4,8 +4,12 @@ import NotFound from "@/pages/NotFound";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const SatellitesPlaceholderPage = lazy(() => import("./pages/SatellitesPlaceholderPage"));
 const Home = lazy(() => import("./pages/Home"));
 const SatelliteConfiguration = lazy(() => import("./pages/SatelliteConfiguration"));
 const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
@@ -23,11 +27,26 @@ function Router() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Switch>
-        <Route path={"/"} component={Home} />
-        <Route path={"/dashboard/configuracion/satelites"} component={SatelliteConfiguration} />
-        <Route path={"/dashboard/informes/:id"} component={ReportDetail} />
-        <Route path={"/dashboard/informes"} component={ReportsDashboard} />
-        <Route path={"/404"} component={NotFound} />
+        {/* Rutas Públicas (Fase 1 & Fase 2) */}
+        <Route path="/" component={LandingPage} />
+        <Route path="/auth" component={AuthPage} />
+        <Route path="/satelites" component={SatellitesPlaceholderPage} />
+
+        {/* Rutas Protegidas bajo /dashboard */}
+        <Route path="/dashboard">
+          {() => <ProtectedRoute component={Home} />}
+        </Route>
+        <Route path="/dashboard/configuracion/satelites">
+          {() => <ProtectedRoute component={SatelliteConfiguration} />}
+        </Route>
+        <Route path="/dashboard/informes/:id">
+          {(params) => <ProtectedRoute component={ReportDetail} params={params} />}
+        </Route>
+        <Route path="/dashboard/informes">
+          {() => <ProtectedRoute component={ReportsDashboard} />}
+        </Route>
+
+        <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
