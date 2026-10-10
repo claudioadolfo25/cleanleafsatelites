@@ -29,7 +29,7 @@ export function buildCatalogSearchPayload(input: CatalogSearchRequest): CatalogS
   if (input.datetime) payload.datetime = input.datetime;
   if (next !== undefined) payload.next = next;
   if (input.filter !== undefined) payload.filter = input.filter;
-  if (input.filterLang) payload.filterLang = input.filterLang;
+  if (input.filterLang) (payload as Record<string, unknown>)["filter-lang"] = input.filterLang;
   if (input.fields) payload.fields = input.fields;
   if (input.distinct) payload.distinct = input.distinct;
   return payload;
