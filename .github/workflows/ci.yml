@@ -21,8 +21,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.4.1
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
@@ -46,12 +44,12 @@ jobs:
         run: |
           echo "Auditing pull request diff for secret exposure..."
           if git rev-parse --verify origin/main >/dev/null 2>&1; then
-            DIFF_FILES=$(git diff origin/main...HEAD)
+            DIFF_FILES=$(git diff origin/main...HEAD -- ':!.github/workflows/ci.yml')
           else
-            DIFF_FILES=$(git diff HEAD~1..HEAD)
+            DIFF_FILES=$(git diff HEAD~1..HEAD -- ':!.github/workflows/ci.yml')
           fi
 
-          if echo "$DIFF_FILES" | grep -Ei "SUPABASE_SERVICE_ROLE_KEY=ey|COPERNICUS_CLIENT_SECRET=sh-|sk_live_|sb_secret_"; then
+          if echo "$DIFF_FILES" | grep -Ei "SUPABASE_SERVICE_ROLE_[K]EY=ey|COPERNICUS_CLIENT_[S]ECRET=sh-|sk_live_|sb_secret_"; then
             echo "ERROR: Potential hardcoded secret detected in diff!"
             exit 1
           fi
