@@ -166,6 +166,20 @@ alter table alertas enable row level security;
 alter table api_keys enable row level security;
 alter table workflow_logs enable row level security;
 
+drop policy if exists tenants_isolation on tenants;
+drop policy if exists planes_read on planes;
+drop policy if exists users_isolation on users;
+drop policy if exists predios_isolation on predios;
+drop policy if exists suscripciones_isolation on suscripciones;
+drop policy if exists solicitudes_isolation on solicitudes_analisis;
+drop policy if exists informes_isolation on informes;
+drop policy if exists mediciones_isolation on mediciones;
+drop policy if exists consumo_isolation on consumo;
+drop policy if exists alertas_isolation on alertas;
+drop policy if exists api_keys_isolation on api_keys;
+drop policy if exists workflow_logs_isolation on workflow_logs;
+
+
 create policy tenants_isolation on tenants for all using (id = get_current_tenant_id() or get_current_role() = 'super_admin');
 create policy planes_read on planes for select using (true);
 create policy users_isolation on users for all using (tenant_id = get_current_tenant_id() or get_current_role() = 'super_admin');

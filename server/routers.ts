@@ -24,7 +24,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -189,8 +189,8 @@ export const appRouter = router({
       return demoDashboard;
     }),
     reports: router({
-      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
-      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+      list: protectedProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
+      getById: protectedProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
@@ -198,7 +198,7 @@ export const appRouter = router({
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
     resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
-    catalogSearch: publicProcedure.input(z.object({
+    catalogSearch: protectedProcedure.input(z.object({
       bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
       datetime: z.string().optional(),
       collections: z.array(z.string().min(1)).min(1).max(5),
@@ -214,12 +214,12 @@ export const appRouter = router({
       }
       return catalogClient(input);
     }),
-    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
+    createAnalysis: protectedProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: observationProvider === copernicusCDSEProvider || isTestRuntime ? "ok" : "degraded", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : isTestRuntime ? "test_mock" : "unavailable", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
     solicitudes: router({
-      create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
+      create: protectedProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {
           return { data: await createAnalysisRequest(input), error: null };
         } catch (error) {
@@ -228,13 +228,13 @@ export const appRouter = router({
       }),
     }),
     onboarding: router({
-      createTenant: publicProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
+      createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
         data: { tenantId: `tenant-${Date.now()}`, nombre: input.organizationName, planId: input.planId, estado: "trial" as const },
         error: null,
       })),
     }),
     apiKeys: router({
-      create: publicProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(({ input }) => {
+      create: adminProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(({ input }) => {
         const plainKey = `cl_${randomBytes(18).toString("hex")}`;
         const hash = createHash("sha256").update(plainKey).digest("hex");
         return { data: { tenantId: input.tenantId, nombre: input.nombre, key: plainKey, hash, warning: "La key se muestra una sola vez en este stub." }, error: null };
