@@ -18,6 +18,13 @@ import { guidanceForNeed, satelliteGuidance } from "../shared/satellite-guidance
 import { getReport, listReports } from "../shared/report-catalog";
 import { appRouter } from "./routers";
 
+const testContext = {
+  user: null,
+  supabaseIdentity: { userId: "00000000-0000-0000-0000-000000000001", tenantId: "00000000-0000-0000-0000-000000000010", email: "qa@example.com" },
+  req: {},
+  res: {},
+} as never;
+
 describe("catálogo satelital por vertical", () => {
   it("habilita Sentinel-2 y Sentinel-1 para agricultura, pero no Sentinel-3", () => {
     const enabled = getSatelitesHabilitados("agricultura");
@@ -97,7 +104,7 @@ describe("contrato unificado de Sentinel", () => {
 
 describe("creación de solicitud", () => {
   it("bloquea Sentinel-3 para un tenant agrícola", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     await expect(
       caller.cleanleaf.createAnalysis({
         predioId: "el-aromo",
@@ -110,7 +117,7 @@ describe("creación de solicitud", () => {
   });
 
   it("acepta Sentinel-3 para un tenant acuícola", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     const result = await caller.cleanleaf.createAnalysis({
       predioId: "centro-acuicola",
       predioNombre: "Centro acuícola", 
@@ -126,7 +133,7 @@ describe("creación de solicitud", () => {
   });
 
   it("rechaza combinaciones de satélite y variable incompatibles", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     await expect(caller.cleanleaf.createAnalysis({
       predioId: "el-aromo",
       predioNombre: "El Aromo",
@@ -138,7 +145,7 @@ describe("creación de solicitud", () => {
   });
 
   it("repite una solicitud sin duplicar el resultado por idempotencyKey", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     const input = {
       predioId: "las-quinas",
       predioNombre: "Las Quinas",
@@ -189,13 +196,13 @@ describe("agente de interpretación", () => {
 
 describe("API v1 multi-plataforma", () => {
   it("devuelve un envelope JSON estable para health y onboarding", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     await expect(caller.apiV1.health()).resolves.toMatchObject({ data: { api: "v1", status: "ok" }, error: null });
     await expect(caller.apiV1.onboarding.createTenant({ organizationName: "Campo Demo", planId: "piloto" })).resolves.toMatchObject({ data: { estado: "trial", planId: "piloto" }, error: null });
   });
 
   it("rechaza tier regional por plan antes de crear la solicitud", async () => {
-    const caller = appRouter.createCaller({} as never);
+    const caller = appRouter.createCaller(testContext);
     const response = await caller.apiV1.solicitudes.create({
       predioId: "region-araucania",
       predioNombre: "Región Araucanía",
