@@ -1,0 +1,14 @@
+HTTP/2 200
+date: Wed, 14 Oct 2026 00:22:39 GMT
+content-type: application/json
+rndr-id: 437790c8-fb3a-467c
+server: cloudflare
+vary: trpc-accept
+vary: Accept-Encoding
+x-powered-by: Express
+x-render-origin-server: Render
+cf-cache-status: DYNAMIC
+cf-ray: a4a26e4e2815616a-ORD
+alt-svc: h3=":443"; ma=86400
+
+{"result":{"data":{"json":{"tenant":{"nombre":"Hacienda Los Robles","vertical":"agricultura","plan":"Piloto Araucanía","usoHa":86,"limiteHa":100},"predios":[{"id":"predio-las-quinas","nombre":"Las Quinas","comuna":"Freire","hectareas":42,"ndvi":0.68,"estado":"Óptimo","delta":0.04},{"id":"predio-el-aromo","nombre":"El Aromo","comuna":"Pitrufquén","hectareas":31,"ndvi":0.51,"estado":"Revisar","delta":-0.08},{"id":"predio-santa-elena","nombre":"Santa Elena","comuna":"Gorbea","hectareas":13,"ndvi":0.72,"estado":"Óptimo","delta":0.02}],"measurements":{"sentinel-2":[{"fecha":"08 Ago","valor":0.49},{"fecha":"13 Ago","valor":0.53},{"fecha":"18 Ago","valor":0.58},{"fecha":"23 Ago","valor":0.55},{"fecha":"28 Ago","valor":0.61},{"fecha":"02 Sep","valor":0.64},{"fecha":"07 Sep","valor":0.68}],"sentinel-1":[{"fecha":"08 Ago","valor":-18.4},{"fecha":"13 Ago","valor":-17.8},{"fecha":"18 Ago","valor":-19.1},{"fecha":"23 Ago","valor":-18.7},{"fecha":"28 Ago","valor":-17.9},{"fecha":"02 Sep","valor":-17.4},{"fecha":"07 Sep","valor":-16.8}]},"alerts":[{"id":"a-1","nivel":"atención","titulo":"El Aromo necesita una revisión","detalle":"El vigor bajó 0,08 puntos en los últimos 15 días.","accion":"Ver zona"},{"id":"a-2","nivel":"info","titulo":"Nueva imagen disponible","detalle":"Sentinel-2 actualizó Las Quinas hace 2 días.","accion":"Ver datos"}]}}}}

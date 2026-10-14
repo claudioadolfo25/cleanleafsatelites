@@ -1,0 +1,14 @@
+HTTP/2 400
+date: Wed, 14 Oct 2026 00:22:39 GMT
+content-type: application/json; charset=utf-8
+etag: W/"27-OZcWidPzQ/yRebcrBYq6IoHoaok"
+rndr-id: e414b78d-d911-4e77
+server: cloudflare
+vary: Accept-Encoding
+x-powered-by: Express
+x-render-origin-server: Render
+cf-cache-status: DYNAMIC
+cf-ray: a4a26e52ee5a0013-ORD
+alt-svc: h3=":443"; ma=86400
+
+{"error":"code and state are required"}

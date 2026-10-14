@@ -1,0 +1,36 @@
+ WARN  Unsupported engine: wanted: {"node":"20.x"} (current: {"node":"v22.22.1","pnpm":"10.4.1"})
+
+> cleanleaf@1.0.0 build /app
+> vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+
+vite v7.1.9 building for production...
+transforming...
+✓ 2441 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/public/index.html                                    368.11 kB │ gzip: 105.62 kB
+../dist/public/assets/index-PjVLM58D.css                     141.53 kB │ gzip:  22.62 kB
+../dist/public/assets/checkbox-C75IfqNJ.js                     1.12 kB │ gzip:   0.52 kB
+../dist/public/assets/badge-QHMAmgho.js                        1.28 kB │ gzip:   0.63 kB
+../dist/public/assets/tabs-CdokkoWT.js                         1.59 kB │ gzip:   0.65 kB
+../dist/public/assets/satellite-catalog-B83qFW5r.js            1.88 kB │ gzip:   0.68 kB
+../dist/public/assets/ReportDownloadActions-Du3isD6e.js        2.64 kB │ gzip:   1.11 kB
+../dist/public/assets/SatellitesPlaceholderPage-CYK9b44K.js    2.67 kB │ gzip:   0.96 kB
+../dist/public/assets/select-DS8wMo1R.js                       4.69 kB │ gzip:   1.42 kB
+../dist/public/assets/input-Dgm65oLF.js                        5.40 kB │ gzip:   1.84 kB
+../dist/public/assets/LandingPage-D1DkKN8q.js                  9.84 kB │ gzip:   2.48 kB
+../dist/public/assets/AuthPage-tuPkDuIJ.js                    13.55 kB │ gzip:   3.85 kB
+../dist/public/assets/ReportDetail-3r5BiHEZ.js                15.42 kB │ gzip:   3.20 kB
+../dist/public/assets/ReportsDashboard-Cqj9BscZ.js            15.54 kB │ gzip:   3.60 kB
+../dist/public/assets/SatelliteConfiguration-sod-8_Z0.js      21.13 kB │ gzip:   5.02 kB
+../dist/public/assets/vendor-icons-ByKkt5aN.js                24.65 kB │ gzip:   5.07 kB
+../dist/public/assets/Home-DVgoysCE.js                        50.36 kB │ gzip:  11.80 kB
+../dist/public/assets/vendor-query-qI_mU3dF.js                83.22 kB │ gzip:  23.07 kB
+../dist/public/assets/vendor-radix-DPNxtLY_.js                95.50 kB │ gzip:  32.61 kB
+../dist/public/assets/vendor-charts-Bt_LSy95.js              404.70 kB │ gzip: 111.96 kB
+../dist/public/assets/index-cg7ISrE_.js                      499.74 kB │ gzip: 144.68 kB
+✓ built in 11.17s
+
+  dist/index.js  79.8kb
+
+⚡ Done in 15ms

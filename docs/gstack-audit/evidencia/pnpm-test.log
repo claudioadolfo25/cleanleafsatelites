@@ -1,0 +1,49 @@
+ WARN  Unsupported engine: wanted: {"node":"20.x"} (current: {"node":"v22.22.1","pnpm":"10.4.1"})
+
+> cleanleaf@1.0.0 test /app
+> vitest run
+
+
+ RUN  v2.1.9 /app
+
+ ✓ server/catalog-client.test.ts (2 tests) 10ms
+stdout | server/copernicus.test.ts
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+stdout | server/copernicus.test.ts > Copernicus OAuth2 Client Service (Tellus) > initializes with official Tellus client ID as default
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+stdout | server/copernicus.test.ts > Copernicus OAuth2 Client Service (Tellus) > fails explicitly when client secret is missing
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+stderr | server/copernicus.test.ts > Copernicus OAuth2 Client Service (Tellus) > propagates a token/network failure instead of returning mock data
+[CopernicusCDSEProvider] Statistical API no disponible: Network connection error
+
+ ✓ server/copernicus.test.ts (5 tests) 13ms
+stdout | server/satellite-domain.test.ts
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+stdout | server/auth.logout.test.ts
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+ ✓ server/satellite-domain.test.ts (27 tests) 58ms
+ ✓ server/auth.logout.test.ts (1 test) 9ms
+ ✓ server/fase1-auth-config.test.ts (2 tests) 4ms
+stdout | server/app.test.ts
+[OAuth] Initialized with baseURL:
+
+stderr | server/app.test.ts
+[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable.
+
+stdout | server/app.test.ts
+[CopernicusTokenManager] Configured with clientId, clientSecret missing. Fallback mode active.
+
+stderr | server/app.test.ts > Express App Integration for Render > GET /api/trpc/cleanleaf.dashboard responds with 200 OK JSON (never HTML)
+[Auth] Missing session cookie
+
+ ✓ server/app.test.ts (3 tests) 77ms
+
+ Test Files  6 passed (6)
+      Tests  40 passed (40)
+   Start at  00:20:45
+   Duration  2.50s (transform 569ms, setup 0ms, collect 2.59s, tests 170ms, environment 2ms, prepare 651ms)
