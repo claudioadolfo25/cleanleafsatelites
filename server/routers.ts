@@ -18,7 +18,7 @@ import { createCatalogClient } from "./catalog-client";
 import { validatePlanLimits, type PlanId } from "../shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "../shared/satellite-router";
 import { querySentinel, tierLabel } from "../shared/satellite-service";
-import { getReport, listReports } from "../shared/report-catalog";
+import { getPersistenceIdentity, getPersistedReport, getSupabasePersistenceClient, listPersistedReports, persistAnalysis } from "./supabase-persistence";
 import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
@@ -98,7 +98,16 @@ const catalogClient = createCatalogClient({
     : undefined,
 });
 
-async function createAnalysisRequest(input: AnalysisInput) {
+function requireTenantIdentity(identity: Parameters<typeof getPersistenceIdentity>[0]) {
+  const persistenceIdentity = getPersistenceIdentity(identity);
+  if (!persistenceIdentity) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Se requiere un JWT de Supabase válido con tenant_id." });
+  }
+  return persistenceIdentity;
+}
+
+async function createAnalysisRequest(input: AnalysisInput, supabaseIdentity: Parameters<typeof getPersistenceIdentity>[0]) {
+  const identity = requireTenantIdentity(supabaseIdentity);
   const satellites = input.satellites as SatelliteId[];
   if (!validarSatelitesSolicitados(input.vertical, satellites)) {
     throw new Error(satelliteValidationMessage(input.vertical, satellites));
@@ -108,7 +117,8 @@ async function createAnalysisRequest(input: AnalysisInput) {
   satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const idempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
-  const previous = idempotencyStore.get(idempotencyKey);
+  const scopedIdempotencyKey = `${identity.tenantId}:${idempotencyKey}`;
+  const previous = idempotencyStore.get(scopedIdempotencyKey);
   if (previous) return previous;
 
   const tier = getTierForSuperficie(input.hectareas);
@@ -135,7 +145,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
       variablesSolicitadas: variables,
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
-    idempotencyStore.set(idempotencyKey, regionalResult);
+    idempotencyStore.set(scopedIdempotencyKey, regionalResult);
     return regionalResult;
   }
 
@@ -166,7 +176,16 @@ async function createAnalysisRequest(input: AnalysisInput) {
     informe: report,
     mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
-  idempotencyStore.set(idempotencyKey, completedResult);
+  if (getSupabasePersistenceClient()) {
+    const persisted = await persistAnalysis({
+      identity,
+      request: { predioId: input.predioId, predioNombre: input.predioNombre, hectareas: input.hectareas, tier, satellites, variables, estado: completedResult.estado, motorUsado: completedResult.motorUsado, correlationId, idempotencyKey },
+      report,
+      source: result.data_source === "copernicus_cdse" ? "copernicus_cdse" : "synthetic",
+    });
+    if (persisted) Object.assign(completedResult, { informePersistido: persisted.report });
+  }
+  idempotencyStore.set(scopedIdempotencyKey, completedResult);
   return completedResult;
 }
 
@@ -189,8 +208,16 @@ export const appRouter = router({
       return demoDashboard;
     }),
     reports: router({
-      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
-      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(async ({ input, ctx }) => {
+        const identity = requireTenantIdentity(ctx.supabaseIdentity);
+        if (!getSupabasePersistenceClient()) return [];
+        return listPersistedReports(identity, input);
+      }),
+      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ input, ctx }) => {
+        const identity = requireTenantIdentity(ctx.supabaseIdentity);
+        if (!getSupabasePersistenceClient()) return null;
+        return getPersistedReport(identity, input.id);
+      }),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
@@ -214,14 +241,14 @@ export const appRouter = router({
       }
       return catalogClient(input);
     }),
-    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
+    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input, ctx }) => createAnalysisRequest(input, ctx.supabaseIdentity)),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: observationProvider === copernicusCDSEProvider || isTestRuntime ? "ok" : "degraded", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : isTestRuntime ? "test_mock" : "unavailable", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
     solicitudes: router({
-      create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
+      create: publicProcedure.input(analysisInput).mutation(async ({ input, ctx }) => {
         try {
-          return { data: await createAnalysisRequest(input), error: null };
+          return { data: await createAnalysisRequest(input, ctx.supabaseIdentity), error: null };
         } catch (error) {
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
         }

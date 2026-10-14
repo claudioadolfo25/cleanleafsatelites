@@ -20,6 +20,8 @@ export type ReportRecord = {
   recommendation: string;
   trace: ReportTraceEvent[];
   metrics: Array<{ label: string; value: string; comparison: string }>;
+  source?: "demo" | "user";
+  dataSource?: "synthetic" | "copernicus_cdse";
 };
 
 const baseTrace = (id: string, status: AnalysisStatus, progress: number, currentStep: string, actor: string, message: string): ReportTraceEvent[] => [
@@ -36,6 +38,11 @@ export const demoReports: ReportRecord[] = [
   { id: "inf-el-aromo-error", tenantId: "tenant-demo", predioId: "predio-el-aromo", predioNombre: "El Aromo", fechaDesde: "2026-08-18", fechaHasta: "2026-08-24", generatedAt: "2026-08-25T09:12:00Z", satellites: ["sentinel-2"], variables: ["NDVI"], status: "error_reintentable", progress: 42, currentStep: "No se encontró una escena óptica utilizable", alertLevel: "critica", summary: "La fuente óptica no tuvo una escena con calidad suficiente para este periodo.", recommendation: "Reintentar con Sentinel-1 o ampliar la ventana de fechas.", trace: baseTrace("inf-el-aromo-error", "error_reintentable", 42, "No se encontró una escena óptica utilizable", "copernicus", "Fallo temporal"), metrics: [{ label: "Progreso", value: "42%", comparison: "detenido por calidad" }, { label: "Reintento", value: "Disponible", comparison: "sin consumo duplicado" }] },
   { id: "inf-regional-review", tenantId: "tenant-demo", predioId: "region-araucania", predioNombre: "Región Araucanía", fechaDesde: "2026-08-01", fechaHasta: "2026-08-31", generatedAt: "2026-08-20T08:40:00Z", satellites: ["sentinel-2"], variables: ["NDVI regional"], status: "requiere_revision", progress: 12, currentStep: "Esperando evaluación del procesamiento regional", alertLevel: "atencion", summary: "El alcance regional supera el procesamiento automático disponible en el plan actual.", recommendation: "Solicitar evaluación antes de iniciar el procesamiento; no se consumió cuota.", trace: [{ at: "2026-08-20T08:40:00Z", actor: "usuario", status: "pendiente", message: "Solicitud recibida", detail: "Se validó el área regional." }, { at: "2026-08-20T08:40:01Z", actor: "policy", status: "requiere_revision", message: "Revisión necesaria", detail: "Tier regional requiere autorización explícita." }], metrics: [{ label: "Área", value: ">5.000 ha", comparison: "tier regional" }, { label: "Consumo", value: "0 ha", comparison: "bloqueado de forma segura" }] },
 ];
+
+for (const report of demoReports) {
+  report.source = "demo";
+  report.dataSource = "synthetic";
+}
 
 export type ReportFilters = { search?: string; predio?: string; satellite?: string; status?: AnalysisStatus | "todos" };
 export function listReports(filters: ReportFilters = {}): ReportRecord[] {
