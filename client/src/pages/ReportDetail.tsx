@@ -216,6 +216,10 @@ export default function ReportDetail() {
                   <dt className="text-stone-400">ID Trazable</dt>
                   <dd className="max-w-[150px] break-all text-right font-mono text-[10px] text-stone-500">{report.id}</dd>
                 </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-stone-400">Procedencia</dt>
+                  <dd className="text-right font-semibold text-stone-700">{report.source === "user" ? "Solicitud persistida" : "Semilla demo"} · {report.dataSource === "synthetic" ? "synthetic" : "Copernicus CDSE"}</dd>
+                </div>
               </dl>
               <div className="mt-5">
                 <ReportDownloadActions report={report} />

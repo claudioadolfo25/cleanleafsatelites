@@ -11,6 +11,7 @@ describe("Copernicus CDSE Provider Integration", () => {
     expect(measurement.satelite).toBe("sentinel-2");
     expect(measurement.variable).toBe("ndvi");
     expect(measurement.unidad).toBe("ratio");
+    expect(measurement.data_source).toBe("synthetic");
     expect(measurement.valor).toBeGreaterThanOrEqual(0);
     expect(measurement.valor).toBeLessThanOrEqual(1);
   });

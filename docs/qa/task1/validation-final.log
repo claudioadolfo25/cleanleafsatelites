@@ -1,0 +1,60 @@
+=== CHECK ===
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.patchedDependencies", "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+> cleanleaf@1.0.0 check /home/ubuntu/cleanleafsatelites
+> tsc --noEmit
+
+CHECK_EXIT=0
+=== TEST ===
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.patchedDependencies", "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+> cleanleaf@1.0.0 test /home/ubuntu/cleanleafsatelites
+> vitest run
+
+
+ RUN  v2.1.9 /home/ubuntu/cleanleafsatelites
+
+ ✓ server/supabase-rls.test.ts (3 tests) 3ms
+ ✓ server/supabase-persistence.test.ts (2 tests) 3ms
+ ✓ tests/copernicus-integration.test.ts (3 tests) 2ms
+ ✓ tests/reports-dashboard.test.ts (3 tests) 5ms
+ ✓ server/critical-flows.test.ts (4 tests) 6ms
+ ✓ server/satellite-domain.test.ts (27 tests) 20ms
+ ✓ tests/guide-interpreter.test.ts (2 tests) 2ms
+ ✓ tests/button-audit-navigation.test.ts (2 tests) 2ms
+ ✓ server/auth.logout.test.ts (1 test) 3ms
+ ✓ tests/sat2farm-honest-enhancements.test.ts (5 tests) 2313ms
+   ✓ Open-Meteo 15-Day Weather Forecast Service (Tarea 2) > fetches weather forecast or returns fallback structure with 15-16 days 2310ms
+
+ Test Files  10 passed (10)
+      Tests  52 passed (52)
+   Start at  12:57:49
+   Duration  2.61s (transform 400ms, setup 0ms, collect 952ms, tests 2.36s, environment 1ms, prepare 505ms)
+
+TEST_EXIT=0
+=== BUILD ===
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.patchedDependencies", "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+> cleanleaf@1.0.0 build /home/ubuntu/cleanleafsatelites
+> vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+
+vite v7.1.9 building for production...
+transforming...
+✓ 2405 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/public/index.html                   367.78 kB │ gzip: 105.54 kB
+../dist/public/assets/index-CRBqdI9l.css    138.73 kB │ gzip:  22.37 kB
+../dist/public/assets/index-emsSCklE.js   1,063.76 kB │ gzip: 296.82 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.67s
+
+  dist/index.js  71.7kb
+
+⚡ Done in 11ms
+BUILD_EXIT=0
+SUMMARY CHECK=0 TEST=0 BUILD=0

@@ -14,6 +14,7 @@ export type SentinelMeasurement = {
   valor: number;
   unidad: string;
   fecha_adquisicion: Date;
+  data_source?: "synthetic" | "copernicus_cdse";
 };
 
 export function resolveTier(hectares: number): Tier {

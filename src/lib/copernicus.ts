@@ -80,6 +80,7 @@ export class CopernicusProvider {
               valor: Number(calculatedValue.toFixed(2)),
               unidad: definition?.unidad ?? "ratio",
               fecha_adquisicion: new Date(),
+              data_source: "copernicus_cdse",
             };
           }
         }
@@ -105,6 +106,7 @@ export class CopernicusProvider {
       valor,
       unidad: definition.unidad,
       fecha_adquisicion: new Date(),
+      data_source: "synthetic",
     };
   }
 }

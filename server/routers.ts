@@ -16,12 +16,13 @@ import { buildAnalysisReport, MockCopernicusProvider } from "@shared/observation
 import { validatePlanLimits, type PlanId } from "@shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "@shared/satellite-router";
 import { querySentinel, tierLabel } from "@shared/satellite-service";
-import { getReport, listReports } from "@shared/report-catalog";
+import { demoReports, getReport, listReports } from "@shared/report-catalog";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { getPersistenceIdentity, getPersistedReport, getSupabasePersistenceClient, listPersistedReports, persistAnalysis } from "./supabase-persistence";
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -78,7 +79,7 @@ type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
 const observationProvider = new MockCopernicusProvider();
 
-async function createAnalysisRequest(input: AnalysisInput) {
+async function createAnalysisRequest(input: AnalysisInput, user: Parameters<typeof getPersistenceIdentity>[0] = null) {
   const satellites = input.satellites as SatelliteId[];
   if (!validarSatelitesSolicitados(input.vertical, satellites)) {
     throw new Error(satelliteValidationMessage(input.vertical, satellites));
@@ -88,7 +89,9 @@ async function createAnalysisRequest(input: AnalysisInput) {
   satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const idempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
-  const previous = idempotencyStore.get(idempotencyKey);
+  const identity = getPersistenceIdentity(user);
+  const scopedIdempotencyKey = identity ? `${identity.tenantId}:${idempotencyKey}` : idempotencyKey;
+  const previous = idempotencyStore.get(scopedIdempotencyKey);
   if (previous) return previous;
 
   const tier = getTierForSuperficie(input.hectareas);
@@ -115,7 +118,7 @@ async function createAnalysisRequest(input: AnalysisInput) {
       variablesSolicitadas: variables,
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
-    idempotencyStore.set(idempotencyKey, regionalResult);
+    idempotencyStore.set(scopedIdempotencyKey, regionalResult);
     return regionalResult;
   }
 
@@ -146,7 +149,27 @@ async function createAnalysisRequest(input: AnalysisInput) {
     informe: report,
     mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
-  idempotencyStore.set(idempotencyKey, completedResult);
+  if (identity && getSupabasePersistenceClient()) {
+    const persisted = await persistAnalysis({
+      identity,
+      request: {
+        predioId: input.predioId,
+        predioNombre: input.predioNombre,
+        hectareas: input.hectareas,
+        tier,
+        satellites,
+        variables,
+        estado: completedResult.estado,
+        motorUsado: completedResult.motorUsado,
+        correlationId,
+        idempotencyKey,
+      },
+      report,
+      source: result.data_source ?? "synthetic",
+    });
+    if (persisted) Object.assign(completedResult, { informePersistido: persisted.report });
+  }
+  idempotencyStore.set(scopedIdempotencyKey, completedResult);
   return completedResult;
 }
 
@@ -163,8 +186,19 @@ export const appRouter = router({
   cleanleaf: router({
     dashboard: publicProcedure.query(() => demoDashboard),
     reports: router({
-      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
-      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(async ({ input, ctx }) => {
+        const identity = getPersistenceIdentity(ctx.user);
+        const persisted = identity && getSupabasePersistenceClient() ? await listPersistedReports(identity, input) : [];
+        return [...persisted, ...listReports(input)];
+      }),
+      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ input, ctx }) => {
+        const identity = getPersistenceIdentity(ctx.user);
+        if (identity && getSupabasePersistenceClient()) {
+          const persisted = await getPersistedReport(identity, input.id);
+          if (persisted) return persisted;
+        }
+        return getReport(input.id) ?? null;
+      }),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
@@ -172,14 +206,14 @@ export const appRouter = router({
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
     resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
-    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
+    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input, ctx }) => createAnalysisRequest(input, ctx.user)),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: "ok", mode: "stub" }, error: null })),
     solicitudes: router({
-      create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
+      create: publicProcedure.input(analysisInput).mutation(async ({ input, ctx }) => {
         try {
-          return { data: await createAnalysisRequest(input), error: null };
+          return { data: await createAnalysisRequest(input, ctx.user), error: null };
         } catch (error) {
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
         }

@@ -203,6 +203,9 @@ export default function ReportsDashboard() {
                         <StatusIcon status={report.status} />
                         {statusInfo[report.status].label}
                       </Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        {report.source === "user" ? "Mi solicitud" : "Demo"}{report.dataSource === "synthetic" ? " · sintético" : ""}
+                      </Badge>
                     </div>
                     <p className="mt-1 text-xs text-stone-400">
                       {report.fechaDesde} — {report.fechaHasta} · {report.variables.join(", ")}
