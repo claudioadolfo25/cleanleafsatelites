@@ -234,6 +234,53 @@ function evaluatePixel(samples) {
 }`;
 }
 
+export function buildStatisticalPayload(request: SatelliteQueryRequest) {
+  const periodFrom = request.periodFrom ?? "2024-01-01T00:00:00Z";
+  const periodTo = request.periodTo ?? "2024-02-01T00:00:00Z";
+
+  const fromTime = new Date(periodFrom).getTime();
+  const toTime = new Date(periodTo).getTime();
+
+  if (isNaN(fromTime) || isNaN(toTime)) {
+    throw new Error("Fechas de período inválidas para la consulta de Copernicus Statistical API.");
+  }
+
+  const durationMs = toTime - fromTime;
+  const ONE_DAY_MS = 86_400_000;
+
+  if (durationMs < ONE_DAY_MS) {
+    throw new Error(
+      `El rango de fechas de la consulta de Copernicus Statistical API (${(durationMs / 3600000).toFixed(1)}h) es menor al mínimo requerido de 24 horas (1 día).`
+    );
+  }
+
+  const evalscript = buildEvalscript(request.satellite, request.variable);
+
+  return {
+    input: {
+      bounds: {
+        properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
+        bbox: request.bbox ?? [-72.6, -38.7, -72.5, -38.6],
+      },
+      data: [
+        {
+          type: productForSatellite(request.satellite),
+        },
+      ],
+    },
+    aggregation: {
+      timeRange: {
+        from: periodFrom,
+        to: periodTo,
+      },
+      aggregationInterval: {
+        of: "P1D",
+      },
+      evalscript,
+    },
+  };
+}
+
 export class CopernicusCDSEProvider implements EarthObservationProvider {
   private statsApiUrl = "https://sh.dataspace.copernicus.eu/api/v1/statistics";
   private resultCache = new Map<string, { data: any; expiresAt: number }>();
@@ -277,29 +324,7 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
 
     try {
       const token = await this.tokenManager.fetchAccessToken();
-
-      const evalscript = buildEvalscript(request.satellite, request.variable);
-      const payload = {
-        input: {
-          bounds: {
-            properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
-            bbox: request.bbox ?? [-72.6, -38.7, -72.5, -38.6],
-          },
-          data: [
-            {
-              type: productForSatellite(request.satellite),
-            },
-          ],
-        },
-        aggregation: {
-          timeRange: {
-            from: request.periodFrom ?? "2024-01-01T00:00:00Z",
-            to: request.periodTo ?? "2024-02-01T00:00:00Z",
-          },
-          aggregationInterval: { unit: "P10D" },
-          evalscript,
-        },
-      };
+      const payload = buildStatisticalPayload(request);
 
       let attempts = 0;
       let lastError: Error | null = null;

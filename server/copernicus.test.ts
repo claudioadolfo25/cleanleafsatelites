@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled } from "./copernicus";
+import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload } from "./copernicus";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -123,5 +123,79 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     expect(result.data_source).toBe("synthetic");
     expect(result.traceability).toMatchObject({ status: "fallback", data_source: "synthetic", error: "CDSE no disponible" });
     expect(result.valor).toBeGreaterThanOrEqual(0);
+  });
+
+  describe("Statistical API Payload Builder & Validation", () => {
+    it("construye un payload válido con aggregationInterval.of igual a P1D", () => {
+      const payload = buildStatisticalPayload({
+        predioId: "predio-1",
+        satellite: "sentinel-2",
+        variable: "ndvi",
+        tier: "tier1_predial",
+        periodFrom: "2026-09-01T00:00:00Z",
+        periodTo: "2026-09-15T23:59:59Z",
+        bbox: [-72.6, -38.7, -72.58, -38.68],
+      });
+
+      expect(payload.aggregation.aggregationInterval).toEqual({ of: "P1D" });
+      expect(payload.aggregation.aggregationInterval.of).toBeDefined();
+      expect(payload.aggregation.aggregationInterval.of).not.toBeNull();
+      expect(payload.input.data[0].type).toBe("sentinel-2-l2a");
+      expect(payload.input.bounds.bbox).toEqual([-72.6, -38.7, -72.58, -38.68]);
+    });
+
+    it("rechaza rangos de fechas menores a 24 horas (1 día)", () => {
+      expect(() => buildStatisticalPayload({
+        predioId: "predio-1",
+        satellite: "sentinel-2",
+        variable: "ndvi",
+        tier: "tier1_predial",
+        periodFrom: "2026-09-01T00:00:00Z",
+        periodTo: "2026-09-01T12:00:00Z",
+      })).toThrow("menor al mínimo requerido de 24 horas");
+    });
+
+    it("rechaza fechas de período inválidas", () => {
+      expect(() => buildStatisticalPayload({
+        predioId: "predio-1",
+        satellite: "sentinel-2",
+        variable: "ndvi",
+        tier: "tier1_predial",
+        periodFrom: "invalid-date",
+        periodTo: "2026-09-15T00:00:00Z",
+      })).toThrow("Fechas de período inválidas");
+    });
+
+    it("envía el payload corregido en la llamada HTTP a CDSE", async () => {
+      const manager = new CopernicusTokenManager(DEFAULT_CLIENT_ID, TEST_SECRET, TEST_TOKEN_URL);
+      let capturedPayload: any = null;
+
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: "mock-token", expires_in: 3600, token_type: "Bearer" }) })
+        .mockImplementationOnce(async (_url, options) => {
+          capturedPayload = JSON.parse(options.body);
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ outputs: { default: { bands: { B0: { stats: { mean: 0.8123 } } } } } }] }),
+          };
+        });
+
+      vi.stubGlobal("fetch", mockFetch);
+
+      const provider = new CopernicusCDSEProvider(manager);
+      await provider.query({
+        predioId: "predio-1",
+        satellite: "sentinel-2",
+        variable: "ndvi",
+        tier: "tier1_predial",
+        periodFrom: "2026-09-01T00:00:00Z",
+        periodTo: "2026-09-15T23:59:59Z",
+      });
+
+      expect(capturedPayload).not.toBeNull();
+      expect(capturedPayload.aggregation.aggregationInterval).toEqual({ of: "P1D" });
+      expect(capturedPayload.aggregation.aggregationInterval.of).toBe("P1D");
+    });
   });
 });
