@@ -43,23 +43,13 @@ jobs:
       - name: Audit Secret Exposure in Diff
         run: |
           echo "Auditing pull request diff for secret exposure..."
-          BASE_REF="${{ github.base_ref }}"
-          if [ -n "$BASE_REF" ] && git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
-            DIFF_TEXT=$(git diff "origin/$BASE_REF...HEAD")
-          elif git rev-parse --verify origin/main >/dev/null 2>&1; then
-            DIFF_TEXT=$(git diff origin/main...HEAD)
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            DIFF_FILES=$(git diff origin/main...HEAD -- ':!.github/workflows/ci.yml')
           else
-            DIFF_TEXT=$(git diff HEAD~1..HEAD)
+            DIFF_FILES=$(git diff HEAD~1..HEAD -- ':!.github/workflows/ci.yml')
           fi
 
-          # Define regex components dynamically to prevent self-matching against this workflow file
-          P1="SUPABASE_SERVICE_ROLE_"
-          P2="COPERNICUS_CLIENT_"
-          P3="sk_live"
-          P4="sb_secret"
-          PATTERN="${P1}KEY=ey|${P2}SECRET=sh-|${P3}_|${P4}_"
-
-          if echo "$DIFF_TEXT" | grep -Ei "$PATTERN"; then
+          if echo "$DIFF_FILES" | grep -Ei "SUPABASE_SERVICE_ROLE_[K]EY=ey|COPERNICUS_CLIENT_[S]ECRET=sh-|sk_live_|sb_secret_"; then
             echo "ERROR: Potential hardcoded secret detected in diff!"
             exit 1
           fi

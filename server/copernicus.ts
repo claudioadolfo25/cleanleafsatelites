@@ -37,13 +37,7 @@ export class CopernicusTimeoutError extends Error {
 }
 
 export function isCopernicusStagingAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (
-    env.APP_ENV === "staging" ||
-    env.RENDER_ENV === "staging" ||
-    env.NODE_ENV === "staging" ||
-    env.ENVIRONMENT === "staging" ||
-    (typeof env.RENDER_SERVICE_NAME === "string" && env.RENDER_SERVICE_NAME.includes("staging"))
-  );
+  return env.APP_ENV === "staging" || env.RENDER_ENV === "staging";
 }
 
 export function isCopernicusLiveEnabled(env: NodeJS.ProcessEnv = process.env, tokenManager?: CopernicusTokenManager): boolean {
@@ -59,7 +53,7 @@ export class SyntheticCopernicusProvider implements EarthObservationProvider {
 
   async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement> {
     const raw = await querySentinel(request.predioId, request.satellite, request.variable);
-    const queriedAt = raw.fecha_adquisicion instanceof Date ? raw.fecha_adquisicion.toISOString() : new Date(raw.fecha_adquisicion).toISOString();
+    const queriedAt = raw.fecha_adquisicion.toISOString();
     return {
       ...raw,
       data_source: "synthetic",
