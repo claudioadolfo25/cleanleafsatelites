@@ -1,4 +1,4 @@
-export type DataSourceType = "copernicus_cdse" | "simulated" | "unavailable";
+export type DataSourceType = "copernicus_cdse" | "synthetic" | "simulated" | "unavailable";
 
 export type MeasurementMetadata = {
   data_source: DataSourceType;
@@ -45,7 +45,7 @@ export function resolveDataTraceability(
   }
 
   return {
-    data_source: "simulated",
+      data_source: "synthetic",
     confidence: 0.8,
     acquired_at: rawAcquiredAt ?? new Date().toISOString(),
     cloud_cover: rawCloudCover ?? 5.0,

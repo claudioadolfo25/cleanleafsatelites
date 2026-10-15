@@ -13,11 +13,20 @@ export type SentinelMeasurement = {
   valor: number;
   unidad: string;
   fecha_adquisicion: Date;
-  data_source?: "copernicus_cdse" | "simulated" | "unavailable";
+  data_source?: "copernicus_cdse" | "synthetic" | "simulated" | "unavailable";
   confidence?: number;
   acquired_at?: string;
   cloud_cover?: number;
   status_code?: string;
+  traceability?: {
+    provider: string;
+    queried_at: string;
+    satellite: SatelliteId;
+    product: string;
+    status: "success" | "fallback" | "error";
+    data_source: "copernicus_cdse" | "synthetic";
+    error?: string;
+  };
 };
 
 export function resolveTier(hectares: number): Tier {

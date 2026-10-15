@@ -48,10 +48,19 @@ export class MockCopernicusProvider implements EarthObservationProvider {
 
     return {
       ...raw,
-      data_source: "simulated",
+      data_source: "synthetic",
       confidence: traceability.confidence,
       acquired_at: traceability.acquired_at,
       cloud_cover: traceability.cloud_cover,
+      status_code: "synthetic_mock",
+      traceability: {
+        provider: "MockCopernicusProvider",
+        queried_at: traceability.acquired_at,
+        satellite: request.satellite,
+        product: request.satellite === "sentinel-2" ? "sentinel-2-l2a" : request.satellite === "sentinel-1" ? "sentinel-1-grd" : "sentinel-3-olci",
+        status: "fallback",
+        data_source: "synthetic",
+      },
     };
   }
 }
@@ -70,6 +79,7 @@ export type AnalysisReport = {
   limitaciones: string[];
   mediciones: SentinelMeasurement[];
   generado_en: string;
+  trazabilidad?: SentinelMeasurement["traceability"];
 };
 
 export function buildAnalysisReport(input: { id: string; predioId: string; predioNombre: string; tier: Tier; measurement: SentinelMeasurement; periodFrom?: string; periodTo?: string }): AnalysisReport {
@@ -91,5 +101,6 @@ export function buildAnalysisReport(input: { id: string; predioId: string; predi
     limitaciones: measurement.data_source === "copernicus_cdse" ? ["Resultado obtenido desde Copernicus CDSE; validar con observaciones de terreno."] : ["Resultado generado por proveedor simulado hasta activar Copernicus CDSE en modo live."],
     mediciones: [measurement],
     generado_en: new Date().toISOString(),
+    trazabilidad: measurement.traceability,
   };
 }
