@@ -13,7 +13,7 @@ import { getCopernicusResources, type Sector } from "../shared/copernicus-catalo
 import { validateSatelliteVariable } from "../shared/analysis-validation";
 import { assertTransition, type AnalysisStatus } from "../shared/analysis-state";
 import { buildAnalysisReport, MockCopernicusProvider, type EarthObservationProvider } from "../shared/observation-provider";
-import { copernicusCDSEProvider } from "./copernicus";
+import { copernicusCDSEProvider, FallbackObservationProvider, isCopernicusLiveEnabled, SyntheticCopernicusProvider } from "./copernicus";
 import { createCatalogClient } from "./catalog-client";
 import { validatePlanLimits, type PlanId } from "../shared/plan-limits";
 import { getTierForSuperficie, processingModeForTier, tierWaitEstimate } from "../shared/satellite-router";
@@ -80,20 +80,19 @@ const analysisInput = z.object({
 
 type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
-const copernicusMode = process.env.COPERNICUS_MODE ?? "live";
+const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
 const isTestRuntime = process.env.NODE_ENV === "test";
-class CopernicusUnavailableProvider implements EarthObservationProvider {
-  async query(): Promise<never> {
-    throw new Error("Copernicus no está conectado. Configura COPERNICUS_MODE=live y COPERNICUS_CLIENT_SECRET.");
-  }
-}
+const copernicusLiveEnabled = copernicusMode === "live" && isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
+const syntheticProvider = new SyntheticCopernicusProvider(
+  copernicusLiveEnabled ? "Fallback sintético preparado para errores de Copernicus CDSE." : "Copernicus CDSE solo se activa en staging autorizado con COPERNICUS_MODE=live y ambas credenciales."
+);
 const observationProvider: EarthObservationProvider = isTestRuntime
   ? new MockCopernicusProvider()
-  : copernicusMode === "live" && copernicusCDSEProvider.getTokenManager().isConfigured()
-    ? copernicusCDSEProvider
-    : new CopernicusUnavailableProvider();
+  : copernicusLiveEnabled
+    ? new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider)
+    : syntheticProvider;
 const catalogClient = createCatalogClient({
-  getAccessToken: async () => copernicusCDSEProvider.getTokenManager().isConfigured()
+  getAccessToken: async () => copernicusLiveEnabled
     ? (await copernicusCDSEProvider.getTokenManager().fetchAccessToken()).accessToken
     : undefined,
 });
@@ -209,15 +208,15 @@ export const appRouter = router({
       fields: z.object({ include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional() }).optional(),
       distinct: z.string().optional(),
     })).mutation(async ({ input }) => {
-      if (!copernicusCDSEProvider.getTokenManager().isConfigured()) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configura COPERNICUS_CLIENT_SECRET en Render para consultar escenas reales de Catalog." });
+      if (!copernicusLiveEnabled) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Catalog CDSE real solo está habilitado en staging con COPERNICUS_MODE=live y ambas credenciales." });
       }
       return catalogClient(input);
     }),
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
-    health: publicProcedure.query(() => ({ data: { api: "v1", status: observationProvider === copernicusCDSEProvider || isTestRuntime ? "ok" : "degraded", mode: observationProvider === copernicusCDSEProvider ? "copernicus_live" : isTestRuntime ? "test_mock" : "unavailable", catalogAuthConfigured: copernicusCDSEProvider.getTokenManager().isConfigured() }, error: null })),
+    health: publicProcedure.query(() => ({ data: { api: "v1", status: copernicusLiveEnabled || isTestRuntime ? "ok" : "degraded", mode: isTestRuntime ? "test_mock" : copernicusLiveEnabled ? "copernicus_live_staging" : "synthetic_fallback", catalogAuthConfigured: copernicusLiveEnabled }, error: null })),
     solicitudes: router({
       create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {

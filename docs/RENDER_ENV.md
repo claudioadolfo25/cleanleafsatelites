@@ -17,6 +17,7 @@ Configurar en el panel de Render en **Dashboard → cleanleafsatelites → Envir
 | `SUPABASE_SERVICE_ROLE_KEY` | Recomendada | Clave de servicio de Supabase (operaciones admin) | `eyJhbGciOi...` |
 | `COPERNICUS_CLIENT_ID` | Opcional | Client ID de Copernicus CDSE (Análisis en vivo) | `sh-xxxx-xxxx` |
 | `COPERNICUS_CLIENT_SECRET` | Opcional | Client Secret de Copernicus CDSE | `xxxx-xxxx-xxxx` |
+| `APP_ENV` | Requerida para staging live | Debe ser `staging` para habilitar consultas CDSE reales; no se habilita en producción | `staging` |
 | `COOKIE_SECRET` | Sí | Secreto de firma para cookies de sesión JWT | `secreto-de-al-menos-32-caracteres` |
 | `OAUTH_SERVER_URL` | Sí | URL base del proveedor de autenticación OAuth | `https://oauth.example.com` |
 | `APP_ID` | Sí | Identificador de aplicación para OAuth | `cleanleaf-app` |
@@ -67,10 +68,10 @@ Configura estas variables en Render (solo en el servidor, nunca como `VITE_*`):
 
 | Variable | Valor recomendado | Uso |
 |---|---|---|
-| `COPERNICUS_MODE` | `live` | Producción estricta: solo permite datos CDSE reales; sin credenciales queda degradado |
+| `COPERNICUS_MODE` | `synthetic` fuera de staging | Use `live` únicamente junto con `APP_ENV=staging` y ambas credenciales; cualquier otro caso usa fallback sintético determinista |
 | `COPERNICUS_CLIENT_ID` | ID oficial | Cliente OAuth2 CDSE |
 | `COPERNICUS_CLIENT_SECRET` | secreto privado | Token OAuth2; obligatorio para Catalog y Statistical API |
 | `COPERNICUS_TOKEN_URL` | endpoint OIDC CDSE | Emisión del token |
 | `COPERNICUS_CATALOG_URL` | `https://sh.dataspace.copernicus.eu/catalog/v1/search` | Búsqueda STAC Catalog |
 
-La aplicación no realiza llamadas anónimas ni presenta datos simulados en producción: si falta el secreto, el health informa `catalogAuthConfigured=false` y la interfaz explica qué variable falta.
+La aplicación no realiza llamadas anónimas. Las llamadas reales solo se habilitan en staging autorizado; si falta una credencial, el entorno no es staging, CDSE falla o devuelve una respuesta inválida, se usa fallback sintético con `data_source: "synthetic"` y trazabilidad explícita. Producción no habilita Copernicus real.

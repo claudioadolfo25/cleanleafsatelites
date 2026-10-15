@@ -3,7 +3,7 @@ import {
   type EarthObservationProvider,
   type SatelliteQueryRequest,
 } from "../shared/observation-provider";
-import type { SentinelMeasurement } from "../shared/satellite-service";
+import { querySentinel, type SentinelMeasurement } from "../shared/satellite-service";
 import { resolveDataTraceability, type DataSourceType } from "../shared/data-traceability";
 import { buildSTACSender, type STACItemSearchRequest } from "./stac-client";
 
@@ -33,6 +33,56 @@ export class CopernicusTimeoutError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CopernicusTimeoutError";
+  }
+}
+
+export function isCopernicusStagingAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.APP_ENV === "staging" || env.RENDER_ENV === "staging";
+}
+
+export function isCopernicusLiveEnabled(env: NodeJS.ProcessEnv = process.env, tokenManager?: CopernicusTokenManager): boolean {
+  return env.COPERNICUS_MODE === "live" && isCopernicusStagingAuthorized(env) && Boolean(tokenManager?.isConfigured());
+}
+
+function productForSatellite(satellite: SatelliteQueryRequest["satellite"]): string {
+  return satellite === "sentinel-2" ? "sentinel-2-l2a" : satellite === "sentinel-1" ? "sentinel-1-grd" : "sentinel-3-olci";
+}
+
+export class SyntheticCopernicusProvider implements EarthObservationProvider {
+  constructor(private readonly reason: string) {}
+
+  async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement> {
+    const raw = await querySentinel(request.predioId, request.satellite, request.variable);
+    const queriedAt = raw.fecha_adquisicion.toISOString();
+    return {
+      ...raw,
+      data_source: "synthetic",
+      confidence: 0.8,
+      acquired_at: queriedAt,
+      status_code: "synthetic_fallback",
+      traceability: {
+        provider: "SyntheticCopernicusProvider",
+        queried_at: queriedAt,
+        satellite: request.satellite,
+        product: productForSatellite(request.satellite),
+        status: "fallback",
+        data_source: "synthetic",
+        error: this.reason,
+      },
+    };
+  }
+}
+
+export class FallbackObservationProvider implements EarthObservationProvider {
+  constructor(private readonly liveProvider: EarthObservationProvider, private readonly syntheticProvider: SyntheticCopernicusProvider) {}
+
+  async query(request: SatelliteQueryRequest): Promise<SentinelMeasurement> {
+    try {
+      return await this.liveProvider.query(request);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Error desconocido de Copernicus CDSE";
+      return new SyntheticCopernicusProvider(reason).query(request);
+    }
   }
 }
 
@@ -237,7 +287,7 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           },
           data: [
             {
-              type: request.satellite === "sentinel-2" ? "sentinel-2-l2a" : request.satellite === "sentinel-1" ? "sentinel-1-grd" : "sentinel-3-olci",
+              type: productForSatellite(request.satellite),
             },
           ],
         },
@@ -290,22 +340,34 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           }
 
           const responseData = await response.json();
-          // Extract statistical value from CDSE response
-          const intervals = responseData?.data ?? [];
-          const lastInterval = intervals[intervals.length - 1];
-          const meanValue = lastInterval?.outputs?.default?.bands?.B0?.stats?.mean ?? 0.62;
+          const intervals = responseData?.data;
+          const lastInterval = Array.isArray(intervals) ? intervals[intervals.length - 1] : null;
+          const meanValue = lastInterval?.outputs?.default?.bands?.B0?.stats?.mean;
+          if (!Number.isFinite(meanValue)) {
+            throw new Error("Respuesta inválida de Copernicus Statistical API: falta un valor medio numérico");
+          }
+          const queriedAt = new Date().toISOString();
 
           const result = {
             satelite: request.satellite,
             variable: request.variable,
-            valor: Number(meanValue.toFixed(4)),
+            valor: Number(Number(meanValue).toFixed(4)),
             unidad: request.variable === "ndvi" || request.variable === "ndre" || request.variable === "ndmi" ? "índice (0-1)" : "dB",
             fecha_adquisicion: new Date(),
             proveedor: `Copernicus CDSE (Tellus ${this.tokenManager.getClientId()})`,
             data_source: "copernicus_cdse" as DataSourceType,
             confidence: 0.98,
-            acquired_at: new Date().toISOString(),
+            acquired_at: queriedAt,
             cloud_cover: 2.1,
+            status_code: String(response.status),
+            traceability: {
+              provider: `Copernicus CDSE (Tellus ${this.tokenManager.getClientId()})`,
+              queried_at: queriedAt,
+              satellite: request.satellite,
+              product: productForSatellite(request.satellite),
+              status: "success" as const,
+              data_source: "copernicus_cdse" as const,
+            },
           };
 
           this.resultCache.set(cacheKey, { data: result, expiresAt: Date.now() + 300000 });
