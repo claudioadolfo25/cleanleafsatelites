@@ -80,19 +80,24 @@ const analysisInput = z.object({
 
 type AnalysisInput = z.infer<typeof analysisInput>;
 const idempotencyStore = new Map<string, unknown>();
-const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
-const isTestRuntime = process.env.NODE_ENV === "test";
-const copernicusLiveEnabled = copernicusMode === "live" && isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
-const syntheticProvider = new SyntheticCopernicusProvider(
-  copernicusLiveEnabled ? "Fallback sintético preparado para errores de Copernicus CDSE." : "Copernicus CDSE solo se activa en staging autorizado con COPERNICUS_MODE=live y ambas credenciales."
-);
-const observationProvider: EarthObservationProvider = isTestRuntime
-  ? new MockCopernicusProvider()
-  : copernicusLiveEnabled
-    ? new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider)
-    : syntheticProvider;
+function isLiveActive(): boolean {
+  const mode = process.env.COPERNICUS_MODE ?? "synthetic";
+  return mode === "live" && isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
+}
+
+function getObservationProvider(): EarthObservationProvider {
+  if (process.env.NODE_ENV === "test") {
+    return new MockCopernicusProvider();
+  }
+  const live = isLiveActive();
+  const synth = new SyntheticCopernicusProvider(
+    live ? "Fallback sintético preparado para errores de Copernicus CDSE." : "Copernicus CDSE solo se activa en staging autorizado con COPERNICUS_MODE=live y ambas credenciales."
+  );
+  return live ? new FallbackObservationProvider(copernicusCDSEProvider, synth) : synth;
+}
+
 const catalogClient = createCatalogClient({
-  getAccessToken: async () => copernicusLiveEnabled
+  getAccessToken: async () => isLiveActive()
     ? (await copernicusCDSEProvider.getTokenManager().fetchAccessToken()).accessToken
     : undefined,
 });
@@ -143,7 +148,8 @@ async function createAnalysisRequest(input: AnalysisInput) {
   const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
   assertTransition(history[0], history[1]);
   assertTransition(history[1], history[2]);
-  const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo, bbox: input.bbox });
+  const provider = getObservationProvider();
+  const result = await provider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo, bbox: input.bbox });
   const report = buildAnalysisReport({ id, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
   history.push("completado");
   assertTransition(history[2], history[3]);
@@ -208,7 +214,7 @@ export const appRouter = router({
       fields: z.object({ include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional() }).optional(),
       distinct: z.string().optional(),
     })).mutation(async ({ input }) => {
-      if (!copernicusLiveEnabled) {
+      if (!isLiveActive()) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Catalog CDSE real solo está habilitado en staging con COPERNICUS_MODE=live y ambas credenciales." });
       }
       return catalogClient(input);
@@ -216,7 +222,19 @@ export const appRouter = router({
     createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
   }),
   apiV1: router({
-    health: publicProcedure.query(() => ({ data: { api: "v1", status: copernicusLiveEnabled || isTestRuntime ? "ok" : "degraded", mode: isTestRuntime ? "test_mock" : copernicusLiveEnabled ? "copernicus_live_staging" : "synthetic_fallback", catalogAuthConfigured: copernicusLiveEnabled }, error: null })),
+    health: publicProcedure.query(() => {
+      const live = isLiveActive();
+      const isTest = process.env.NODE_ENV === "test";
+      return {
+        data: {
+          api: "v1",
+          status: live || isTest ? "ok" : "degraded",
+          mode: isTest ? "test_mock" : live ? "copernicus_live_staging" : "synthetic_fallback",
+          catalogAuthConfigured: live,
+        },
+        error: null,
+      };
+    }),
     solicitudes: router({
       create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
         try {
