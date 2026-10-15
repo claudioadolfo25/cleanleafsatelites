@@ -1,4 +1,0 @@
- WARN  Unsupported engine: wanted: {"node":"20.x"} (current: {"node":"v22.22.1","pnpm":"10.4.1"})
-
-> cleanleaf@1.0.0 check /app
-> tsc --noEmit

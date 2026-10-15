@@ -8,7 +8,6 @@ export const ENV = {
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  demoMode: process.env.DEMO_MODE ?? (process.env.DEMO_PUBLIC_DASHBOARD !== "false" ? "true" : "false"),
   isProduction: isProductionEnv(),
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",

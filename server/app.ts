@@ -11,25 +11,16 @@ export function createApp(): Express {
   // Trust Render reverse proxy for x-forwarded-proto and client IP
   app.set("trust proxy", 1);
 
-  // Configure default global body parser with strict 100kb limit
-  app.use(express.json({ limit: "100kb" }));
-  app.use(express.urlencoded({ limit: "100kb", extended: true }));
+  // Configure body parser with larger size limit for file uploads
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // Register storage proxy with 50mb limit for uploads and OAuth routes
+  // Register storage proxy and OAuth routes
   registerStorageProxy(app);
   registerOAuthRoutes(app);
 
-  // Public lightweight health check route
+  // Health check route returning status and boolean checks for critical env vars (never raw values)
   app.get("/api/health", (_req: Request, res: Response) => {
-    res.json({
-      status: "ok",
-      service: "cleanleaf-api",
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Protected detailed health check route
-  app.get("/api/health/details", (_req: Request, res: Response) => {
     const envChecks = {
       supabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
       supabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
@@ -39,7 +30,7 @@ export function createApp(): Express {
 
     res.json({
       status: "ok",
-      service: "cleanleaf-api",
+      service: "agropulso-cleanleaf-api",
       timestamp: new Date().toISOString(),
       checks: envChecks,
     });

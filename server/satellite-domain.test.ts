@@ -97,7 +97,7 @@ describe("contrato unificado de Sentinel", () => {
 
 describe("creación de solicitud", () => {
   it("bloquea Sentinel-3 para un tenant agrícola", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     await expect(
       caller.cleanleaf.createAnalysis({
         predioId: "el-aromo",
@@ -110,7 +110,7 @@ describe("creación de solicitud", () => {
   });
 
   it("acepta Sentinel-3 para un tenant acuícola", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     const result = await caller.cleanleaf.createAnalysis({
       predioId: "centro-acuicola",
       predioNombre: "Centro acuícola", 
@@ -126,7 +126,7 @@ describe("creación de solicitud", () => {
   });
 
   it("rechaza combinaciones de satélite y variable incompatibles", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     await expect(caller.cleanleaf.createAnalysis({
       predioId: "el-aromo",
       predioNombre: "El Aromo",
@@ -138,7 +138,7 @@ describe("creación de solicitud", () => {
   });
 
   it("repite una solicitud sin duplicar el resultado por idempotencyKey", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     const input = {
       predioId: "las-quinas",
       predioNombre: "Las Quinas",
@@ -189,13 +189,13 @@ describe("agente de interpretación", () => {
 
 describe("API v1 multi-plataforma", () => {
   it("devuelve un envelope JSON estable para health y onboarding", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     await expect(caller.apiV1.health()).resolves.toMatchObject({ data: { api: "v1", status: "ok" }, error: null });
     await expect(caller.apiV1.onboarding.createTenant({ organizationName: "Campo Demo", planId: "piloto" })).resolves.toMatchObject({ data: { estado: "trial", planId: "piloto" }, error: null });
   });
 
   it("rechaza tier regional por plan antes de crear la solicitud", async () => {
-    const caller = appRouter.createCaller({ user: { id: "user-1", openId: "usr-1", name: "Tester", role: "admin" } } as never);
+    const caller = appRouter.createCaller({} as never);
     const response = await caller.apiV1.solicitudes.create({
       predioId: "region-araucania",
       predioNombre: "Región Araucanía",

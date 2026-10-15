@@ -11,14 +11,7 @@ describe("Express App Integration for Render", () => {
     expect(res.headers["content-type"]).toMatch(/json/);
     expect(res.body).toMatchObject({
       status: "ok",
-      service: "cleanleaf-api",
-    });
-
-    const detailsRes = await request(app).get("/api/health/details");
-    expect(detailsRes.status).toBe(200);
-    expect(detailsRes.body).toMatchObject({
-      status: "ok",
-      service: "cleanleaf-api",
+      service: "agropulso-cleanleaf-api",
       checks: expect.objectContaining({
         supabaseUrl: expect.any(Boolean),
         supabaseAnonKey: expect.any(Boolean),
