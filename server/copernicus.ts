@@ -234,6 +234,41 @@ function evaluatePixel(samples) {
 }`;
 }
 
+export function buildStatisticalPayload(request: SatelliteQueryRequest): Record<string, unknown> {
+  const fromStr = request.periodFrom ?? "2024-01-01T00:00:00Z";
+  const toStr = request.periodTo ?? "2024-02-01T00:00:00Z";
+  const fromMs = new Date(fromStr).getTime();
+  const toMs = new Date(toStr).getTime();
+  if (isNaN(fromMs) || isNaN(toMs) || toMs - fromMs < 24 * 60 * 60 * 1000) {
+    throw new Error("El rango de fechas debe ser de al menos 24 horas (1 día) para Copernicus Statistical API.");
+  }
+
+  const evalscript = buildEvalscript(request.satellite, request.variable);
+  return {
+    input: {
+      bounds: {
+        properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
+        bbox: request.bbox ?? [-72.6, -38.7, -72.5, -38.6],
+      },
+      data: [
+        {
+          type: productForSatellite(request.satellite),
+        },
+      ],
+    },
+    aggregation: {
+      timeRange: {
+        from: fromStr,
+        to: toStr,
+      },
+      aggregationInterval: {
+        of: "P1D",
+      },
+      evalscript,
+    },
+  };
+}
+
 export class CopernicusCDSEProvider implements EarthObservationProvider {
   private statsApiUrl = "https://sh.dataspace.copernicus.eu/api/v1/statistics";
   private resultCache = new Map<string, { data: any; expiresAt: number }>();
@@ -278,28 +313,7 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
     try {
       const token = await this.tokenManager.fetchAccessToken();
 
-      const evalscript = buildEvalscript(request.satellite, request.variable);
-      const payload = {
-        input: {
-          bounds: {
-            properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" },
-            bbox: request.bbox ?? [-72.6, -38.7, -72.5, -38.6],
-          },
-          data: [
-            {
-              type: productForSatellite(request.satellite),
-            },
-          ],
-        },
-        aggregation: {
-          timeRange: {
-            from: request.periodFrom ?? "2024-01-01T00:00:00Z",
-            to: request.periodTo ?? "2024-02-01T00:00:00Z",
-          },
-          aggregationInterval: { unit: "P10D" },
-          evalscript,
-        },
-      };
+      const payload = buildStatisticalPayload(request);
 
       let attempts = 0;
       let lastError: Error | null = null;
