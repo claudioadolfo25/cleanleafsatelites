@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload } from "./copernicus";
+import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload, buildEvalscript } from "./copernicus";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -158,6 +158,17 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
           periodTo: "2026-10-10T12:00:00.000Z",
         })
       ).toThrow("El rango de fechas debe ser de al menos 24 horas (1 día) para Copernicus Statistical API.");
+    });
+  });
+
+  describe("buildEvalscript", () => {
+    it("declara dataMask en setup().output y lo retorna en evaluatePixel", () => {
+      const evalscript = buildEvalscript("sentinel-2", "ndvi");
+
+      expect(evalscript).toContain('{ id: "dataMask", bands: 1 }');
+      expect(evalscript).toContain("dataMask: [0]");
+      expect(evalscript).toContain("dataMask: [1]");
+      expect(evalscript).toContain("var ndvi = (samples.B08 - samples.B04) / (samples.B08 + samples.B04);");
     });
   });
 });
