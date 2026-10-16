@@ -170,3 +170,4 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     });
   });
 });
+});
