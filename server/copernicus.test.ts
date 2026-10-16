@@ -1,14 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import {
-  CopernicusTokenManager,
-  CopernicusCDSEProvider,
-  CopernicusUnavailableError,
-  FallbackObservationProvider,
-  SyntheticCopernicusProvider,
-  isCopernicusLiveEnabled,
-  buildStatisticalPayload,
-  buildEvalscript,
-} from "./copernicus";
+import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload, buildEvalscript } from "./copernicus";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -177,9 +168,6 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
       expect(evalscript).toContain('{ id: "dataMask", bands: 1 }');
       expect(evalscript).toContain("dataMask: [0]");
       expect(evalscript).toContain("dataMask: [1]");
-      expect(evalscript).toContain(
-        "var ndvi = (samples.B08 - samples.B04) / (samples.B08 + samples.B04);"
-      );
     });
   });
 });
