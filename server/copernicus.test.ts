@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled } from "./copernicus";
+import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload } from "./copernicus";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -123,5 +123,41 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     expect(result.data_source).toBe("synthetic");
     expect(result.traceability).toMatchObject({ status: "fallback", data_source: "synthetic", error: "CDSE no disponible" });
     expect(result.valor).toBeGreaterThanOrEqual(0);
+  });
+
+  describe("buildStatisticalPayload", () => {
+    it("construye el payload con aggregationInterval.of = 'P1D' y sin clave 'unit'", () => {
+      const payload = buildStatisticalPayload({
+        predioId: "predio-test",
+        satellite: "sentinel-2",
+        variable: "ndvi",
+        tier: "tier1_predial",
+        periodFrom: "2026-10-10T00:00:00.000Z",
+        periodTo: "2026-10-13T00:00:00.000Z",
+        bbox: [-72.6, -38.7, -72.58, -38.68],
+      }) as any;
+
+      expect(payload.aggregation.aggregationInterval).toHaveProperty("of", "P1D");
+      expect(payload.aggregation.aggregationInterval).not.toHaveProperty("unit");
+      expect(payload.aggregation.timeRange).toEqual({
+        from: "2026-10-10T00:00:00.000Z",
+        to: "2026-10-13T00:00:00.000Z",
+      });
+      expect(payload.input.data[0].type).toBe("sentinel-2-l2a");
+      expect(payload.input.bounds.bbox).toEqual([-72.6, -38.7, -72.58, -38.68]);
+    });
+
+    it("rechaza rangos de fechas menores a 24 horas", () => {
+      expect(() =>
+        buildStatisticalPayload({
+          predioId: "predio-test",
+          satellite: "sentinel-2",
+          variable: "ndvi",
+          tier: "tier1_predial",
+          periodFrom: "2026-10-10T00:00:00.000Z",
+          periodTo: "2026-10-10T12:00:00.000Z",
+        })
+      ).toThrow("El rango de fechas debe ser de al menos 24 horas (1 día) para Copernicus Statistical API.");
+    });
   });
 });
