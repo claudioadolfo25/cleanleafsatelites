@@ -160,7 +160,6 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
       ).toThrow("El rango de fechas debe ser de al menos 24 horas (1 día) para Copernicus Statistical API.");
     });
   });
-
   describe("buildEvalscript", () => {
     it("declara dataMask en setup().output y lo retorna en evaluatePixel", () => {
       const evalscript = buildEvalscript("sentinel-2", "ndvi");
