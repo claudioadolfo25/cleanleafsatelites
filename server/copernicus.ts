@@ -190,21 +190,31 @@ export function buildEvalscript(satellite: string, variable: string): string {
 function setup() {
   return {
     input: [{ bands: ["B02", "B04", "B05", "B08", "B11", "SCL", "dataMask"] }],
-    output: [{ id: "default", bands: 1 }]
+    output: [
+      { id: "default", bands: 1 },
+      { id: "dataMask", bands: 1 }
+    ]
   };
 }
 function evaluatePixel(samples) {
   if (samples.dataMask === 0 || samples.SCL === 3 || samples.SCL === 8 || samples.SCL === 9) {
-    return [0];
+    return {
+      default: [0],
+      dataMask: [0]
+    };
   }
   var ndvi = (samples.B08 - samples.B04) / (samples.B08 + samples.B04);
   var ndre = (samples.B08 - samples.B05) / (samples.B08 + samples.B05);
   var ndmi = (samples.B08 - samples.B11) / (samples.B08 + samples.B11);
   var lswi = (samples.B08 - samples.B11) / (samples.B08 + samples.B11);
-  if ("${variable}" === "ndre") return [ndre];
-  if ("${variable}" === "ndmi") return [ndmi];
-  if ("${variable}" === "lswi") return [lswi];
-  return [ndvi];
+  var val = ndvi;
+  if ("${variable}" === "ndre") val = ndre;
+  if ("${variable}" === "ndmi") val = ndmi;
+  if ("${variable}" === "lswi") val = lswi;
+  return {
+    default: [val],
+    dataMask: [1]
+  };
 }`;
   }
 
@@ -213,12 +223,23 @@ function evaluatePixel(samples) {
 function setup() {
   return {
     input: [{ bands: ["VV", "VH", "dataMask"] }],
-    output: [{ id: "default", bands: 2 }]
+    output: [
+      { id: "default", bands: 2 },
+      { id: "dataMask", bands: 1 }
+    ]
   };
 }
 function evaluatePixel(samples) {
-  if (samples.dataMask === 0) return [0, 0];
-  return [10 * Math.log10(samples.VV), 10 * Math.log10(samples.VH)];
+  if (samples.dataMask === 0) {
+    return {
+      default: [0, 0],
+      dataMask: [0]
+    };
+  }
+  return {
+    default: [10 * Math.log10(samples.VV), 10 * Math.log10(samples.VH)],
+    dataMask: [samples.dataMask]
+  };
 }`;
   }
 
@@ -226,11 +247,17 @@ function evaluatePixel(samples) {
 function setup() {
   return {
     input: [{ bands: ["B01", "dataMask"] }],
-    output: [{ id: "default", bands: 1 }]
+    output: [
+      { id: "default", bands: 1 },
+      { id: "dataMask", bands: 1 }
+    ]
   };
 }
 function evaluatePixel(samples) {
-  return [samples.B01];
+  return {
+    default: [samples.B01],
+    dataMask: [samples.dataMask]
+  };
 }`;
 }
 
