@@ -26,14 +26,20 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { isProductionEnv } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry, type GeoJSONPolygon } from "./geometry";
 import {
+  createPredioDb,
   createSolicitudAnalisisDb,
+  deletePredioDb,
+  getPredioByIdDb,
   getReportByIdDb,
   getTenantUsageAndLimits,
+  listPrediosDb,
   listReportsDb,
   recordConsumoDb,
   saveInformeDb,
   saveMedicionesDb,
+  updatePredioDb,
   writeWorkflowLogDb,
 } from "./db/repository";
 
@@ -74,8 +80,8 @@ const demoDashboard = {
 
 const analysisInput = z.object({
   predioId: z.string().min(1),
-  predioNombre: z.string().min(1),
-  hectareas: z.number().positive().max(1_000_000),
+  predioNombre: z.string().min(1).optional(),
+  hectareas: z.number().positive().max(1_000_000).optional(),
   vertical: verticalSchema,
   satellites: z.array(satelliteSchema).min(1),
   variables: z.array(variableSchema).default([]),
@@ -87,6 +93,17 @@ const analysisInput = z.object({
   haMesUsadas: z.number().nonnegative().default(0),
   prediosActivos: z.number().int().nonnegative().default(1),
   bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+  geometria: geoJSONGeometrySchema.optional(),
+}).refine(data => {
+  if (data.periodFrom && data.periodTo) {
+    const from = new Date(data.periodFrom).getTime();
+    const to = new Date(data.periodTo).getTime();
+    return to - from >= 24 * 60 * 60 * 1000;
+  }
+  return true;
+}, {
+  message: "El periodo de análisis debe ser de al menos 24 horas",
+  path: ["periodTo"],
 });
 
 type AnalysisInput = z.infer<typeof analysisInput>;
@@ -108,6 +125,29 @@ const catalogClient = createCatalogClient({
     : undefined,
 });
 
+function fallbackPolygonForPredio(predioId: string): GeoJSONPolygon {
+  let hash = 0;
+  for (let i = 0; i < predioId.length; i++) {
+    hash = (hash << 5) - hash + predioId.charCodeAt(i);
+    hash |= 0;
+  }
+  const normalized = Math.abs(hash) / 2147483647;
+  const lng = Number((-72.6 + (normalized * 2 - 1) * 0.5).toFixed(4));
+  const lat = Number((-38.7 + (normalized * 2 - 1) * 0.5).toFixed(4));
+  const offset = 0.01;
+
+  return {
+    type: "Polygon",
+    coordinates: [[
+      [lng - offset, lat - offset],
+      [lng + offset, lat - offset],
+      [lng + offset, lat + offset],
+      [lng - offset, lat + offset],
+      [lng - offset, lat - offset],
+    ]],
+  };
+}
+
 async function createAnalysisRequest(
   input: AnalysisInput,
   tenantId: string = "tenant-default",
@@ -121,6 +161,7 @@ async function createAnalysisRequest(
 
   const variables = satellites.map((satellite, index) => input.variables[index] ?? satelliteCatalog[satellite].variables[0]?.variable).filter((value): value is string => Boolean(value));
   satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
+
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const rawIdempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
   const idempotencyKey = `${tenantId}:${rawIdempotencyKey}`;
@@ -128,21 +169,48 @@ async function createAnalysisRequest(
   const previous = idempotencyStore.get(idempotencyKey);
   if (previous) return previous;
 
-  // 1. Obtener uso y límites calculados en servidor desde DB
-  const { planId, haMesUsadas, prediosActivos } = await getTenantUsageAndLimits(tenantId, accessToken);
-  const tier = getTierForSuperficie(input.hectareas);
+  // 1. Obtener predio de la base de datos o usar geometría/bbox provista
+  const predioDb = await getPredioByIdDb(tenantId, input.predioId, accessToken);
+  let geometryToUse: GeoJSONGeometry | undefined = (predioDb?.geometria as GeoJSONGeometry) || input.geometria;
+  let predioNombre = predioDb?.nombre || input.predioNombre || "Predio";
 
-  const planResult = validatePlanLimits(planId, tier, input.hectareas, {
+  if (!geometryToUse && input.bbox) {
+    const [minLng, minLat, maxLng, maxLat] = input.bbox;
+    geometryToUse = {
+      type: "Polygon",
+      coordinates: [[
+        [minLng, minLat],
+        [maxLng, minLat],
+        [maxLng, maxLat],
+        [minLng, maxLat],
+        [minLng, minLat],
+      ]],
+    };
+  }
+
+  if (!geometryToUse) {
+    geometryToUse = fallbackPolygonForPredio(input.predioId);
+  }
+
+  const derivedBBox = computeBBox(geometryToUse);
+  const superficieHa = Math.max(input.hectareas ?? 0, predioDb?.superficie_ha || computePolygonAreaHa(geometryToUse));
+
+  // 2. Obtener uso y límites calculados en servidor desde DB
+  const { planId, haMesUsadas, prediosActivos } = await getTenantUsageAndLimits(tenantId, accessToken);
+  const tier = getTierForSuperficie(superficieHa);
+
+  const planResult = validatePlanLimits(planId, tier, superficieHa, {
     haMesUsadas,
     prediosActivos,
   });
   if (!planResult.allowed) throw new Error(`${planResult.code}: ${planResult.message}`);
 
-  // 2. Persistir/recuperar la solicitud por idempotencia (tenant_id + idempotency_key) en DB
+  // 3. Persistir/recuperar la solicitud por idempotencia en DB
   const solicitudDb = await createSolicitudAnalisisDb({
     tenant_id: tenantId,
     predio_id: input.predioId,
-    superficie_ha: input.hectareas,
+    geometria: geometryToUse as any,
+    superficie_ha: superficieHa,
     tier,
     satelites_solicitados: satellites,
     estado: tier === "tier3_regional" ? "requiere_revision" : "procesando",
@@ -164,9 +232,10 @@ async function createAnalysisRequest(
       tierLabel: tierLabel(tier),
       motorUsado: processingModeForTier(tier),
       tiempoEstimado: tierWaitEstimate(tier),
-      predioNombre: input.predioNombre,
+      predioNombre,
       satelitesSolicitados: satellites,
       variablesSolicitadas: variables,
+      bbox: derivedBBox,
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
     idempotencyStore.set(idempotencyKey, regionalResult);
@@ -174,18 +243,28 @@ async function createAnalysisRequest(
     return regionalResult;
   }
 
-  // 3. Procesar medición
+  // 4. Procesar medición usando el BBOX derivado de la geometría real
   const firstSatellite = satellites[0];
   const firstVariable = variables[0];
   const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
   assertTransition(history[0], history[1]);
   assertTransition(history[1], history[2]);
-  const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo, bbox: input.bbox });
-  const report = buildAnalysisReport({ id: solicitudDb.id ?? `sol-${Date.now()}`, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
+
+  const result = await observationProvider.query({
+    predioId: input.predioId,
+    satellite: firstSatellite,
+    variable: firstVariable,
+    tier,
+    periodFrom: input.periodFrom,
+    periodTo: input.periodTo,
+    bbox: derivedBBox
+  });
+
+  const report = buildAnalysisReport({ id: solicitudDb.id ?? `sol-${Date.now()}`, predioId: input.predioId, predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
   history.push("completado");
   assertTransition(history[2], history[3]);
 
-  // 4. Guardar Informe, Mediciones, Consumo y Logs en DB
+  // 5. Guardar Informe, Mediciones, Consumo y Logs en DB
   await saveInformeDb({
     tenant_id: tenantId,
     predio_id: input.predioId,
@@ -208,7 +287,7 @@ async function createAnalysisRequest(
     fecha_adquisicion: acquisitionIsoStr,
   }], accessToken);
 
-  await recordConsumoDb(tenantId, input.hectareas, accessToken);
+  await recordConsumoDb(tenantId, superficieHa, accessToken);
 
   const completedResult = {
     id: solicitudDb.id ?? `sol-${Date.now()}`,
@@ -220,13 +299,14 @@ async function createAnalysisRequest(
     tierLabel: tierLabel(tier),
     motorUsado: processingModeForTier(tier),
     tiempoEstimado: tierWaitEstimate(tier),
-    predioNombre: input.predioNombre,
+    predioNombre,
     satelitesSolicitados: satellites,
     variablesSolicitadas: variables,
+    bbox: derivedBBox,
     medicionPreview: result,
     interpretacionPreview: interpretMeasurement(result),
     informe: report,
-    mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
+    mensaje: `Solicitud creada para ${predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
 
   idempotencyStore.set(idempotencyKey, completedResult);
@@ -243,6 +323,59 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+  predios: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      return listPrediosDb(ctx.user.tenantId, accessToken);
+    }),
+    getById: protectedProcedure
+      .input(z.object({ id: z.string().min(1) }))
+      .query(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const predio = await getPredioByIdDb(ctx.user.tenantId, input.id, accessToken);
+        if (!predio) throw new TRPCError({ code: "NOT_FOUND", message: "Predio no encontrado" });
+        return predio;
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        nombre: z.string().min(2, "El nombre del predio debe tener al menos 2 caracteres"),
+        geometria: geoJSONGeometrySchema,
+        comuna: z.string().optional(),
+        cultivo_o_uso: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        return createPredioDb({
+          tenant_id: ctx.user.tenantId,
+          nombre: input.nombre,
+          geometria: input.geometria,
+          comuna: input.comuna,
+          cultivo_o_uso: input.cultivo_o_uso,
+        }, accessToken);
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.string().min(1),
+        nombre: z.string().min(2).optional(),
+        geometria: geoJSONGeometrySchema.optional(),
+        comuna: z.string().optional(),
+        cultivo_o_uso: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const updated = await updatePredioDb(ctx.user.tenantId, input.id, input, accessToken);
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Predio no encontrado o no autorizado" });
+        return updated;
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const success = await deletePredioDb(ctx.user.tenantId, input.id, accessToken);
+        if (!success) throw new TRPCError({ code: "NOT_FOUND", message: "Predio no encontrado o no autorizado" });
+        return { success: true };
+      }),
   }),
   cleanleaf: router({
     dashboard: protectedProcedure.query(({ ctx }) => {

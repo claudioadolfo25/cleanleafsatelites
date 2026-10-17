@@ -2,7 +2,19 @@ import type { PlanId } from "../../shared/plan-limits";
 import type { ReportRecord } from "../../shared/report-catalog";
 import type { AnalysisStatus } from "../../shared/analysis-state";
 import type { SatelliteId } from "../../shared/satellite-catalog";
+import { computePolygonAreaHa, type GeoJSONGeometry } from "../geometry";
 import { getSupabaseUserClient } from "./supabase-client";
+
+export type PredioRecord = {
+  id: string;
+  tenant_id: string;
+  nombre: string;
+  geometria: GeoJSONGeometry;
+  cultivo_o_uso?: string | null;
+  comuna?: string | null;
+  superficie_ha: number;
+  creado_en?: string;
+};
 
 export type SolicitudRecord = {
   id?: string;
@@ -46,6 +58,7 @@ export type MedicionRecord = {
 };
 
 // Almacenamiento en memoria para fallback en entornos de prueba o locales sin conexión live
+const memoryPredios = new Map<string, PredioRecord>();
 const memorySolicitudes = new Map<string, SolicitudRecord>();
 const memoryInformes = new Map<string, InformeRecord>();
 const memoryMediciones: MedicionRecord[] = [];
@@ -75,6 +88,212 @@ function mapInformeToReportRecord(inf: any): ReportRecord {
     trace: contenido.trace || [],
     metrics: contenido.metrics || [],
   };
+}
+
+export async function listPrediosDb(
+  tenantId: string,
+  accessToken?: string
+): Promise<PredioRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data } = await client
+      .from("predios")
+      .select("*")
+      .eq("tenant_id", tenantId);
+
+    if (data && data.length > 0) {
+      return data.map(row => ({
+        id: row.id,
+        tenant_id: row.tenant_id,
+        nombre: row.nombre,
+        geometria: row.geometria,
+        cultivo_o_uso: row.cultivo_o_uso,
+        comuna: row.comuna,
+        superficie_ha: Number(row.superficie_ha),
+        creado_en: row.creado_en,
+      }));
+    }
+  }
+
+  return Array.from(memoryPredios.values()).filter(p => p.tenant_id === tenantId);
+}
+
+export async function getPredioByIdDb(
+  tenantId: string,
+  predioId: string,
+  accessToken?: string
+): Promise<PredioRecord | null> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data } = await client
+      .from("predios")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("id", predioId)
+      .maybeSingle();
+
+    if (data) {
+      return {
+        id: data.id,
+        tenant_id: data.tenant_id,
+        nombre: data.nombre,
+        geometria: data.geometria,
+        cultivo_o_uso: data.cultivo_o_uso,
+        comuna: data.comuna,
+        superficie_ha: Number(data.superficie_ha),
+        creado_en: data.creado_en,
+      };
+    }
+  }
+
+  const p = memoryPredios.get(predioId);
+  if (p && p.tenant_id === tenantId) {
+    return p;
+  }
+  return null;
+}
+
+export async function createPredioDb(
+  data: {
+    tenant_id: string;
+    nombre: string;
+    geometria: GeoJSONGeometry;
+    cultivo_o_uso?: string | null;
+    comuna?: string | null;
+  },
+  accessToken?: string
+): Promise<PredioRecord> {
+  const superficieHa = computePolygonAreaHa(data.geometria);
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data: inserted } = await client
+      .from("predios")
+      .insert({
+        tenant_id: data.tenant_id,
+        nombre: data.nombre,
+        geometria: data.geometria,
+        cultivo_o_uso: data.cultivo_o_uso ?? null,
+        comuna: data.comuna ?? null,
+        superficie_ha: superficieHa,
+      })
+      .select()
+      .single();
+
+    if (inserted) {
+      return {
+        id: inserted.id,
+        tenant_id: inserted.tenant_id,
+        nombre: inserted.nombre,
+        geometria: inserted.geometria,
+        cultivo_o_uso: inserted.cultivo_o_uso,
+        comuna: inserted.comuna,
+        superficie_ha: Number(inserted.superficie_ha),
+        creado_en: inserted.creado_en,
+      };
+    }
+  }
+
+  const created: PredioRecord = {
+    id: `predio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    tenant_id: data.tenant_id,
+    nombre: data.nombre,
+    geometria: data.geometria,
+    cultivo_o_uso: data.cultivo_o_uso ?? null,
+    comuna: data.comuna ?? null,
+    superficie_ha: superficieHa,
+    creado_en: new Date().toISOString(),
+  };
+
+  memoryPredios.set(created.id, created);
+  return created;
+}
+
+export async function updatePredioDb(
+  tenantId: string,
+  predioId: string,
+  data: Partial<{
+    nombre: string;
+    geometria: GeoJSONGeometry;
+    cultivo_o_uso?: string | null;
+    comuna?: string | null;
+  }>,
+  accessToken?: string
+): Promise<PredioRecord | null> {
+  const client = getSupabaseUserClient(accessToken);
+
+  const updates: Record<string, any> = {};
+  if (data.nombre !== undefined) updates.nombre = data.nombre;
+  if (data.cultivo_o_uso !== undefined) updates.cultivo_o_uso = data.cultivo_o_uso;
+  if (data.comuna !== undefined) updates.comuna = data.comuna;
+  if (data.geometria) {
+    updates.geometria = data.geometria;
+    updates.superficie_ha = computePolygonAreaHa(data.geometria);
+  }
+
+  if (client) {
+    const { data: updated } = await client
+      .from("predios")
+      .update(updates)
+      .eq("tenant_id", tenantId)
+      .eq("id", predioId)
+      .select()
+      .maybeSingle();
+
+    if (updated) {
+      return {
+        id: updated.id,
+        tenant_id: updated.tenant_id,
+        nombre: updated.nombre,
+        geometria: updated.geometria,
+        cultivo_o_uso: updated.cultivo_o_uso,
+        comuna: updated.comuna,
+        superficie_ha: Number(updated.superficie_ha),
+        creado_en: updated.creado_en,
+      };
+    }
+  }
+
+  const existing = memoryPredios.get(predioId);
+  if (existing && existing.tenant_id === tenantId) {
+    const updated = {
+      ...existing,
+      ...updates,
+      superficie_ha: data.geometria ? computePolygonAreaHa(data.geometria) : existing.superficie_ha,
+    };
+    memoryPredios.set(predioId, updated);
+    return updated;
+  }
+
+  return null;
+}
+
+export async function deletePredioDb(
+  tenantId: string,
+  predioId: string,
+  accessToken?: string
+): Promise<boolean> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { error, count } = await client
+      .from("predios")
+      .delete({ count: "exact" })
+      .eq("tenant_id", tenantId)
+      .eq("id", predioId);
+
+    if (!error && (count ?? 0) > 0) return true;
+  }
+
+  const existing = memoryPredios.get(predioId);
+  if (existing && existing.tenant_id === tenantId) {
+    memoryPredios.delete(predioId);
+    return true;
+  }
+
+  return false;
 }
 
 export async function getTenantUsageAndLimits(
@@ -141,6 +360,8 @@ export async function getTenantUsageAndLimits(
   haMesUsadas = memoryConsumo
     .filter(c => c.tenant_id === tenantId && c.fecha.startsWith(currentMonthPrefix))
     .reduce((acc, c) => acc + c.ha_procesadas, 0);
+
+  prediosActivos = Array.from(memoryPredios.values()).filter(p => p.tenant_id === tenantId).length || 1;
 
   return { planId, haMesUsadas, prediosActivos };
 }

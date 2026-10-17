@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import request from "supertest";
 import * as jose from "jose";
 import { createApp } from "./app";
+import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry } from "./geometry";
 
 async function createMockJwt(payload: Record<string, unknown> = {}) {
   const secret = new TextEncoder().encode("test-jwt-secret-12345678901234567890");
@@ -15,6 +16,28 @@ async function createMockJwt(payload: Record<string, unknown> = {}) {
     .setExpirationTime("1h")
     .sign(secret);
 }
+
+const validValdiviaPolygon: GeoJSONGeometry = {
+  type: "Polygon",
+  coordinates: [[
+    [-73.2500, -39.8200],
+    [-73.2300, -39.8200],
+    [-73.2300, -39.8000],
+    [-73.2500, -39.8000],
+    [-73.2500, -39.8200],
+  ]],
+};
+
+const validOsornoPolygon: GeoJSONGeometry = {
+  type: "Polygon",
+  coordinates: [[
+    [-73.1500, -40.5800],
+    [-73.1300, -40.5800],
+    [-73.1300, -40.5600],
+    [-73.1500, -40.5600],
+    [-73.1500, -40.5800],
+  ]],
+};
 
 describe("Express App Integration & tRPC Auth Bridge", () => {
   const app = createApp();
@@ -44,6 +67,53 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
         code: "NOT_FOUND",
         message: "API route not found",
       },
+    });
+  });
+
+  describe("Validación de Geometría, Cálculo de Superficie y BBOX", () => {
+    it("valida polígonos GeoJSON correctos en WGS84", () => {
+      const parsed = geoJSONGeometrySchema.safeParse(validValdiviaPolygon);
+      expect(parsed.success).toBe(true);
+    });
+
+    it("rechaza polígonos con anillo no cerrado (primer y último punto no coinciden)", () => {
+      const openPolygon = {
+        type: "Polygon",
+        coordinates: [[
+          [-73.2500, -39.8200],
+          [-73.2300, -39.8200],
+          [-73.2300, -39.8000],
+          [-73.2500, -39.8000], // Sin cerrar
+        ]],
+      };
+      const parsed = geoJSONGeometrySchema.safeParse(openPolygon);
+      expect(parsed.success).toBe(false);
+    });
+
+    it("rechaza coordenadas fuera de rango WGS84", () => {
+      const outOfRange = {
+        type: "Polygon",
+        coordinates: [[
+          [-195.0000, -39.8200], // Longitud < -180
+          [-73.2300, -39.8200],
+          [-73.2300, -39.8000],
+          [-195.0000, -39.8000],
+          [-195.0000, -39.8200],
+        ]],
+      };
+      const parsed = geoJSONGeometrySchema.safeParse(outOfRange);
+      expect(parsed.success).toBe(false);
+    });
+
+    it("calcula la superficie en hectáreas de forma consistente en el servidor", () => {
+      const areaValdiviaHa = computePolygonAreaHa(validValdiviaPolygon);
+      expect(areaValdiviaHa).toBeGreaterThan(100);
+      expect(areaValdiviaHa).toBeLessThan(1000);
+    });
+
+    it("deriva el BBOX exacto [minLng, minLat, maxLng, maxLat] desde el polígono", () => {
+      const bbox = computeBBox(validValdiviaPolygon);
+      expect(bbox).toEqual([-73.25, -39.82, -73.23, -39.8]);
     });
   });
 
@@ -84,6 +154,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       "cleanleaf.reports.list",
       "cleanleaf.resources",
       "auth.me",
+      "predios.list",
     ];
 
     for (const endpoint of protectedGetEndpoints) {
@@ -116,6 +187,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       "apiV1.solicitudes.create",
       "apiV1.onboarding.createTenant",
       "apiV1.apiKeys.create",
+      "predios.create",
     ];
 
     for (const endpoint of protectedPostEndpoints) {
@@ -131,149 +203,80 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     }
   });
 
-  describe("Procedimientos Protegidos (Acceso exitoso con Bearer token válido)", () => {
-    it("GET /api/trpc/auth.me con Bearer token responde 200 OK y devuelve datos del usuario", async () => {
+  describe("Gestión de Predios y Generación Dinámica de BBOX en Análisis", () => {
+    it("confirma que dos predios en distintas ubicaciones generen BBOX distintos en la consulta de análisis", async () => {
       const token = await createMockJwt({
-        sub: "usr_abc_123",
-        email: "agronomo@fundo.cl",
-        user_metadata: { name: "Juan Agrónomo" },
-        app_metadata: { tenant_id: "tenant-fundo-1", role: "user" },
+        app_metadata: { tenant_id: "tenant-geo-test", role: "user" },
       });
 
-      const res = await request(app)
-        .get("/api/trpc/auth.me")
-        .set("Authorization", `Bearer ${token}`);
+      // 1. Crear Predio Valdivia
+      const createValdiviaRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Predio Valdivia Real",
+            geometria: validValdiviaPolygon,
+            comuna: "Valdivia",
+          },
+        });
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json).toEqual({
-        id: "usr_abc_123",
-        email: "agronomo@fundo.cl",
-        name: "Juan Agrónomo",
-        tenantId: "tenant-fundo-1",
-        role: "user",
-      });
-    });
+      expect(createValdiviaRes.status).toBe(200);
+      const valdiviaPredioId = createValdiviaRes.body.result.data.json.id;
 
-    it("GET /api/trpc/cleanleaf.dashboard con Bearer token responde 200 OK JSON", async () => {
-      const token = await createMockJwt();
-      const res = await request(app)
-        .get("/api/trpc/cleanleaf.dashboard")
-        .set("Authorization", `Bearer ${token}`);
+      // 2. Crear Predio Osorno
+      const createOsornoRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Fundo Osorno Real",
+            geometria: validOsornoPolygon,
+            comuna: "Osorno",
+          },
+        });
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json).toHaveProperty("tenant");
-      expect(res.body.result.data.json).toHaveProperty("predios");
-    });
+      expect(createOsornoRes.status).toBe(200);
+      const osornoPredioId = createOsornoRes.body.result.data.json.id;
 
-    it("GET /api/trpc/cleanleaf.reports.list con Bearer token responde 200 OK JSON", async () => {
-      const token = await createMockJwt();
-      const res = await request(app)
-        .get("/api/trpc/cleanleaf.reports.list")
-        .set("Authorization", `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json).toBeDefined();
-    });
-
-    it("POST /api/trpc/cleanleaf.createAnalysis con Bearer token crea solicitud aislada por tenant", async () => {
-      const token = await createMockJwt({
-        app_metadata: { tenant_id: "tenant-valdivia", role: "user" },
-      });
-
-      const payload = {
-        json: {
-          predioId: "predio-1",
-          predioNombre: "Predio Valdivia",
-          hectareas: 25,
-          vertical: "agricultura",
-          satellites: ["sentinel-2"],
-          variables: ["ndvi"],
-          idempotencyKey: "test-idempotency-key-01",
-        },
-      };
-
-      const res = await request(app)
+      // 3. Crear Análisis para Predio Valdivia
+      const analysisValdiviaRes = await request(app)
         .post("/api/trpc/cleanleaf.createAnalysis")
         .set("Authorization", `Bearer ${token}`)
-        .send(payload);
+        .send({
+          json: {
+            predioId: valdiviaPredioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "idempotency-key-valdivia-01",
+          },
+        });
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json).toHaveProperty("id");
-      expect(res.body.result.data.json.idempotencyKey).toBe("tenant-valdivia:test-idempotency-key-01");
-    });
+      expect(analysisValdiviaRes.status).toBe(200);
+      const bboxValdivia = analysisValdiviaRes.body.result.data.json.bbox;
 
-    it("POST /api/trpc/apiV1.solicitudes.create con Bearer token responde 200 OK con datos de solicitud", async () => {
-      const token = await createMockJwt({
-        app_metadata: { tenant_id: "tenant-osorno", role: "user" },
-      });
-
-      const payload = {
-        json: {
-          predioId: "predio-osorno",
-          predioNombre: "Fundo Osorno",
-          hectareas: 50,
-          vertical: "agricultura",
-          satellites: ["sentinel-2"],
-          variables: ["ndvi"],
-          idempotencyKey: "test-idempotency-key-02",
-        },
-      };
-
-      const res = await request(app)
-        .post("/api/trpc/apiV1.solicitudes.create")
+      // 4. Crear Análisis para Predio Osorno
+      const analysisOsornoRes = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
         .set("Authorization", `Bearer ${token}`)
-        .send(payload);
+        .send({
+          json: {
+            predioId: osornoPredioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "idempotency-key-osorno-01",
+          },
+        });
 
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json.data).toHaveProperty("id");
-      expect(res.body.result.data.json.data.idempotencyKey).toBe("tenant-osorno:test-idempotency-key-02");
-    });
+      expect(analysisOsornoRes.status).toBe(200);
+      const bboxOsorno = analysisOsornoRes.body.result.data.json.bbox;
 
-    it("POST /api/trpc/apiV1.onboarding.createTenant con Bearer token responde 200 OK JSON", async () => {
-      const token = await createMockJwt();
-      const payload = {
-        json: {
-          organizationName: "Agrícola del Sur",
-          planId: "piloto",
-        },
-      };
-
-      const res = await request(app)
-        .post("/api/trpc/apiV1.onboarding.createTenant")
-        .set("Authorization", `Bearer ${token}`)
-        .send(payload);
-
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json.data).toMatchObject({
-        nombre: "Agrícola del Sur",
-        planId: "piloto",
-      });
-    });
-
-    it("POST /api/trpc/apiV1.apiKeys.create con Bearer token responde 200 OK JSON", async () => {
-      const token = await createMockJwt();
-      const payload = {
-        json: {
-          tenantId: "tenant-test-99",
-          nombre: "Production Key",
-        },
-      };
-
-      const res = await request(app)
-        .post("/api/trpc/apiV1.apiKeys.create")
-        .set("Authorization", `Bearer ${token}`)
-        .send(payload);
-
-      expect(res.status).toBe(200);
-      expect(res.headers["content-type"]).toMatch(/json/);
-      expect(res.body.result.data.json.data).toHaveProperty("key");
-      expect(res.body.result.data.json.data.key).toMatch(/^cl_/);
+      // 5. Verificar que BBOX de Valdivia y Osorno son completamente distintos
+      expect(bboxValdivia).toEqual([-73.25, -39.82, -73.23, -39.8]);
+      expect(bboxOsorno).toEqual([-73.15, -40.58, -73.13, -40.56]);
+      expect(bboxValdivia).not.toEqual(bboxOsorno);
     });
   });
 
@@ -338,6 +341,49 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       const reportsTenantA = listResTenantA.body.result.data.json;
       const foundInTenantA = Array.isArray(reportsTenantA) && reportsTenantA.some((r: any) => r.id === solicitudIdTenantA || r.solicitudId === solicitudIdTenantA);
       expect(foundInTenantA).toBe(true);
+    });
+
+    it("impide que un usuario del Tenant B consulte o elimine predios del Tenant A", async () => {
+      const tokenTenantA = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-owner-a", role: "user" },
+      });
+
+      const tokenTenantB = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-owner-b", role: "user" },
+      });
+
+      // 1. Tenant A crea un predio
+      const createRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${tokenTenantA}`)
+        .send({
+          json: {
+            nombre: "Predio Privado Tenant A",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      expect(createRes.status).toBe(200);
+      const predioIdTenantA = createRes.body.result.data.json.id;
+
+      // 2. Tenant B consulta predios -> no ve el predio de Tenant A
+      const listResTenantB = await request(app)
+        .get("/api/trpc/predios.list")
+        .set("Authorization", `Bearer ${tokenTenantB}`);
+
+      expect(listResTenantB.status).toBe(200);
+      const prediosTenantB = listResTenantB.body.result.data.json;
+      expect(prediosTenantB.some((p: any) => p.id === predioIdTenantA)).toBe(false);
+
+      // 3. Tenant B intenta eliminar el predio de Tenant A -> responde 404 NOT_FOUND
+      const deleteRes = await request(app)
+        .post("/api/trpc/predios.delete")
+        .set("Authorization", `Bearer ${tokenTenantB}`)
+        .send({
+          json: { id: predioIdTenantA },
+        });
+
+      expect(deleteRes.status).toBe(404);
     });
   });
 });

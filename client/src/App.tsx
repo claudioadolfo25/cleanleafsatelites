@@ -14,6 +14,7 @@ const Home = lazy(() => import("./pages/Home"));
 const SatelliteConfiguration = lazy(() => import("./pages/SatelliteConfiguration"));
 const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
 const ReportDetail = lazy(() => import("./pages/ReportDetail"));
+const PrediosPage = lazy(() => import("./pages/PrediosPage"));
 
 function RouteFallback() {
   return (
@@ -27,7 +28,7 @@ function Router() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Switch>
-        {/* Rutas Públicas (Fase 1 & Fase 2) */}
+        {/* Rutas Públicas */}
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/satelites" component={SatellitesPlaceholderPage} />
@@ -35,6 +36,9 @@ function Router() {
         {/* Rutas Protegidas bajo /dashboard */}
         <Route path="/dashboard">
           {() => <ProtectedRoute component={Home} />}
+        </Route>
+        <Route path="/dashboard/predios">
+          {() => <ProtectedRoute component={PrediosPage} />}
         </Route>
         <Route path="/dashboard/configuracion/satelites">
           {() => <ProtectedRoute component={SatelliteConfiguration} />}
