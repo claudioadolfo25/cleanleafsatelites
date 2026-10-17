@@ -6,7 +6,7 @@ export type User = {
   id: string;
   email: string | null;
   name?: string | null;
-  tenantId: string;
+  tenantId: string | null;
   role: string;
 };
 
@@ -15,6 +15,23 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
 };
+
+const ALLOWED_ROLES = ["user", "admin", "owner", "super_admin"] as const;
+
+function parseRole(rawRole: unknown): string {
+  if (typeof rawRole === "string" && (ALLOWED_ROLES as readonly string[]).includes(rawRole)) {
+    return rawRole;
+  }
+  return "user";
+}
+
+function parseTenantId(appMeta: Record<string, any>): string | null {
+  const tenantId = appMeta.tenant_id ?? appMeta.tenantId;
+  if (typeof tenantId === "string" && tenantId.trim().length > 0) {
+    return tenantId.trim();
+  }
+  return null;
+}
 
 async function verifySupabaseToken(token: string): Promise<User | null> {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -38,20 +55,17 @@ async function verifySupabaseToken(token: string): Promise<User | null> {
           id: u.id,
           email: u.email ?? null,
           name: (userMeta.name || appMeta.name || u.email?.split("@")[0]) ?? null,
-          tenantId: (appMeta.tenant_id || userMeta.tenant_id || appMeta.tenantId || userMeta.tenantId || u.id) as string,
-          role: (appMeta.role || userMeta.role || "user") as string,
+          tenantId: parseTenantId(appMeta),
+          role: parseRole(appMeta.role),
         };
       }
     } catch {
-      // Fallback a verificación JWT con secreto
+      // Fallback a verificación JWT
     }
   }
 
-  // 2. Verificación criptográfica con HMAC secret
-  const jwtSecret =
-    process.env.SUPABASE_JWT_SECRET ||
-    process.env.JWT_SECRET ||
-    (process.env.NODE_ENV === "test" ? "test-jwt-secret-12345678901234567890" : "");
+  // 2. Verificación criptográfica con SUPABASE_JWT_SECRET únicamente
+  const jwtSecret = process.env.SUPABASE_JWT_SECRET;
 
   if (jwtSecret) {
     try {
@@ -64,8 +78,8 @@ async function verifySupabaseToken(token: string): Promise<User | null> {
           id: payload.sub,
           email: (payload.email as string) ?? null,
           name: (userMeta.name || appMeta.name) ?? null,
-          tenantId: (appMeta.tenant_id || userMeta.tenant_id || payload.tenant_id || payload.sub) as string,
-          role: (appMeta.role || userMeta.role || payload.role || "user") as string,
+          tenantId: parseTenantId(appMeta),
+          role: parseRole(appMeta.role),
         };
       }
     } catch {

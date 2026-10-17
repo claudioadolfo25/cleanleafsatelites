@@ -27,6 +27,29 @@ export async function uploadReportPdfToStorage(
   return path;
 }
 
+export async function uploadReportThumbnail(
+  tenantId: string,
+  reportId: string,
+  imageBuffer: Buffer,
+  accessToken?: string
+): Promise<string> {
+  const path = `${tenantId}/${reportId}/thumb.png`;
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      await client.storage.from(BUCKET_NAME).upload(path, imageBuffer, {
+        contentType: "image/png",
+        upsert: true,
+      });
+    } catch (err) {
+      console.warn("[Storage] Error uploading thumbnail to Supabase Storage:", err);
+    }
+  }
+
+  return path;
+}
+
 export async function getSignedReportDownloadUrlService(
   tenantId: string,
   reportId: string,

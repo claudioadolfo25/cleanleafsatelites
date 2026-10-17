@@ -1,3 +1,4 @@
+import { getSupabaseAdminClient } from "../admin/supabase-client";
 import { assertTransition, type AnalysisStatus } from "../../shared/analysis-state";
 import { buildAnalysisReport, MockCopernicusProvider, type EarthObservationProvider } from "../../shared/observation-provider";
 import { interpretMeasurement } from "../../shared/interpretation";
@@ -371,6 +372,9 @@ export async function runWorkerIteration(accessToken?: string): Promise<number> 
 
 export function startWorkerLoop(intervalMs = 2000): () => void {
   console.log("[Worker] Iniciando bucle de procesamiento de solicitudes...");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NODE_ENV !== "test") {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required to start analysis worker loop.");
+  }
   let active = true;
 
   const loop = async () => {
