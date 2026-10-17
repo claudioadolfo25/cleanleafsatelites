@@ -73,7 +73,10 @@ const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
 const planSchema = z.enum(["piloto", "regional_pyme", "region_completa"]);
 const sectorSchema = z.enum(["agricultura", "acuicultura", "forestal", "emergencias"]);
-const variableSchema = z.string().min(1);
+const identifierSchema = z.string().trim().min(1).max(128);
+const variableSchema = z.string().trim().min(1).max(64);
+const idInput = z.object({ id: identifierSchema }).strict();
+const reportStatusSchema = z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]);
 
 const demoDashboard = {
   tenant: {
@@ -105,12 +108,12 @@ const demoDashboard = {
 };
 
 const analysisInput = z.object({
-  predioId: z.string().min(1),
-  predioNombre: z.string().min(1).optional(),
+  predioId: identifierSchema,
+  predioNombre: z.string().trim().min(1).max(200).optional(),
   hectareas: z.number().positive().max(1_000_000).optional(),
   vertical: verticalSchema,
-  satellites: z.array(satelliteSchema).min(1),
-  variables: z.array(variableSchema).default([]),
+  satellites: z.array(satelliteSchema).min(1).max(3).refine(values => new Set(values).size === values.length, "No se permiten satélites duplicados"),
+  variables: z.array(variableSchema).max(3).default([]),
   periodFrom: z.string().datetime().optional(),
   periodTo: z.string().datetime().optional(),
   correlationId: z.string().min(8).optional(),
@@ -120,7 +123,7 @@ const analysisInput = z.object({
   prediosActivos: z.number().int().nonnegative().default(1),
   bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
   geometria: geoJSONGeometrySchema.optional(),
-}).refine(data => {
+}).strict().refine(data => {
   if (data.periodFrom && data.periodTo) {
     const from = new Date(data.periodFrom).getTime();
     const to = new Date(data.periodTo).getTime();
@@ -420,7 +423,7 @@ export const appRouter = router({
       return listPrediosDb(ctx.user.tenantId, accessToken);
     }),
     getById: protectedProcedure
-      .input(z.object({ id: z.string().min(1) }))
+      .input(idInput)
       .query(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const predio = await getPredioByIdDb(ctx.user.tenantId, input.id, accessToken);
@@ -429,11 +432,11 @@ export const appRouter = router({
       }),
     create: protectedProcedure
       .input(z.object({
-        nombre: z.string().min(2, "El nombre del predio debe tener al menos 2 caracteres"),
+        nombre: z.string().trim().min(2, "El nombre del predio debe tener al menos 2 caracteres").max(200),
         geometria: geoJSONGeometrySchema,
-        comuna: z.string().optional(),
-        cultivo_o_uso: z.string().optional(),
-      }))
+        comuna: z.string().trim().max(120).optional(),
+        cultivo_o_uso: z.string().trim().max(120).optional(),
+      }).strict())
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         return createPredioDb({
@@ -446,12 +449,12 @@ export const appRouter = router({
       }),
     update: protectedProcedure
       .input(z.object({
-        id: z.string().min(1),
-        nombre: z.string().min(2).optional(),
+        id: identifierSchema,
+        nombre: z.string().trim().min(2).max(200).optional(),
         geometria: geoJSONGeometrySchema.optional(),
-        comuna: z.string().optional(),
-        cultivo_o_uso: z.string().optional(),
-      }))
+        comuna: z.string().trim().max(120).optional(),
+        cultivo_o_uso: z.string().trim().max(120).optional(),
+      }).strict())
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const updated = await updatePredioDb(ctx.user.tenantId, input.id, input, accessToken);
@@ -459,7 +462,7 @@ export const appRouter = router({
         return updated;
       }),
     delete: protectedProcedure
-      .input(z.object({ id: z.string().min(1) }))
+      .input(idInput)
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const success = await deletePredioDb(ctx.user.tenantId, input.id, accessToken);
@@ -475,11 +478,11 @@ export const appRouter = router({
     reports: router({
       list: protectedProcedure
         .input(z.object({
-          search: z.string().optional(),
-          predio: z.string().optional(),
-          satellite: z.string().optional(),
-          status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional()
-        }).optional())
+          search: z.string().trim().max(200).optional(),
+          predio: z.string().trim().max(200).optional(),
+          satellite: satelliteSchema.optional(),
+          status: reportStatusSchema.optional()
+        }).strict().optional())
         .query(async ({ input, ctx }) => {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
           const dbReports = await listReportsDb(ctx.user.tenantId, input, accessToken);
@@ -489,7 +492,7 @@ export const appRouter = router({
           return listReports(input);
         }),
       getById: protectedProcedure
-        .input(z.object({ id: z.string().min(1) }))
+        .input(idInput)
         .query(async ({ input, ctx }) => {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
           const dbReport = await getReportByIdDb(ctx.user.tenantId, input.id, accessToken);
@@ -499,7 +502,7 @@ export const appRouter = router({
           return getReport(input.id) ?? null;
         }),
       getDownloadUrl: protectedProcedure
-        .input(z.object({ id: z.string().min(1) }))
+        .input(idInput)
         .query(async ({ input, ctx }) => {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
           try {
@@ -512,7 +515,7 @@ export const appRouter = router({
           }
         }),
       getGeoJson: protectedProcedure
-        .input(z.object({ id: z.string().min(1) }))
+        .input(idInput)
         .query(async ({ input, ctx }) => {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
           const report = await getReportByIdDb(ctx.user.tenantId, input.id, accessToken);
@@ -554,19 +557,19 @@ export const appRouter = router({
     resources: protectedProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
     catalogSearch: protectedProcedure.input(z.object({
       bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
-      datetime: z.string().optional(),
+      datetime: z.string().trim().max(100).optional(),
       collections: z.array(z.string().min(1)).min(1).max(5),
       limit: z.number().int().min(1).max(100).optional(),
       next: z.number().int().min(0).max(10000).optional(),
       filter: z.union([z.record(z.string(), z.unknown()), z.string()]).optional(),
       filterLang: z.enum(["cql2-json", "cql2-text"]).optional(),
       fields: z.object({ include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional() }).optional(),
-      distinct: z.string().optional(),
-    })).mutation(async ({ input }) => {
+      distinct: z.string().trim().max(100).optional(),
+    }).strict()).mutation(async ({ input }) => {
       // Habilitar consulta de catálogo STAC en producción para todos los usuarios autenticados
       try {
         return await catalogClient(input);
-      } catch (err: any) {
+      } catch (error: unknown) {
         return {
           type: "FeatureCollection" as const,
           context: { limit: input.limit ?? 20, matched: 1, returned: 1, next: undefined },
@@ -590,13 +593,13 @@ export const appRouter = router({
       return createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id);
     }),
     getTimeSeries: protectedProcedure.input(z.object({
-      predioId: z.string().min(1),
+      predioId: identifierSchema,
       satellite: satelliteSchema,
       variable: variableSchema,
       interval: z.enum(["P5D", "P10D"]).default("P5D"),
-      periodFrom: z.string().optional(),
-      periodTo: z.string().optional(),
-    })).query(async ({ input, ctx }) => {
+      periodFrom: z.string().trim().max(40).optional(),
+      periodTo: z.string().trim().max(40).optional(),
+    }).strict()).query(async ({ input, ctx }) => {
       const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
       const { isSstSupportedForSatellite, buildMultiVariableEvalscript } = await import("./services/copernicus-time-series-service");
 

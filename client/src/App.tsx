@@ -54,7 +54,7 @@ function Router() {
           {() => <ProtectedRoute component={SatelliteConfiguration} />}
         </Route>
         <Route path="/dashboard/informes/:id">
-          {(params) => <ProtectedRoute component={ReportDetail} params={params} />}
+          {() => <ProtectedRoute component={ReportDetail} />}
         </Route>
         <Route path="/dashboard/informes">
           {() => <ProtectedRoute component={ReportsDashboard} />}

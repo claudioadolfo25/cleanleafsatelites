@@ -26,11 +26,27 @@ export default function ReportsDashboard() {
   const [predio, setPredio] = useState("todos");
   const [satellite, setSatellite] = useState("todos");
   const [status, setStatus] = useState<ReportFilterStatus>("todos");
-  const query = trpc.cleanleaf.reports.list.useQuery({ search: search || undefined, predio: predio === "todos" ? undefined : predio, satellite: satellite === "todos" ? undefined : satellite, status });
-  const reports = query.data ?? [];
-  const allReports = trpc.cleanleaf.reports.list.useQuery();
-  const summary = useMemo(() => { const source = allReports.data ?? []; return { total: source.length, ready: source.filter(report => report.status === "completado").length, attention: source.filter(report => report.alertLevel !== "normal").length, processing: source.filter(report => ["procesando", "en_cola", "pendiente"].includes(report.status)).length }; }, [allReports.data]);
-  const properties = Array.from(new Set((allReports.data ?? []).map(report => report.predioNombre)));
+  const query = trpc.cleanleaf.reports.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const allReports = query.data ?? [];
+  const reports = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return allReports.filter(report =>
+      (!normalizedSearch || `${report.predioNombre} ${report.variables.join(" ")}`.toLowerCase().includes(normalizedSearch)) &&
+      (predio === "todos" || report.predioNombre === predio) &&
+      (satellite === "todos" || report.satellites.some(id => id === satellite)) &&
+      (status === "todos" || report.status === status)
+    );
+  }, [allReports, predio, satellite, search, status]);
+  const summary = useMemo(() => ({
+    total: allReports.length,
+    ready: allReports.filter(report => report.status === "completado").length,
+    attention: allReports.filter(report => report.alertLevel !== "normal").length,
+    processing: allReports.filter(report => ["procesando", "en_cola", "pendiente"].includes(report.status)).length,
+  }), [allReports]);
+  const properties = useMemo(() => Array.from(new Set(allReports.map(report => report.predioNombre))), [allReports]);
 
   return (
     <DashboardLayout>
