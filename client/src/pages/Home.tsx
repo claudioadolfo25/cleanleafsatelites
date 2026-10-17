@@ -338,7 +338,7 @@ export default function Home() {
                         <CartesianGrid vertical={false} stroke="#edf0e9" />
                         <XAxis dataKey="fecha" tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} interval="preserveStartEnd" />
                         <YAxis domain={meta.domain} tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} tickFormatter={value => selectedSatellite === "sentinel-2" ? Number(value).toFixed(1).replace(".", ",") : value} />
-                        <Tooltip cursor={{ stroke: "#d9e5d1", strokeWidth: 1 }} contentStyle={{ borderRadius: 12, border: "1px solid #e7ebe2", boxShadow: "0 8px 24px -12px rgba(45,64,33,.25)", fontSize: 12 }} formatter={(value: number) => [selectedSatellite === "sentinel-2" ? value.toFixed(2).replace(".", ",") : `${value.toFixed(1)} dB`, meta.unit]} />
+                        <Tooltip cursor={{ stroke: "#d9e5d1", strokeWidth: 1 }} contentStyle={{ borderRadius: 12, border: "1px solid #e7ebe2", boxShadow: "0 8px 24px -12px rgba(45,64,33,.25)", fontSize: 12 }} formatter={(value: any) => [selectedSatellite === "sentinel-2" ? Number(value).toFixed(2).replace(".", ",") : `${Number(value).toFixed(1)} dB`, meta.unit]} />
                         <Area type="monotone" dataKey="valor" stroke={meta.stroke} strokeWidth={2.5} fill={`url(#fill-${selectedSatellite})`} dot={{ r: 2.8, fill: meta.stroke, strokeWidth: 0 }} activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }} />
                       </AreaChart>
                     </ResponsiveContainer>

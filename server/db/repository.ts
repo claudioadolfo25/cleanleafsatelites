@@ -858,6 +858,75 @@ export async function saveTenantSettingsDb(
   return updated;
 }
 
+export type TenantInfoRecord = {
+  id: string;
+  nombre: string;
+  plan_id: string;
+  estado: string;
+  creado_en?: string;
+};
+
+const memoryTenants = new Map<string, TenantInfoRecord>();
+const memoryApiKeyHashes = new Set<string>();
+
+export async function createTenantDb(
+  data: { nombre: string; plan_id: string },
+  accessToken?: string
+): Promise<TenantInfoRecord> {
+  const client = getSupabaseUserClient(accessToken);
+  const newTenant: TenantInfoRecord = {
+    id: `tenant-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    nombre: data.nombre,
+    plan_id: data.plan_id,
+    estado: "trial",
+    creado_en: new Date().toISOString(),
+  };
+
+  if (client) {
+    const { data: inserted } = await client
+      .from("tenants")
+      .insert({
+        id: newTenant.id,
+        nombre: newTenant.nombre,
+        plan_id: newTenant.plan_id,
+        estado: newTenant.estado,
+      })
+      .select()
+      .single();
+
+    if (inserted) {
+      return {
+        id: inserted.id,
+        nombre: inserted.nombre,
+        plan_id: inserted.plan_id,
+        estado: inserted.estado,
+        creado_en: inserted.creado_en,
+      };
+    }
+  }
+
+  memoryTenants.set(newTenant.id, newTenant);
+  return newTenant;
+}
+
+export async function saveApiKeyHashDb(
+  data: { tenant_id: string; nombre: string; key_hash: string },
+  accessToken?: string
+): Promise<void> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    await client.from("api_keys").insert({
+      tenant_id: data.tenant_id,
+      nombre: data.nombre,
+      key_hash: data.key_hash,
+    });
+    return;
+  }
+
+  memoryApiKeyHashes.add(data.key_hash);
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string

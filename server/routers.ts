@@ -32,6 +32,7 @@ import { getSignedReportDownloadUrlService } from "./reports/storage-service";
 import {
   createPredioDb,
   createSolicitudAnalisisDb,
+  createTenantDb,
   deletePredioDb,
   getDashboardDataDb,
   getPredioByIdDb,
@@ -44,6 +45,7 @@ import {
   listPrediosDb,
   listReportsDb,
   recordConsumoDb,
+  saveApiKeyHashDb,
   saveInformeDb,
   saveMedicionesDb,
   saveTenantSettingsDb,
@@ -595,16 +597,27 @@ export const appRouter = router({
         }),
     }),
     onboarding: router({
-      createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
-        data: { tenantId: `tenant-${Date.now()}`, nombre: input.organizationName, planId: input.planId, estado: "trial" as const },
-        error: null,
-      })),
+      createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(async ({ input, ctx }) => {
+        const allowedRoles = ["admin", "owner", "super_admin"];
+        if (!allowedRoles.includes(ctx.user.role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Solo administradores pueden registrar nuevos tenants." });
+        }
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const tenant = await createTenantDb({ nombre: input.organizationName, plan_id: input.planId }, accessToken);
+        return { data: { tenantId: tenant.id, nombre: tenant.nombre, planId: tenant.plan_id, estado: tenant.estado }, error: null };
+      }),
     }),
     apiKeys: router({
-      create: protectedProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(({ input }) => {
+      create: protectedProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(async ({ input, ctx }) => {
+        const allowedRoles = ["admin", "owner", "super_admin"];
+        if (!allowedRoles.includes(ctx.user.role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Solo administradores pueden generar API keys." });
+        }
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const plainKey = `cl_${randomBytes(18).toString("hex")}`;
         const hash = createHash("sha256").update(plainKey).digest("hex");
-        return { data: { tenantId: input.tenantId, nombre: input.nombre, key: plainKey, hash, warning: "La key se muestra una sola vez en este stub." }, error: null };
+        await saveApiKeyHashDb({ tenant_id: input.tenantId, nombre: input.nombre, key_hash: hash }, accessToken);
+        return { data: { tenantId: input.tenantId, nombre: input.nombre, key: plainKey, warning: "La API key solo se muestra una vez. Guárdala en un lugar seguro." }, error: null };
       }),
     }),
   }),

@@ -495,6 +495,46 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Tests de Humo de Navegación del Dashboard", () => {
+    it("verifica que todos los procedimientos tRPC asociados a enlaces del menú respondan exitosamente", async () => {
+      const userToken = await createMockJwt({
+        sub: "usr_smoke_test_01",
+        email: "smoke@cleanleaf.cl",
+        app_metadata: { tenant_id: "tenant-smoke-01", role: "user" },
+      });
+
+      // 1. Dashboard / Resumen (`/dashboard`)
+      const dashRes = await request(app)
+        .get("/api/trpc/cleanleaf.dashboard")
+        .set("Authorization", `Bearer ${userToken}`);
+      expect(dashRes.status).toBe(200);
+
+      // 2. Mis Predios (`/dashboard/predios`)
+      const prediosRes = await request(app)
+        .get("/api/trpc/predios.list")
+        .set("Authorization", `Bearer ${userToken}`);
+      expect(prediosRes.status).toBe(200);
+
+      // 3. Informes (`/dashboard/informes`)
+      const reportsRes = await request(app)
+        .get("/api/trpc/cleanleaf.reports.list")
+        .set("Authorization", `Bearer ${userToken}`);
+      expect(reportsRes.status).toBe(200);
+
+      // 4. Configuración Satelital (`/dashboard/configuracion/satelites`)
+      const prefsRes = await request(app)
+        .get("/api/trpc/preferences.getUserPreferences")
+        .set("Authorization", `Bearer ${userToken}`);
+      expect(prefsRes.status).toBe(200);
+
+      // 5. Mi Perfil (`/dashboard/perfil`)
+      const profileRes = await request(app)
+        .get("/api/trpc/profile.get")
+        .set("Authorization", `Bearer ${userToken}`);
+      expect(profileRes.status).toBe(200);
+    });
+  });
+
   describe("Gestión de Perfil y Preferencias de Usuario (tRPC & RLS)", () => {
     it("obtiene y actualiza preferencias de usuario individual vía tRPC", async () => {
       const userToken = await createMockJwt({

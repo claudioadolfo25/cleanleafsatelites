@@ -23,7 +23,7 @@ const mockCtx = {
     id: "usr_test",
     email: "test@cleanleaf.cl",
     tenantId: "tenant-test",
-    role: "user",
+    role: "admin",
   },
   req: {} as any,
   res: {} as any,
