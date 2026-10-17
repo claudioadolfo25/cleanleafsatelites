@@ -100,7 +100,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     }
 
     it("GET /api/trpc/cleanleaf.reports.getById sin token responde UNAUTHORIZED en JSON", async () => {
-      const input = encodeURIComponent(JSON.stringify({ "0": { json: { id: "sol-123" } } }));
+      const input = encodeURIComponent(JSON.stringify({ json: { id: "sol-123" } }));
       const res = await request(app).get(`/api/trpc/cleanleaf.reports.getById?input=${input}`);
       expect(res.headers["content-type"]).toMatch(/json/);
       expect(res.text).not.toContain("<html>");
@@ -274,6 +274,70 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       expect(res.headers["content-type"]).toMatch(/json/);
       expect(res.body.result.data.json.data).toHaveProperty("key");
       expect(res.body.result.data.json.data.key).toMatch(/^cl_/);
+    });
+  });
+
+  describe("Aislamiento Multi-Tenant (RLS & Filtrado Estricto por Tenant)", () => {
+    it("impide que un usuario del Tenant B lea un informe creado por el Tenant A", async () => {
+      const tokenTenantA = await createMockJwt({
+        sub: "usr_tenant_a",
+        email: "usuarioA@tenantA.cl",
+        app_metadata: { tenant_id: "tenant-alpha-100", role: "user" },
+      });
+
+      const tokenTenantB = await createMockJwt({
+        sub: "usr_tenant_b",
+        email: "usuarioB@tenantB.cl",
+        app_metadata: { tenant_id: "tenant-beta-200", role: "user" },
+      });
+
+      // 1. Tenant A crea un análisis
+      const createRes = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${tokenTenantA}`)
+        .send({
+          json: {
+            predioId: "predio-a1",
+            predioNombre: "Fundo Alpha",
+            hectareas: 30,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "unique-key-tenant-alpha-001",
+          },
+        });
+
+      expect(createRes.status).toBe(200);
+      const solicitudIdTenantA = createRes.body.result.data.json.id;
+
+      // 2. Tenant B intenta leer el informe de Tenant A por ID -> debe devolver null (no encontrado/no autorizado)
+      const inputParam = encodeURIComponent(JSON.stringify({ json: { id: solicitudIdTenantA } }));
+      const getByIdRes = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getById?input=${inputParam}`)
+        .set("Authorization", `Bearer ${tokenTenantB}`);
+
+      expect(getByIdRes.status).toBe(200);
+      expect(getByIdRes.body.result.data.json).toBeNull();
+
+      // 3. Tenant B lista sus informes -> el informe del Tenant A NO debe aparecer
+      const listResTenantB = await request(app)
+        .get("/api/trpc/cleanleaf.reports.list")
+        .set("Authorization", `Bearer ${tokenTenantB}`);
+
+      expect(listResTenantB.status).toBe(200);
+      const reportsTenantB = listResTenantB.body.result.data.json;
+      const foundInTenantB = Array.isArray(reportsTenantB) && reportsTenantB.some((r: any) => r.id === solicitudIdTenantA || r.solicitudId === solicitudIdTenantA);
+      expect(foundInTenantB).toBe(false);
+
+      // 4. Tenant A lista sus informes -> el informe SÍ aparece para Tenant A
+      const listResTenantA = await request(app)
+        .get("/api/trpc/cleanleaf.reports.list")
+        .set("Authorization", `Bearer ${tokenTenantA}`);
+
+      expect(listResTenantA.status).toBe(200);
+      const reportsTenantA = listResTenantA.body.result.data.json;
+      const foundInTenantA = Array.isArray(reportsTenantA) && reportsTenantA.some((r: any) => r.id === solicitudIdTenantA || r.solicitudId === solicitudIdTenantA);
+      expect(foundInTenantA).toBe(true);
     });
   });
 });

@@ -26,6 +26,16 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { isProductionEnv } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import {
+  createSolicitudAnalisisDb,
+  getReportByIdDb,
+  getTenantUsageAndLimits,
+  listReportsDb,
+  recordConsumoDb,
+  saveInformeDb,
+  saveMedicionesDb,
+  writeWorkflowLogDb,
+} from "./db/repository";
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -98,7 +108,12 @@ const catalogClient = createCatalogClient({
     : undefined,
 });
 
-async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "tenant-default") {
+async function createAnalysisRequest(
+  input: AnalysisInput,
+  tenantId: string = "tenant-default",
+  accessToken?: string,
+  userId?: string
+) {
   const satellites = input.satellites as SatelliteId[];
   if (!validarSatelitesSolicitados(input.vertical, satellites)) {
     throw new Error(satelliteValidationMessage(input.vertical, satellites));
@@ -109,15 +124,13 @@ async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "t
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const rawIdempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
   const idempotencyKey = `${tenantId}:${rawIdempotencyKey}`;
+
   const previous = idempotencyStore.get(idempotencyKey);
   if (previous) return previous;
 
+  // 1. Obtener uso y límites calculados en servidor desde DB
+  const { planId, haMesUsadas, prediosActivos } = await getTenantUsageAndLimits(tenantId, accessToken);
   const tier = getTierForSuperficie(input.hectareas);
-
-  // TODO (Fase 2): Derivar planId, haMesUsadas y prediosActivos desde la base de datos (Supabase) según el tenantId/usuario.
-  const planId: PlanId = "regional_pyme";
-  const haMesUsadas = 0;
-  const prediosActivos = 1;
 
   const planResult = validatePlanLimits(planId, tier, input.hectareas, {
     haMesUsadas,
@@ -125,10 +138,24 @@ async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "t
   });
   if (!planResult.allowed) throw new Error(`${planResult.code}: ${planResult.message}`);
 
-  const id = `sol-${Date.now()}`;
+  // 2. Persistir/recuperar la solicitud por idempotencia (tenant_id + idempotency_key) en DB
+  const solicitudDb = await createSolicitudAnalisisDb({
+    tenant_id: tenantId,
+    predio_id: input.predioId,
+    superficie_ha: input.hectareas,
+    tier,
+    satelites_solicitados: satellites,
+    estado: tier === "tier3_regional" ? "requiere_revision" : "procesando",
+    motor_usado: processingModeForTier(tier),
+    variables_solicitadas: variables,
+    correlation_id: correlationId,
+    idempotency_key: rawIdempotencyKey,
+    solicitado_por: userId ?? null,
+  }, accessToken);
+
   if (tier === "tier3_regional") {
     const regionalResult = {
-      id,
+      id: solicitudDb.id ?? `sol-${Date.now()}`,
       correlationId,
       idempotencyKey,
       estado: "requiere_revision" as const,
@@ -143,20 +170,48 @@ async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "t
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
     idempotencyStore.set(idempotencyKey, regionalResult);
+    await writeWorkflowLogDb(tenantId, "createAnalysis", "exitoso", null, regionalResult, accessToken);
     return regionalResult;
   }
 
+  // 3. Procesar medición
   const firstSatellite = satellites[0];
   const firstVariable = variables[0];
   const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
   assertTransition(history[0], history[1]);
   assertTransition(history[1], history[2]);
   const result = await observationProvider.query({ predioId: input.predioId, satellite: firstSatellite, variable: firstVariable, tier, periodFrom: input.periodFrom, periodTo: input.periodTo, bbox: input.bbox });
-  const report = buildAnalysisReport({ id, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
+  const report = buildAnalysisReport({ id: solicitudDb.id ?? `sol-${Date.now()}`, predioId: input.predioId, predioNombre: input.predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
   history.push("completado");
   assertTransition(history[2], history[3]);
+
+  // 4. Guardar Informe, Mediciones, Consumo y Logs en DB
+  await saveInformeDb({
+    tenant_id: tenantId,
+    predio_id: input.predioId,
+    solicitud_id: solicitudDb.id,
+    tipo_lente: "agro",
+    contenido: report as any,
+  }, accessToken);
+
+  const acquisitionDate = (result as any).fecha ?? (result as any).acquired_at;
+  const acquisitionIsoStr = acquisitionDate instanceof Date ? acquisitionDate.toISOString() : typeof acquisitionDate === "string" ? acquisitionDate : new Date().toISOString();
+
+  await saveMedicionesDb([{
+    tenant_id: tenantId,
+    predio_id: input.predioId,
+    solicitud_id: solicitudDb.id,
+    satelite: firstSatellite,
+    variable: firstVariable,
+    valor: result.valor,
+    unidad: result.unidad,
+    fecha_adquisicion: acquisitionIsoStr,
+  }], accessToken);
+
+  await recordConsumoDb(tenantId, input.hectareas, accessToken);
+
   const completedResult = {
-    id,
+    id: solicitudDb.id ?? `sol-${Date.now()}`,
     correlationId,
     idempotencyKey,
     estado: "completado" as const,
@@ -173,7 +228,9 @@ async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "t
     informe: report,
     mensaje: `Solicitud creada para ${input.predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
   };
+
   idempotencyStore.set(idempotencyKey, completedResult);
+  await writeWorkflowLogDb(tenantId, "createAnalysis", "exitoso", null, completedResult, accessToken);
   return completedResult;
 }
 
@@ -202,8 +259,31 @@ export const appRouter = router({
       };
     }),
     reports: router({
-      list: protectedProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
-      getById: protectedProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+      list: protectedProcedure
+        .input(z.object({
+          search: z.string().optional(),
+          predio: z.string().optional(),
+          satellite: z.string().optional(),
+          status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional()
+        }).optional())
+        .query(async ({ input, ctx }) => {
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          const dbReports = await listReportsDb(ctx.user.tenantId, input, accessToken);
+          if (dbReports && dbReports.length > 0) {
+            return dbReports;
+          }
+          return listReports(input);
+        }),
+      getById: protectedProcedure
+        .input(z.object({ id: z.string().min(1) }))
+        .query(async ({ input, ctx }) => {
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          const dbReport = await getReportByIdDb(ctx.user.tenantId, input.id, accessToken);
+          if (dbReport) {
+            return dbReport;
+          }
+          return getReport(input.id) ?? null;
+        }),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
@@ -227,14 +307,18 @@ export const appRouter = router({
       }
       return catalogClient(input);
     }),
-    createAnalysis: protectedProcedure.input(analysisInput).mutation(({ input, ctx }) => createAnalysisRequest(input, ctx.user.tenantId)),
+    createAnalysis: protectedProcedure.input(analysisInput).mutation(({ input, ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      return createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id);
+    }),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: copernicusLiveEnabled || isTestRuntime ? "ok" : "degraded", mode: isTestRuntime ? "test_mock" : copernicusLiveEnabled ? "copernicus_live_staging" : "synthetic_fallback", catalogAuthConfigured: copernicusLiveEnabled }, error: null })),
     solicitudes: router({
       create: protectedProcedure.input(analysisInput).mutation(async ({ input, ctx }) => {
         try {
-          return { data: await createAnalysisRequest(input, ctx.user.tenantId), error: null };
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          return { data: await createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id), error: null };
         } catch (error) {
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
         }
