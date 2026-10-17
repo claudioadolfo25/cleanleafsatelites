@@ -18,6 +18,13 @@ const userOrIpKey = (req: Request): string => {
   return req.ip || "127.0.0.1";
 };
 
+// Estructura de configuración extensible para almacenamiento de Rate Limiting (Redis / Upstash / Memory)
+export const rateLimitStoreDriver = process.env.RATE_LIMIT_STORE_DRIVER || "memory";
+export const rateLimitDistributedConfig = {
+  driver: rateLimitStoreDriver,
+  redisUrl: process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL || null,
+};
+
 const createCustomRateLimiter = (maxRequests: number, windowMs: number) => {
   return rateLimit({
     windowMs,

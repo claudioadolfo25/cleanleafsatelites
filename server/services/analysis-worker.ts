@@ -113,6 +113,17 @@ export async function processSolicitud(
     const cacheKey = generateCacheKey(queryReq);
     let result = await getObservationCacheDb(cacheKey, accessToken);
 
+    if (result) {
+      await writeWorkflowLogDb(
+        tenantId,
+        "processSolicitud",
+        "exitoso",
+        null,
+        { solicitudId, cacheHit: true, cacheKey },
+        accessToken
+      );
+    }
+
     let lastError: Error | null = null;
 
     if (!result) {
@@ -131,6 +142,7 @@ export async function processSolicitud(
               result.quality_warning = quality.warningMessage;
             }
 
+            // Persistir en observacion_cache para evitar llamadas redundantes a Copernicus CDSE
             await saveObservationCacheDb(cacheKey, result, 300, accessToken);
             break;
           }
@@ -154,10 +166,10 @@ export async function processSolicitud(
         "processSolicitud",
         "fallido",
         errorMessage,
-        { solicitudId, estado: "error_final" },
+        { solicitudId, estado: "error_final", copernicusPolicy: copernicusProdPolicy },
         accessToken
       );
-      // ¡IMPORTANTE! Las solicitudes fallidas NO registran consumo de hectáreas.
+      // ¡IMPORTANTE! Las solicitudes fallidas NO registran consumo de hectáreas ni persisten filas sintéticas en modo live.
       return { success: false, estado: "error_final", error: errorMessage };
     }
 
