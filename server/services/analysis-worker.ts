@@ -196,7 +196,32 @@ export async function processSolicitud(
       fecha_adquisicion: acquisitionIsoStr,
     }], accessToken);
 
-    // 5. Registrar Consumo ÚNICAMENTE al completar con éxito
+    // 5. Determinar proveniencia y guardar escenas STAC de Copernicus
+    const { getProvenance } = await import("./copernicus-scenes-service");
+    const { saveEscenasAndProvenanceDb } = await import("../db/repository");
+    const geometryToUseForProv = (predioDbForReport?.geometria as GeoJSONGeometry) || (solicitud.geometria as GeoJSONGeometry);
+    const prov = await getProvenance(
+      solicitudId,
+      geometryToUseForProv,
+      "2024-01-01T00:00:00Z",
+      new Date().toISOString()
+    );
+
+    await saveEscenasAndProvenanceDb(
+      tenantId,
+      solicitudId,
+      prov.scenes.map(s => ({
+        id: s.id,
+        satelite: s.satelite,
+        producto: s.producto,
+        fecha_sensado: s.fechaSensado,
+        cobertura_nubes: s.coberturaNubes,
+        baseline_procesamiento: s.baselineProcesamiento,
+      })),
+      accessToken
+    );
+
+    // 6. Registrar Consumo ÚNICAMENTE al completar con éxito
     await recordConsumoDb(tenantId, solicitud.superficie_ha, accessToken);
 
     // 6. Transición final -> completado

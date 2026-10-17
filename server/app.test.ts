@@ -535,6 +535,44 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Casos de Uso searchScenes, getProvenance y Atribución Legal", () => {
+    it("busca escenas STAC filtrando por cobertura de nubes", async () => {
+      const { searchScenes } = await import("./services/copernicus-scenes-service");
+      const scenes = await searchScenes(validValdiviaPolygon, "2024-01-01T00:00:00Z", "2024-01-31T00:00:00Z", 20);
+      expect(Array.isArray(scenes)).toBe(true);
+      expect(scenes.every(s => s.coberturaNubes === null || s.coberturaNubes <= 20)).toBe(true);
+    });
+
+    it("genera el texto de atribución legal correcto con años extraídos de las escenas", async () => {
+      const { generateAttributionText } = await import("./services/copernicus-scenes-service");
+      const mockScenes = [
+        { id: "S2A_1", satelite: "sentinel-2", producto: "sentinel-2-l2a", fechaSensado: "2023-11-10T12:00:00Z", coberturaNubes: 5, baselineProcesamiento: "05.10" },
+        { id: "S2B_2", satelite: "sentinel-2", producto: "sentinel-2-l2a", fechaSensado: "2024-02-15T12:00:00Z", coberturaNubes: 8, baselineProcesamiento: "05.10" },
+      ];
+
+      const text = generateAttributionText(mockScenes);
+      expect(text).toBe("Contiene datos modificados de Copernicus Sentinel [2023, 2024]");
+    });
+
+    it("permite a usuarios autenticados realizar catalogSearch en producción", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-stac-test", role: "user" },
+      });
+
+      const res = await request(app)
+        .post("/api/trpc/cleanleaf.catalogSearch")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            collections: ["SENTINEL-2"],
+          },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.result.data.json).toHaveProperty("type", "FeatureCollection");
+    });
+  });
+
   describe("Caso de Uso getIndexTimeSeries y Persistencia en observaciones_serie", () => {
     it("obtiene y almacena incrementalmente la serie temporal de índices", async () => {
       const token = await createMockJwt({

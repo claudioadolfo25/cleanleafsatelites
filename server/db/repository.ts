@@ -1233,6 +1233,92 @@ export async function saveObservacionesSerieDb(
   }
 }
 
+export type EscenaRecord = {
+  id: string;
+  satelite: string;
+  producto: string;
+  fecha_sensado: string;
+  cobertura_nubes?: number | null;
+  baseline_procesamiento?: string | null;
+  creado_en?: string;
+};
+
+const memoryEscenas = new Map<string, EscenaRecord>();
+const memoryInformeEscenas: { informe_id: string; escena_id: string; tenant_id: string }[] = [];
+
+export async function saveEscenasAndProvenanceDb(
+  tenantId: string,
+  informeId: string,
+  escenas: EscenaRecord[],
+  accessToken?: string
+): Promise<void> {
+  if (escenas.length === 0) return;
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      await client.from("escenas").upsert(
+        escenas.map(e => ({
+          id: e.id,
+          satelite: e.satelite,
+          producto: e.producto,
+          fecha_sensado: e.fecha_sensado,
+          cobertura_nubes: e.cobertura_nubes ?? null,
+          baseline_procesamiento: e.baseline_procesamiento ?? null,
+        }))
+      );
+
+      await client.from("informe_escenas").upsert(
+        escenas.map(e => ({
+          informe_id: informeId,
+          escena_id: e.id,
+          tenant_id: tenantId,
+        }))
+      );
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+
+  for (const e of escenas) {
+    memoryEscenas.set(e.id, e);
+    if (!memoryInformeEscenas.some(ie => ie.informe_id === informeId && ie.escena_id === e.id)) {
+      memoryInformeEscenas.push({ informe_id: informeId, escena_id: e.id, tenant_id: tenantId });
+    }
+  }
+}
+
+export async function listEscenasForInformeDb(
+  tenantId: string,
+  informeId: string,
+  accessToken?: string
+): Promise<EscenaRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { data } = await client
+        .from("informe_escenas")
+        .select("escena_id, escenas(*)")
+        .eq("tenant_id", tenantId)
+        .eq("informe_id", informeId);
+
+      if (data && data.length > 0) {
+        return data.map((row: any) => row.escenas).filter(Boolean);
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const escenaIds = memoryInformeEscenas
+    .filter(ie => ie.tenant_id === tenantId && ie.informe_id === informeId)
+    .map(ie => ie.escena_id);
+
+  return escenaIds.map(id => memoryEscenas.get(id)).filter((e): e is EscenaRecord => Boolean(e));
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string
