@@ -20,21 +20,25 @@ import {
 } from "../db/repository";
 
 const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
+const copernicusProdPolicy = process.env.COPERNICUS_PROD_POLICY ?? "synthetic_demo_only";
 const isTestRuntime = process.env.NODE_ENV === "test";
+const isDemoMode = process.env.DEMO_MODE === "true" || copernicusProdPolicy === "synthetic_demo_only";
+
 const copernicusLiveEnabled =
   copernicusMode === "live" &&
   isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
 
 const syntheticProvider = new SyntheticCopernicusProvider(
-  copernicusLiveEnabled
-    ? "Fallback sintético preparado para errores de Copernicus CDSE."
-    : "Copernicus CDSE solo se activa en staging autorizado con COPERNICUS_MODE=live y ambas credenciales."
+  "Modo demostración o sintético activo."
 );
 
+// Con COPERNICUS_PROD_POLICY=live, eliminar FallbackObservationProvider del camino de producción:
+// si CDSE falla tras los reintentos, la solicitud queda en error_final.
+// El proveedor sintético solo se usa con DEMO_MODE=true o policy synthetic_demo_only.
 export const workerObservationProvider: EarthObservationProvider = isTestRuntime
   ? new MockCopernicusProvider()
   : copernicusLiveEnabled
-  ? new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider)
+  ? copernicusCDSEProvider
   : syntheticProvider;
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -156,26 +160,66 @@ export async function processSolicitud(
       return { success: false, estado: "error_final", error: errorMessage };
     }
 
-    // 4. Interpretar serie temporal real y evaluar reglas de recomendación
+    // 4. Invocar getIndexTimeSeries (o almacenamiento incremental de serie temporal) por predio y satélite
+    const { saveObservacionesSerieDb, listObservacionesSerieDb, createAlertWithDeduplicationDb } = await import("../db/repository");
     const { interpretTimeSeries } = await import("../analysis/interpret");
-    const { createAlertWithDeduplicationDb, listObservacionesSerieDb } = await import("../db/repository");
+    const { buildMultiVariableEvalscript } = await import("./copernicus-time-series-service");
+
+    const requestedSatellites = solicitud.satelites_solicitados ?? [firstSatellite];
+    const requestedVariables = solicitud.variables_solicitadas ?? [firstVariable];
+
+    if (solicitud.predio_id && geometryToUse) {
+      for (const sat of requestedSatellites) {
+        const evalMeta = buildMultiVariableEvalscript(sat, requestedVariables);
+        const acquisitionDate = (result as any).fecha ?? (result as any).acquired_at ?? new Date();
+        const acquisitionIsoStr =
+          acquisitionDate instanceof Date
+            ? acquisitionDate.toISOString()
+            : typeof acquisitionDate === "string"
+            ? acquisitionDate
+            : new Date().toISOString();
+
+        const fromDateStr = new Date(new Date(acquisitionIsoStr).getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+
+        const pointsToSave = requestedVariables.map(v => {
+          const isSynthetic = (result as any).data_source === "synthetic" || isDemoMode;
+          const val = v === firstVariable ? result.valor : result.valor;
+          return {
+            tenant_id: tenantId,
+            predio_id: solicitud.predio_id!,
+            satelite: sat,
+            variable: v,
+            intervalo_desde: fromDateStr,
+            intervalo_hasta: acquisitionIsoStr,
+            valor: val,
+            porcentaje_pixeles_validos: (result as any).valid_pixel_percentage ?? 0.85,
+            nivel_confianza: result.confidence_level ?? "alta",
+            evalscript_version: evalMeta.version,
+            evalscript_hash: evalMeta.hash,
+          };
+        });
+
+        await saveObservacionesSerieDb(pointsToSave, accessToken);
+      }
+    }
 
     const historySeries = solicitud.predio_id
       ? await listObservacionesSerieDb(tenantId, solicitud.predio_id, firstSatellite, firstVariable, accessToken)
       : [];
 
-    const seriesForInterpret = [
-      ...historySeries.map(s => ({
-        valor: s.valor,
-        porcentajePixelesValidos: s.porcentaje_pixeles_validos,
-        nivelConfianza: s.nivel_confianza,
-      })),
-      {
-        valor: result.valor,
-        porcentajePixelesValidos: result.valid_pixel_percentage ?? 0.85,
-        nivelConfianza: result.confidence_level ?? "alta",
-      },
-    ];
+    const seriesForInterpret = historySeries.length > 0
+      ? historySeries.map(s => ({
+          valor: s.valor,
+          porcentajePixelesValidos: s.porcentaje_pixeles_validos,
+          nivelConfianza: s.nivel_confianza,
+        }))
+      : [
+          {
+            valor: result.valor,
+            porcentajePixelesValidos: (result as any).valid_pixel_percentage ?? 0.85,
+            nivelConfianza: result.confidence_level ?? "alta",
+          },
+        ];
 
     const interpretation = interpretTimeSeries(seriesForInterpret, "agricultura", firstVariable);
 

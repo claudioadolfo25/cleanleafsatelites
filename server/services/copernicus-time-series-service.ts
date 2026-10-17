@@ -18,17 +18,9 @@ export function computeEvalscriptHash(evalscript: string): string {
 }
 
 export function isSstSupportedForSatellite(satellite: string): { supported: boolean; reason?: string } {
-  if (satellite === "sentinel-3") {
-    // SST requiere el instrumento SLSTR (Sea and Land Surface Temperature Radiometer)
-    // El producto por defecto OLCI solo entrega clorofila/radiación
-    return {
-      supported: true,
-      reason: "SST requiere Sentinel-3 SLSTR_L2_WST",
-    };
-  }
   return {
     supported: false,
-    reason: "SST solo está disponible para Sentinel-3 SLSTR",
+    reason: "La variable sst no está disponible en el catálogo de Sentinel Hub en CDSE (SLSTR L2 WST no soportado) y no se simula.",
   };
 }
 

@@ -76,7 +76,7 @@ export async function querySentinel2(predioId: string, variable = "ndvi"): Promi
   return measurement(predioId, "sentinel-2", variable);
 }
 
-export async function querySentinel3(predioId: string, variable = "sst"): Promise<SentinelMeasurement> {
+export async function querySentinel3(predioId: string, variable = "clorofila_a"): Promise<SentinelMeasurement> {
   return measurement(predioId, "sentinel-3", variable);
 }
 
