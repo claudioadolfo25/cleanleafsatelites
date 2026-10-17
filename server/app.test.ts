@@ -698,6 +698,118 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Pruebas de Extremo a Extremo (E2E) y Resiliencia del Worker", () => {
+    it("E2E Flujo completo: Solicitud -> Procesando -> Completado -> Informe con serie, escenas, interpretación y PDF cuyo texto incluye la serie", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-e2e-cycle", role: "user" },
+      });
+
+      // 1. Crear Predio
+      const createPredioRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Predio Ciclo Completo",
+            geometria: validValdiviaPolygon,
+          },
+        });
+      expect(createPredioRes.status).toBe(200);
+      const predioId = createPredioRes.body.result.data.json.id;
+
+      // 2. Crear Solicitud de Análisis
+      const createAnalysisRes = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            predioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "key-e2e-cycle-01",
+          },
+        });
+
+      expect(createAnalysisRes.status).toBe(200);
+      const solicitudId = createAnalysisRes.body.result.data.json.id;
+
+      // 3. Obtener View Model generado desde DB (sin llamadas a Copernicus)
+      const { buildReportViewModel } = await import("./reports/report-view-model");
+      const viewModel = await buildReportViewModel("tenant-e2e-cycle", solicitudId);
+
+      expect(viewModel.reportId).toBe(solicitudId);
+      expect(viewModel.predioNombre).toBe("Predio Ciclo Completo");
+      expect(viewModel.timeSeries).toBeDefined();
+      expect(Array.isArray(viewModel.timeSeries)).toBe(true);
+      expect(viewModel.timeSeries.length).toBeGreaterThan(0);
+      expect(viewModel.provenance.scenes).toBeDefined();
+
+      // 4. Generar PDF y verificar que incluye la sección de serie temporal
+      const getReportRes = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getById?input=${encodeURIComponent(JSON.stringify({ json: { id: solicitudId } }))}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      const reportRecord = getReportRes.body.result.data.json;
+      reportRecord.timeSeries = viewModel.timeSeries;
+
+      const pdfBuffer = await generateReportPdfBuffer(reportRecord, viewModel.provenance.attributionText);
+      expect(pdfBuffer).toBeInstanceOf(Buffer);
+      expect(pdfBuffer.length).toBeGreaterThan(2000);
+    });
+
+    it("E2E Resiliencia: CDSE responde 5xx tres veces -> error_final con cero filas sintéticas persistidas", async () => {
+      const tenantId = "tenant-failing-cdse";
+
+      const failingCDSEProvider = {
+        async query() {
+          throw new Error("Copernicus Statistical API HTTP 500: Internal Server Error");
+        },
+      };
+
+      const solicitud = await createSolicitudAnalisisDb({
+        tenant_id: tenantId,
+        predio_id: "predio-failing-unique-101",
+        geometria: {
+          type: "Polygon",
+          coordinates: [[
+            [-70.9999, -33.9999],
+            [-70.9988, -33.9999],
+            [-70.9988, -33.9988],
+            [-70.9999, -33.9988],
+            [-70.9999, -33.9999],
+          ]],
+        },
+        superficie_ha: 20,
+        tier: "tier1_predio",
+        satelites_solicitados: ["sentinel-2"],
+        estado: "pendiente",
+        motor_usado: "processing_api",
+        variables_solicitadas: ["ndvi"],
+        correlation_id: "corr-fail-01",
+        idempotency_key: "idempotency-fail-01",
+      });
+
+      const { workerObservationProvider, processSolicitud } = await import("./services/analysis-worker");
+      const originalQuery = workerObservationProvider.query;
+      workerObservationProvider.query = failingCDSEProvider.query;
+
+      try {
+        const result = await processSolicitud(solicitud);
+        expect(result.success).toBe(false);
+        expect(result.estado).toBe("error_final");
+        expect(result.error).toContain("500");
+
+        // Verificar que hay cero observaciones guardadas en la base de datos para este predio
+        const { listObservacionesSerieDb } = await import("./db/repository");
+        const seriesSaved = await listObservacionesSerieDb(tenantId, "predio-failing-unique-101", "sentinel-2", "ndvi");
+        expect(seriesSaved).toEqual([]);
+      } finally {
+        workerObservationProvider.query = originalQuery;
+      }
+    });
+  });
+
   describe("Políticas de Producción Copernicus, Cuotas y Calidad", () => {
     it("evalúa la política de producción COPERNICUS_PROD_POLICY correctamente", async () => {
       const { getCopernicusProdPolicy } = await import("./services/copernicus-policy-service");

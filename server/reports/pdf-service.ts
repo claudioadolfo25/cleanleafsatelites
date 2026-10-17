@@ -81,12 +81,12 @@ export async function generateReportPdfBuffer(
 
       doc.moveDown(1.2);
 
-      // 5. Tabla de Métricas Observadas
+      // 5. Tabla de Métricas Observadas y Serie Temporal
       doc
         .fillColor("#047857")
         .fontSize(12)
         .font("Helvetica-Bold")
-        .text("Métricas Observadas");
+        .text("Métricas Observadas y Serie Temporal");
 
       doc.moveDown(0.4);
 
@@ -106,6 +106,28 @@ export async function generateReportPdfBuffer(
         });
       } else {
         doc.fillColor("#6b7280").fontSize(9).text("No se registraron métricas en este periodo.");
+      }
+
+      const timeSeriesData = (report as any).timeSeries ?? (report as any).series;
+      if (Array.isArray(timeSeriesData) && timeSeriesData.length > 0) {
+        doc.moveDown(0.6);
+        doc
+          .fillColor("#065f46")
+          .fontSize(10)
+          .font("Helvetica-Bold")
+          .text("Serie Temporal de Observaciones (observaciones_serie):");
+
+        doc.moveDown(0.3);
+        timeSeriesData.slice(0, 10).forEach((pt: any) => {
+          const desde = pt.intervaloDesde ? pt.intervaloDesde.slice(0, 10) : "";
+          const hasta = pt.intervaloHasta ? pt.intervaloHasta.slice(0, 10) : "";
+          const valStr = pt.valor !== null && pt.valor !== undefined ? Number(pt.valor).toFixed(3) : "sin dato";
+          doc
+            .fillColor("#374151")
+            .fontSize(8.5)
+            .font("Helvetica")
+            .text(`  • [${desde} - ${hasta}] Valor: ${valStr} | Confianza: ${pt.nivelConfianza ?? pt.status ?? "alta"}`);
+        });
       }
 
       doc.moveDown(1.2);

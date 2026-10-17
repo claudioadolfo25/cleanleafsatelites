@@ -90,11 +90,11 @@ describe("contrato unificado de Sentinel", () => {
     expect(result.valor).toBeLessThanOrEqual(-5);
   });
 
-  it("devuelve SST válido para Sentinel-3", async () => {
-    const result = await querySentinel3("centro-acuicola", "sst");
-    expect(result).toMatchObject({ satelite: "sentinel-3", variable: "sst", unidad: "°C" });
+  it("devuelve clorofila_a válido para Sentinel-3", async () => {
+    const result = await querySentinel3("centro-acuicola", "clorofila_a");
+    expect(result).toMatchObject({ satelite: "sentinel-3", variable: "clorofila_a", unidad: "mg/m³" });
     expect(result.valor).toBeGreaterThanOrEqual(0);
-    expect(result.valor).toBeLessThanOrEqual(30);
+    expect(result.valor).toBeLessThanOrEqual(10);
   });
 
   it("resuelve el tier de tamaño de forma independiente", () => {
@@ -128,6 +128,7 @@ describe("creación de solicitud", () => {
       hectareas: 250,
       vertical: "acuicultura",
       satellites: ["sentinel-3"],
+      variables: ["clorofila_a"],
       planId: "regional_pyme",
     });
     expect(result).toMatchObject({ estado: "completado", tier: "tier2_extendido" });
