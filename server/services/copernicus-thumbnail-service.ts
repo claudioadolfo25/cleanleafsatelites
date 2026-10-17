@@ -1,5 +1,5 @@
 import type { GeoJSONGeometry } from "../geometry";
-import { uploadReportPdfService } from "../reports/storage-service";
+import { uploadReportPdfToStorage } from "../reports/storage-service";
 import { createAuditLogDb } from "../db/repository";
 
 export async function getFieldThumbnail(
@@ -15,8 +15,7 @@ export async function getFieldThumbnail(
       "base64"
     );
 
-    const storagePath = `thumbnails/${tenantId}/${solicitudId}.png`;
-    const uploadResult = await uploadReportPdfService(tenantId, `${solicitudId}-thumb`, mockImageBuffer, accessToken);
+    const storagePath = await uploadReportPdfToStorage(tenantId, `${solicitudId}-thumb`, mockImageBuffer, accessToken);
 
     await createAuditLogDb({
       tenant_id: tenantId,
@@ -26,7 +25,7 @@ export async function getFieldThumbnail(
     }, accessToken);
 
     return {
-      thumbnailUrl: uploadResult.path,
+      thumbnailUrl: storagePath,
     };
   } catch (err) {
     console.warn("[getFieldThumbnail] Cuota o servicio no disponible, continuando sin miniatura:", err);
