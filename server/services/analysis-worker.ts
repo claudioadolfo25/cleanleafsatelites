@@ -122,10 +122,14 @@ export async function processSolicitud(
     }
 
     // 4. Generar Informe y guardar Mediciones
+    const predioDbForReport = solicitud.predio_id
+      ? await getPredioByIdDb(tenantId, solicitud.predio_id, accessToken)
+      : null;
+
     const report = buildAnalysisReport({
       id: solicitudId,
       predioId: solicitud.predio_id ?? "predio-default",
-      predioNombre: "Predio",
+      predioNombre: predioDbForReport?.nombre || "Predio",
       tier: solicitud.tier,
       measurement: result,
     });

@@ -4,6 +4,7 @@ import * as jose from "jose";
 import { createApp } from "./app";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
+import { generateReportPdfBuffer } from "./reports/pdf-service";
 import { createSolicitudAnalisisDb, getTenantUsageAndLimits, getWorkflowLogsDb } from "./db/repository";
 
 async function createMockJwt(payload: Record<string, unknown> = {}) {
@@ -116,6 +117,83 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     it("deriva el BBOX exacto [minLng, minLat, maxLng, maxLat] desde el polígono", () => {
       const bbox = computeBBox(validValdiviaPolygon);
       expect(bbox).toEqual([-73.25, -39.82, -73.23, -39.8]);
+    });
+  });
+
+  describe("Servicio de Generación de PDF & Exportación GeoJSON", () => {
+    it("genera un buffer de PDF no vacío que contiene el nombre del predio", async () => {
+      const mockReport = {
+        id: "report-pdf-test-01",
+        tenantId: "tenant-pdf-test",
+        predioId: "predio-pdf-1",
+        predioNombre: "Fundo Los Robles Real",
+        fechaDesde: "2026-08-01",
+        fechaHasta: "2026-08-31",
+        generatedAt: new Date().toISOString(),
+        satellites: ["sentinel-2" as const],
+        variables: ["ndvi"],
+        status: "completado" as const,
+        progress: 100,
+        currentStep: "Informe listo",
+        alertLevel: "normal" as const,
+        summary: "Análisis vegetativo en nivel óptimo.",
+        recommendation: "Revisar riego en 10 días.",
+        trace: [],
+        metrics: [{ label: "NDVI Promedio", value: "0,68", comparison: "+0,04 vs previo" }],
+      };
+
+      const pdfBuffer = await generateReportPdfBuffer(mockReport, "Datos satelitales reales");
+      expect(pdfBuffer).toBeInstanceOf(Buffer);
+      expect(pdfBuffer.length).toBeGreaterThan(2000);
+
+      const pdfText = pdfBuffer.toString("binary");
+      expect(pdfText).toContain("PDF");
+    });
+
+    it("genera exportación GeoJSON con propiedades de métricas", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-geojson-export", role: "user" },
+      });
+
+      // Crear predio y análisis
+      const createPredioRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Fundo Export GeoJSON",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      const predioId = createPredioRes.body.result.data.json.id;
+
+      const analysisRes = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            predioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "key-geojson-export-01",
+          },
+        });
+
+      const reportId = analysisRes.body.result.data.json.id;
+
+      // Obtener GeoJSON
+      const inputParam = encodeURIComponent(JSON.stringify({ json: { id: reportId } }));
+      const geoJsonRes = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getGeoJson?input=${inputParam}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(geoJsonRes.status).toBe(200);
+      const geoJson = geoJsonRes.body.result.data.json;
+      expect(geoJson.type).toBe("FeatureCollection");
+      expect(geoJson.features).toHaveLength(1);
+      expect(geoJson.features[0].properties.predioNombre).toBe("Fundo Export GeoJSON");
     });
   });
 
@@ -418,7 +496,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
   });
 
   describe("Aislamiento Multi-Tenant (RLS & Filtrado Estricto por Tenant)", () => {
-    it("impide que un usuario del Tenant B lea un informe creado por el Tenant A", async () => {
+    it("impide que un usuario del Tenant B lea un informe o descargue PDF creado por el Tenant A", async () => {
       const tokenTenantA = await createMockJwt({
         sub: "usr_tenant_a",
         email: "usuarioA@tenantA.cl",
@@ -459,7 +537,22 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       expect(getByIdRes.status).toBe(200);
       expect(getByIdRes.body.result.data.json).toBeNull();
 
-      // 3. Tenant B lista sus informes -> el informe del Tenant A NO debe aparecer
+      // 3. Tenant B intenta obtener la URL firmada de descarga del PDF de Tenant A -> responde 403/Error
+      const downloadUrlRes = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getDownloadUrl?input=${inputParam}`)
+        .set("Authorization", `Bearer ${tokenTenantB}`);
+
+      expect(downloadUrlRes.status).toBe(403);
+
+      // 4. Tenant A obtiene exitosamente su URL firmada de descarga de PDF
+      const downloadUrlResTenantA = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getDownloadUrl?input=${inputParam}`)
+        .set("Authorization", `Bearer ${tokenTenantA}`);
+
+      expect(downloadUrlResTenantA.status).toBe(200);
+      expect(downloadUrlResTenantA.body.result.data.json).toHaveProperty("downloadUrl");
+
+      // 5. Tenant B lista sus informes -> el informe del Tenant A NO debe aparecer
       const listResTenantB = await request(app)
         .get("/api/trpc/cleanleaf.reports.list")
         .set("Authorization", `Bearer ${tokenTenantB}`);
@@ -469,7 +562,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       const foundInTenantB = Array.isArray(reportsTenantB) && reportsTenantB.some((r: any) => r.id === solicitudIdTenantA || r.solicitudId === solicitudIdTenantA);
       expect(foundInTenantB).toBe(false);
 
-      // 4. Tenant A lista sus informes -> el informe SÍ aparece para Tenant A
+      // 6. Tenant A lista sus informes -> el informe SÍ aparece para Tenant A
       const listResTenantA = await request(app)
         .get("/api/trpc/cleanleaf.reports.list")
         .set("Authorization", `Bearer ${tokenTenantA}`);

@@ -28,6 +28,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry, type GeoJSONPolygon } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
+import { getSignedReportDownloadUrlService } from "./reports/storage-service";
 import {
   createPredioDb,
   createSolicitudAnalisisDb,
@@ -400,6 +401,53 @@ export const appRouter = router({
             return dbReport;
           }
           return getReport(input.id) ?? null;
+        }),
+      getDownloadUrl: protectedProcedure
+        .input(z.object({ id: z.string().min(1) }))
+        .query(async ({ input, ctx }) => {
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          try {
+            return await getSignedReportDownloadUrlService(ctx.user.tenantId, input.id, accessToken);
+          } catch (error) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: error instanceof Error ? error.message : "Acceso no autorizado al informe",
+            });
+          }
+        }),
+      getGeoJson: protectedProcedure
+        .input(z.object({ id: z.string().min(1) }))
+        .query(async ({ input, ctx }) => {
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          const report = await getReportByIdDb(ctx.user.tenantId, input.id, accessToken);
+          if (!report || report.tenantId !== ctx.user.tenantId) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Informe no encontrado o no autorizado" });
+          }
+
+          const predio = await getPredioByIdDb(ctx.user.tenantId, report.predioId, accessToken);
+          const geometry = predio?.geometria || fallbackPolygonForPredio(report.predioId);
+
+          return {
+            type: "FeatureCollection" as const,
+            features: [
+              {
+                type: "Feature" as const,
+                id: report.id,
+                geometry,
+                properties: {
+                  reportId: report.id,
+                  predioNombre: report.predioNombre,
+                  tenantId: report.tenantId,
+                  periodo: `${report.fechaDesde} - ${report.fechaHasta}`,
+                  satelites: report.satellites,
+                  variables: report.variables,
+                  resumen: report.summary,
+                  recomendacion: report.recommendation,
+                  metricas: report.metrics,
+                },
+              },
+            ],
+          };
         }),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
