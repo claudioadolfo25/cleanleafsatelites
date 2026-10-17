@@ -60,7 +60,7 @@
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.44.5",
     "embla-carousel-react": "^8.6.0",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^8.7.1",
     "framer-motion": "^12.23.22",
     "helmet": "^8.3.0",
