@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
-interface ProtectedRouteProps {
-  component: React.ComponentType<any>;
-  [key: string]: any;
-}
-
-export default function ProtectedRoute({ component: Component, ...rest }: ProtectedRouteProps) {
+type ProtectedRouteProps = {
+  component: React.ComponentType;
+};
+export default function ProtectedRoute({ component: Component }: ProtectedRouteProps) {
   const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
@@ -64,5 +62,5 @@ export default function ProtectedRoute({ component: Component, ...rest }: Protec
     return null;
   }
 
-  return <Component {...rest} />;
+  return <Component />;
 }

@@ -566,7 +566,7 @@ export const appRouter = router({
       // Habilitar consulta de catálogo STAC en producción para todos los usuarios autenticados
       try {
         return await catalogClient(input);
-      } catch (err: any) {
+      } catch (error: unknown) {
         return {
           type: "FeatureCollection" as const,
           context: { limit: input.limit ?? 20, matched: 1, returned: 1, next: undefined },

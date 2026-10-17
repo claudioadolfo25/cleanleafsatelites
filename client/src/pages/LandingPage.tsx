@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import type { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Satellite, ShieldCheck, ArrowRight, Activity, Cloud, Eye, User, LogOut } from "lucide-react";
+import { Satellite, ShieldCheck, ArrowRight, Activity, Cloud, Eye, User as UserIcon, LogOut } from "lucide-react";
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -60,7 +61,7 @@ export default function LandingPage() {
                   onClick={() => setLocation("/dashboard")}
                   className="bg-emerald-700 hover:bg-emerald-800 text-white gap-2 text-sm"
                 >
-                  <User className="h-4 w-4" /> Ir al Dashboard
+                  <UserIcon className="h-4 w-4" /> Ir al Dashboard
                 </Button>
                 <Button
                   variant="outline"

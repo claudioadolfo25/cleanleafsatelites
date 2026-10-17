@@ -8,6 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Satellite, Mail, Phone, ShieldCheck, AlertCircle, CheckCircle2, ArrowLeft, KeyRound } from "lucide-react";
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export default function AuthPage() {
   const [, setLocation] = useLocation();
 
@@ -65,8 +69,8 @@ export default function AuthPage() {
         if (error) throw error;
         setSuccessMsg("Instrucciones de recuperación enviadas a tu correo.");
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Ocurrió un error en la autenticación por correo.");
+    } catch (error: unknown) {
+      setErrorMsg(errorMessage(error, "Ocurrió un error en la autenticación por correo."));
     } finally {
       setLoading(false);
     }
@@ -87,11 +91,11 @@ export default function AuthPage() {
       if (error) throw error;
       setOtpSent(true);
       setSuccessMsg(`Código OTP enviado por SMS a ${formattedPhone}.`);
-    } catch (err: any) {
-      setErrorMsg(
-        err?.message ||
-          "Error al enviar SMS. Si el servicio de SMS no está configurado en Supabase/Twilio, contacta al administrador."
-      );
+    } catch (error: unknown) {
+      setErrorMsg(errorMessage(
+        error,
+        "Error al enviar SMS. Si el servicio de SMS no está configurado en Supabase/Twilio, contacta al administrador."
+      ));
     } finally {
       setLoading(false);
     }
@@ -112,8 +116,8 @@ export default function AuthPage() {
       });
       if (error) throw error;
       setLocation("/dashboard");
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Código OTP inválido o expirado.");
+    } catch (error: unknown) {
+      setErrorMsg(errorMessage(error, "Código OTP inválido o expirado."));
     } finally {
       setLoading(false);
     }
@@ -133,8 +137,8 @@ export default function AuthPage() {
         },
       });
       if (error) throw error;
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Error al iniciar sesión con Google.");
+    } catch (error: unknown) {
+      setErrorMsg(errorMessage(error, "Error al iniciar sesión con Google."));
       setLoading(false);
     }
   };
