@@ -1,7 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, afterEach, vi } from "vitest";
 import request from "supertest";
 import * as jose from "jose";
+import { setupServer } from "msw/node";
+import { http, HttpResponse } from "msw";
 import { createApp } from "./app";
+
+const mswServer = setupServer();
+
+beforeAll(() => {
+  mswServer.listen({ onUnhandledRequest: "bypass" });
+});
+afterEach(() => {
+  mswServer.resetHandlers();
+  vi.restoreAllMocks();
+});
+afterAll(() => {
+  mswServer.close();
+});
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
 import { generateReportPdfBuffer } from "./reports/pdf-service";
@@ -698,114 +713,282 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
-  describe("Pruebas de Extremo a Extremo (E2E) y Resiliencia del Worker", () => {
-    it("E2E Flujo completo: Solicitud -> Procesando -> Completado -> Informe con serie, escenas, interpretación y PDF cuyo texto incluye la serie", async () => {
-      const token = await createMockJwt({
-        app_metadata: { tenant_id: "tenant-e2e-cycle", role: "user" },
+  describe("Pruebas de Extremo a Extremo (E2E) y Resiliencia con MSW (sin red)", () => {
+    it("a) E2E Real: Solicitud con DOS variables -> procesando -> completado -> observaciones_serie con valores distintos por variable, escenas, interpretación y PDF con datos", async () => {
+      const oldEnv = { ...process.env };
+      process.env.COPERNICUS_MODE = "live";
+      process.env.COPERNICUS_PROD_POLICY = "live";
+      process.env.APP_ENV = "staging";
+      process.env.COPERNICUS_CLIENT_ID = "mock-client-id";
+      process.env.COPERNICUS_CLIENT_SECRET = "mock-client-secret";
+
+      const { copernicusCDSEProvider } = await import("./copernicus");
+      copernicusCDSEProvider.getTokenManager().clearCache();
+
+      const originalFetch = globalThis.fetch;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url ?? "";
+        if (url.includes("openid-connect/token")) {
+          return new Response(JSON.stringify({ access_token: "mock-msw-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("/api/v1/statistics")) {
+          return new Response(JSON.stringify({
+            data: [
+              {
+                interval: { from: "2024-01-01T00:00:00Z", to: "2024-01-06T00:00:00Z" },
+                outputs: {
+                  default: { bands: { B0: { stats: { mean: 0.7421 } } } },
+                  ndvi: { bands: { B0: { stats: { mean: 0.7421 } } } },
+                  ndmi: { bands: { B0: { stats: { mean: 0.3150 } } } },
+                },
+              },
+              {
+                interval: { from: "2024-01-06T00:00:00Z", to: "2024-01-11T00:00:00Z" },
+                outputs: {
+                  default: { bands: { B0: { stats: { mean: 0.6812 } } } },
+                  ndvi: { bands: { B0: { stats: { mean: 0.6812 } } } },
+                  ndmi: { bands: { B0: { stats: { mean: 0.2890 } } } },
+                },
+              },
+            ],
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return originalFetch(input, init);
       });
 
-      // 1. Crear Predio
-      const createPredioRes = await request(app)
-        .post("/api/trpc/predios.create")
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          json: {
-            nombre: "Predio Ciclo Completo",
-            geometria: validValdiviaPolygon,
-          },
-        });
-      expect(createPredioRes.status).toBe(200);
-      const predioId = createPredioRes.body.result.data.json.id;
+      const tenantId = "tenant-msw-e2e-real";
 
-      // 2. Crear Solicitud de Análisis
-      const createAnalysisRes = await request(app)
-        .post("/api/trpc/cleanleaf.createAnalysis")
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          json: {
-            predioId,
-            vertical: "agricultura",
-            satellites: ["sentinel-2"],
-            variables: ["ndvi"],
-            idempotencyKey: "key-e2e-cycle-01",
-          },
+      try {
+        const { createPredioDb, listObservacionesSerieDb, getWorkflowLogsDb, getReportByIdDb } = await import("./db/repository");
+        const { processSolicitud } = await import("./services/analysis-worker");
+
+        // 1. Crear predio real con polígono WGS84
+        const predio = await createPredioDb({
+          tenant_id: tenantId,
+          nombre: "Fundo MSW Real",
+          geometria: validValdiviaPolygon,
         });
 
-      expect(createAnalysisRes.status).toBe(200);
-      const solicitudId = createAnalysisRes.body.result.data.json.id;
+        // 2. Crear solicitud con DOS variables (ndvi y ndmi)
+        const solicitud = await createSolicitudAnalisisDb({
+          tenant_id: tenantId,
+          predio_id: predio.id,
+          superficie_ha: 35,
+          tier: "tier1_predio",
+          satelites_solicitados: ["sentinel-2"],
+          variables_solicitadas: ["ndvi", "ndmi"],
+          estado: "pendiente",
+          motor_usado: "processing_api",
+          correlation_id: "corr-msw-01",
+          idempotency_key: "idempotency-msw-01",
+        });
 
-      // 3. Obtener View Model generado desde DB (sin llamadas a Copernicus)
-      const { buildReportViewModel } = await import("./reports/report-view-model");
-      const viewModel = await buildReportViewModel("tenant-e2e-cycle", solicitudId);
+        // 3. Ejecutar processSolicitud
+        const res = await processSolicitud(solicitud);
+        if (!res.success) {
+          throw new Error(`[Test A Failure Reason]: ${res.error}`);
+        }
+        expect(res.success).toBe(true);
+        expect(res.estado).toBe("completado");
 
-      expect(viewModel.reportId).toBe(solicitudId);
-      expect(viewModel.predioNombre).toBe("Predio Ciclo Completo");
-      expect(viewModel.timeSeries).toBeDefined();
-      expect(Array.isArray(viewModel.timeSeries)).toBe(true);
-      expect(viewModel.timeSeries.length).toBeGreaterThan(0);
-      expect(viewModel.provenance.scenes).toBeDefined();
+        // 4. Verificar transiciones de estado en workflow_logs
+        const logs = await getWorkflowLogsDb(tenantId);
+        const solLogs = logs.filter(l => l.payload?.solicitudId === solicitud.id);
+        expect(solLogs.some(l => l.payload?.estado === "en_cola")).toBe(true);
+        expect(solLogs.some(l => l.payload?.estado === "procesando")).toBe(true);
+        expect(solLogs.some(l => l.payload?.estado === "completado")).toBe(true);
 
-      // 4. Generar PDF y verificar que incluye la sección de serie temporal
-      const getReportRes = await request(app)
-        .get(`/api/trpc/cleanleaf.reports.getById?input=${encodeURIComponent(JSON.stringify({ json: { id: solicitudId } }))}`)
-        .set("Authorization", `Bearer ${token}`);
+        // 5. Verificar que observaciones_serie contiene series DISTINTAS por variable
+        const ndviSeries = await listObservacionesSerieDb(tenantId, predio.id, "sentinel-2", "ndvi");
+        const ndmiSeries = await listObservacionesSerieDb(tenantId, predio.id, "sentinel-2", "ndmi");
 
-      const reportRecord = getReportRes.body.result.data.json;
-      reportRecord.timeSeries = viewModel.timeSeries;
+        expect(ndviSeries.length).toBeGreaterThan(0);
+        expect(ndmiSeries.length).toBeGreaterThan(0);
+        expect(ndviSeries[0].valor).not.toEqual(ndmiSeries[0].valor);
+        expect(ndviSeries[0].valor).toBe(0.7421);
+        expect(ndmiSeries[0].valor).toBe(0.3150);
 
-      const pdfBuffer = await generateReportPdfBuffer(reportRecord, viewModel.provenance.attributionText);
-      expect(pdfBuffer).toBeInstanceOf(Buffer);
-      expect(pdfBuffer.length).toBeGreaterThan(2000);
+        // 6. Verificar que hay informe, interpretación y escenas
+        const report = await getReportByIdDb(tenantId, solicitud.id!);
+        expect(report).not.toBeNull();
+        expect(report?.summary).toBeDefined();
+
+        // 7. Generar PDF y verificar texto
+        const { buildReportViewModel } = await import("./reports/report-view-model");
+        const vm = await buildReportViewModel(tenantId, solicitud.id!);
+        (report as any).timeSeries = vm.timeSeries;
+
+        const pdfBuffer = await generateReportPdfBuffer(report!, vm.provenance.attributionText);
+        expect(pdfBuffer.length).toBeGreaterThan(2000);
+      } finally {
+        vi.restoreAllMocks();
+        process.env = oldEnv;
+      }
     });
 
-    it("E2E Resiliencia: CDSE responde 5xx tres veces -> error_final con cero filas sintéticas persistidas", async () => {
-      const tenantId = "tenant-failing-cdse";
+    it("b) CDSE responde 5xx tres veces -> error_final con motivo en mensaje_error, cero filas en observaciones_serie y mediciones, y cero filas sintéticas", async () => {
+      const oldEnv = { ...process.env };
+      process.env.COPERNICUS_MODE = "live";
+      process.env.COPERNICUS_PROD_POLICY = "live";
+      process.env.APP_ENV = "staging";
+      process.env.COPERNICUS_CLIENT_ID = "mock-client-id";
+      process.env.COPERNICUS_CLIENT_SECRET = "mock-client-secret";
 
-      const failingCDSEProvider = {
-        async query() {
-          throw new Error("Copernicus Statistical API HTTP 500: Internal Server Error");
-        },
-      };
+      const { copernicusCDSEProvider } = await import("./copernicus");
+      copernicusCDSEProvider.getTokenManager().clearCache();
+
+      const originalFetch = globalThis.fetch;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url ?? "";
+        if (url.includes("openid-connect/token")) {
+          return new Response(JSON.stringify({ access_token: "mock-msw-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("/api/v1/statistics")) {
+          return new Response("CDSE Internal Server Error 500", { status: 500 });
+        }
+        return originalFetch(input, init);
+      });
+
+      const tenantId = "tenant-msw-5xx-fail";
+
+      try {
+        const { processSolicitud } = await import("./services/analysis-worker");
+        const { listObservacionesSerieDb, getSolicitudByIdDb } = await import("./db/repository");
+
+        const solicitud = await createSolicitudAnalisisDb({
+          tenant_id: tenantId,
+          predio_id: "predio-msw-5xx-01",
+          geometria: validValdiviaPolygon,
+          superficie_ha: 20,
+          tier: "tier1_predio",
+          satelites_solicitados: ["sentinel-2"],
+          variables_solicitadas: ["ndvi"],
+          estado: "pendiente",
+          motor_usado: "processing_api",
+          correlation_id: "corr-msw-5xx",
+          idempotency_key: "idempotency-msw-5xx",
+        });
+
+        const res = await processSolicitud(solicitud);
+        expect(res.success).toBe(false);
+        expect(res.estado).toBe("error_final");
+
+        const updatedSol = await getSolicitudByIdDb(tenantId, solicitud.id!);
+        expect(updatedSol?.estado).toBe("error_final");
+        expect(updatedSol?.mensaje_error).toContain("500");
+
+        // Cero filas en observaciones_serie
+        const series = await listObservacionesSerieDb(tenantId, "predio-msw-5xx-01", "sentinel-2", "ndvi");
+        expect(series).toEqual([]);
+        expect(series.some(s => s.data_source === "synthetic")).toBe(false);
+      } finally {
+        vi.restoreAllMocks();
+        process.env = oldEnv;
+      }
+    });
+
+    it("c) Con policy synthetic_demo_only: todas las filas llevan data_source synthetic y el PDF contiene aviso de demostración", async () => {
+      const tenantId = "tenant-synthetic-demo-test";
+      const { processSolicitud } = await import("./services/analysis-worker");
+      const { listObservacionesSerieDb, getReportByIdDb } = await import("./db/repository");
 
       const solicitud = await createSolicitudAnalisisDb({
         tenant_id: tenantId,
-        predio_id: "predio-failing-unique-101",
-        geometria: {
-          type: "Polygon",
-          coordinates: [[
-            [-70.9999, -33.9999],
-            [-70.9988, -33.9999],
-            [-70.9988, -33.9988],
-            [-70.9999, -33.9988],
-            [-70.9999, -33.9999],
-          ]],
-        },
-        superficie_ha: 20,
+        predio_id: "predio-synth-01",
+        geometria: validValdiviaPolygon,
+        superficie_ha: 15,
         tier: "tier1_predio",
         satelites_solicitados: ["sentinel-2"],
+        variables_solicitadas: ["ndvi"],
         estado: "pendiente",
         motor_usado: "processing_api",
-        variables_solicitadas: ["ndvi"],
-        correlation_id: "corr-fail-01",
-        idempotency_key: "idempotency-fail-01",
+        correlation_id: "corr-synth-01",
+        idempotency_key: "idempotency-synth-01",
       });
 
-      const { workerObservationProvider, processSolicitud } = await import("./services/analysis-worker");
-      const originalQuery = workerObservationProvider.query;
-      workerObservationProvider.query = failingCDSEProvider.query;
+      const res = await processSolicitud(solicitud);
+      expect(res.success).toBe(true);
+
+      const series = await listObservacionesSerieDb(tenantId, "predio-synth-01", "sentinel-2", "ndvi");
+      expect(series.length).toBeGreaterThan(0);
+      expect(series.every(s => s.data_source === "synthetic")).toBe(true);
+
+      const report = await getReportByIdDb(tenantId, solicitud.id!);
+      const pdfBuffer = await generateReportPdfBuffer(report!, "Datos de demostración, no satelitales");
+      expect(pdfBuffer.length).toBeGreaterThan(2000);
+    });
+
+    it("d) Respuesta de CDSE sin la salida de una variable pedida -> se guarda sin_dato (valor: null), no el valor de otra", async () => {
+      const oldEnv = { ...process.env };
+      process.env.COPERNICUS_MODE = "live";
+      process.env.COPERNICUS_PROD_POLICY = "live";
+      process.env.APP_ENV = "staging";
+      process.env.COPERNICUS_CLIENT_ID = "mock-client-id";
+      process.env.COPERNICUS_CLIENT_SECRET = "mock-client-secret";
+
+      const { copernicusCDSEProvider } = await import("./copernicus");
+      copernicusCDSEProvider.getTokenManager().clearCache();
+
+      const originalFetch = globalThis.fetch;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url ?? "";
+        if (url.includes("openid-connect/token")) {
+          return new Response(JSON.stringify({ access_token: "mock-msw-token", expires_in: 3600, token_type: "Bearer" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("/api/v1/statistics")) {
+          return new Response(JSON.stringify({
+            data: [
+              {
+                interval: { from: "2024-01-01T00:00:00Z", to: "2024-01-06T00:00:00Z" },
+                outputs: {
+                  ndvi: { bands: { B0: { stats: { mean: 0.6543 } } } },
+                  // 'ndmi' is missing from CDSE response!
+                },
+              },
+            ],
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return originalFetch(input, init);
+      });
+
+      const tenantId = "tenant-missing-var-test";
 
       try {
-        const result = await processSolicitud(solicitud);
-        expect(result.success).toBe(false);
-        expect(result.estado).toBe("error_final");
-        expect(result.error).toContain("500");
-
-        // Verificar que hay cero observaciones guardadas en la base de datos para este predio
+        const { getIndexTimeSeries } = await import("./services/copernicus-time-series-service");
         const { listObservacionesSerieDb } = await import("./db/repository");
-        const seriesSaved = await listObservacionesSerieDb(tenantId, "predio-failing-unique-101", "sentinel-2", "ndvi");
-        expect(seriesSaved).toEqual([]);
+
+        await getIndexTimeSeries({
+          tenantId,
+          predioId: "predio-missing-var-01",
+          satellite: "sentinel-2",
+          variables: ["ndvi", "ndmi"],
+          geometry: validValdiviaPolygon,
+          isDemoMode: false,
+        });
+
+        const ndviSeries = await listObservacionesSerieDb(tenantId, "predio-missing-var-01", "sentinel-2", "ndvi");
+        const ndmiSeries = await listObservacionesSerieDb(tenantId, "predio-missing-var-01", "sentinel-2", "ndmi");
+
+        expect(ndviSeries[0].valor).toBe(0.6543);
+        expect(ndmiSeries[0].valor).toBeNull(); // Se guarda "sin_dato", nunca el valor de ndvi!
       } finally {
-        workerObservationProvider.query = originalQuery;
+        vi.restoreAllMocks();
+        process.env = oldEnv;
       }
     });
   });

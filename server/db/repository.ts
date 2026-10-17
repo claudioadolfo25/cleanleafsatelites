@@ -43,6 +43,7 @@ export type InformeRecord = {
   tipo_lente?: string;
   contenido: Record<string, unknown>;
   fecha_generacion?: string;
+  data_source?: string;
 };
 
 export type MedicionRecord = {
@@ -55,6 +56,7 @@ export type MedicionRecord = {
   valor: number;
   unidad?: string | null;
   fecha_adquisicion: string;
+  data_source?: string;
 };
 
 export type WorkflowLogRecord = {
@@ -531,6 +533,7 @@ export async function saveInformeDb(
         solicitud_id: informe.solicitud_id ?? null,
         tipo_lente: informe.tipo_lente ?? "agro",
         contenido: informe.contenido,
+        data_source: informe.data_source ?? "copernicus_cdse",
       })
       .select()
       .single();
@@ -574,6 +577,7 @@ export async function saveMedicionesDb(
         valor: m.valor,
         unidad: m.unidad ?? null,
         fecha_adquisicion: m.fecha_adquisicion,
+        data_source: m.data_source ?? "copernicus_cdse",
       }))
     );
     return;
@@ -1148,6 +1152,7 @@ export type ObservacionesSerieRecord = {
   nivel_confianza?: string;
   evalscript_version?: string;
   evalscript_hash?: string;
+  data_source?: string;
   creado_en?: string;
 };
 
@@ -1206,6 +1211,7 @@ export async function saveObservacionesSerieDb(
           nivel_confianza: item.nivel_confianza ?? "alta",
           evalscript_version: item.evalscript_version ?? "v1.0.0",
           evalscript_hash: item.evalscript_hash,
+          data_source: item.data_source ?? "copernicus_cdse",
         })),
         { onConflict: "tenant_id,predio_id,satelite,variable,intervalo_desde,intervalo_hasta" }
       );

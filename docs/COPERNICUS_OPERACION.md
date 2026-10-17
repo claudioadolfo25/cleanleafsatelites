@@ -42,7 +42,17 @@ Las solicitudes de análisis que superan las **5.000 ha** son encoladas automát
 
 ---
 
-## 5. Procedimiento ante Caídas o Interrupciones de CDSE
+## 5. Incompatibilidad de Variable SST (Sea Surface Temperature) en CDSE Sentinel Hub
+
+En la API Estadística de Sentinel Hub integrada en CDSE, la medición de **SST** (Sea Surface Temperature) requiere la colección de productos `SLSTR L2 WST` (Sentinel-3 Sea and Land Surface Temperature Radiometer Level-2 Water Surface Temperature).
+
+- **Limitación en CDSE Statistical API:** Sentinel Hub en CDSE ofrece únicamente Sentinel-3 OLCI y SLSTR L1B/L2 genérico, sin soporte para procesamiento ni agregación estadística directa de `SLSTR_L2_WST` para obtener SST.
+- **Política de la Plataforma:** La variable `sst` ha sido removida del catálogo activo de Sentinel-3 y se rechaza explícitamente en la validación de entrada (`INVALID_SATELLITE_VARIABLE`). No se generan ni simulan valores inventados para `sst`.
+- **Alternativa Oficial:** La consulta de temperatura superficial del mar para acuicultura u oceanografía debe canalizarse mediante la API de **Copernicus Marine Service (CMEMS)**, planeada para la Fase 2 de la plataforma.
+
+---
+
+## 6. Procedimiento ante Caídas o Interrupciones de CDSE
 
 1. Si CDSE experimenta degradación o tiempos de respuesta superiores a 10 segundos, el worker reintentará hasta 3 veces.
 2. Si los reintentos fallan, la solicitud pasa al estado `error_final` sin consumir cuota del tenant.

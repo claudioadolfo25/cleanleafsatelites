@@ -30,6 +30,17 @@ export async function generateReportPdfBuffer(
       doc.strokeColor("#e5e7eb").lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
       doc.moveDown(1);
 
+      // Banner para Datos Sintéticos / Demostración
+      const isSynthetic = (report as any).dataSource === "synthetic" || (report as any).data_source === "synthetic" || dataProvenance.toLowerCase().includes("demostración") || dataProvenance.toLowerCase().includes("sintétic");
+      if (isSynthetic) {
+        doc
+          .fillColor("#92400e")
+          .fontSize(9.5)
+          .font("Helvetica-Bold")
+          .text("⚠️ AVISO: Datos de demostración, no satelitales", { align: "center" });
+        doc.moveDown(0.5);
+      }
+
       // 2. Título e Información Básica
       doc
         .fillColor("#1f2937")

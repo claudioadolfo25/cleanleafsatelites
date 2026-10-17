@@ -19,15 +19,6 @@ import {
   type SolicitudRecord,
 } from "../db/repository";
 
-const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
-const copernicusProdPolicy = process.env.COPERNICUS_PROD_POLICY ?? "synthetic_demo_only";
-const isTestRuntime = process.env.NODE_ENV === "test";
-const isDemoMode = process.env.DEMO_MODE === "true" || copernicusProdPolicy === "synthetic_demo_only";
-
-const copernicusLiveEnabled =
-  copernicusMode === "live" &&
-  isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
-
 const syntheticProvider = new SyntheticCopernicusProvider(
   "Modo demostración o sintético activo."
 );
@@ -35,11 +26,19 @@ const syntheticProvider = new SyntheticCopernicusProvider(
 // Con COPERNICUS_PROD_POLICY=live, eliminar FallbackObservationProvider del camino de producción:
 // si CDSE falla tras los reintentos, la solicitud queda en error_final.
 // El proveedor sintético solo se usa con DEMO_MODE=true o policy synthetic_demo_only.
-export const workerObservationProvider: EarthObservationProvider = isTestRuntime
-  ? new MockCopernicusProvider()
-  : copernicusLiveEnabled
-  ? copernicusCDSEProvider
-  : syntheticProvider;
+export function getWorkerObservationProvider(): EarthObservationProvider {
+  const mode = process.env.COPERNICUS_MODE ?? "synthetic";
+  if (process.env.NODE_ENV === "test" && mode !== "live") {
+    return new MockCopernicusProvider();
+  }
+  const isLive = mode === "live" && isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
+  if (isLive) {
+    return copernicusCDSEProvider;
+  }
+  return syntheticProvider;
+}
+
+export const workerObservationProvider: EarthObservationProvider = getWorkerObservationProvider();
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -49,6 +48,8 @@ export async function processSolicitud(
 ): Promise<{ success: boolean; estado: string; error?: string }> {
   const tenantId = solicitud.tenant_id;
   const solicitudId = solicitud.id!;
+  const prodPolicy = process.env.COPERNICUS_PROD_POLICY ?? "synthetic_demo_only";
+  const isDemoMode = process.env.DEMO_MODE === "true" || prodPolicy === "synthetic_demo_only";
 
   try {
     // 1. Transición: pendiente -> en_cola
@@ -119,7 +120,8 @@ export async function processSolicitud(
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          result = await workerObservationProvider.query(queryReq);
+          const provider = getWorkerObservationProvider();
+          result = await provider.query(queryReq);
 
           if (result) {
             // Evaluar calidad SCL si está disponible
@@ -160,46 +162,25 @@ export async function processSolicitud(
       return { success: false, estado: "error_final", error: errorMessage };
     }
 
-    // 4. Invocar getIndexTimeSeries (o almacenamiento incremental de serie temporal) por predio y satélite
-    const { saveObservacionesSerieDb, listObservacionesSerieDb, createAlertWithDeduplicationDb } = await import("../db/repository");
+    // 4. Invocar el usecase getIndexTimeSeries por predio, satélite y polígono real
+    const { getIndexTimeSeries } = await import("./copernicus-time-series-service");
+    const { createAlertWithDeduplicationDb, listObservacionesSerieDb } = await import("../db/repository");
     const { interpretTimeSeries } = await import("../analysis/interpret");
-    const { buildMultiVariableEvalscript } = await import("./copernicus-time-series-service");
 
     const requestedSatellites = solicitud.satelites_solicitados ?? [firstSatellite];
     const requestedVariables = solicitud.variables_solicitadas ?? [firstVariable];
 
     if (solicitud.predio_id && geometryToUse) {
       for (const sat of requestedSatellites) {
-        const evalMeta = buildMultiVariableEvalscript(sat, requestedVariables);
-        const acquisitionDate = (result as any).fecha ?? (result as any).acquired_at ?? new Date();
-        const acquisitionIsoStr =
-          acquisitionDate instanceof Date
-            ? acquisitionDate.toISOString()
-            : typeof acquisitionDate === "string"
-            ? acquisitionDate
-            : new Date().toISOString();
-
-        const fromDateStr = new Date(new Date(acquisitionIsoStr).getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
-
-        const pointsToSave = requestedVariables.map(v => {
-          const isSynthetic = (result as any).data_source === "synthetic" || isDemoMode;
-          const val = v === firstVariable ? result.valor : result.valor;
-          return {
-            tenant_id: tenantId,
-            predio_id: solicitud.predio_id!,
-            satelite: sat,
-            variable: v,
-            intervalo_desde: fromDateStr,
-            intervalo_hasta: acquisitionIsoStr,
-            valor: val,
-            porcentaje_pixeles_validos: (result as any).valid_pixel_percentage ?? 0.85,
-            nivel_confianza: result.confidence_level ?? "alta",
-            evalscript_version: evalMeta.version,
-            evalscript_hash: evalMeta.hash,
-          };
+        await getIndexTimeSeries({
+          tenantId,
+          predioId: solicitud.predio_id,
+          satellite: sat,
+          variables: requestedVariables,
+          geometry: geometryToUse,
+          accessToken,
+          isDemoMode,
         });
-
-        await saveObservacionesSerieDb(pointsToSave, accessToken);
       }
     }
 
@@ -263,12 +244,18 @@ export async function processSolicitud(
       (report as any).recommendation = "No es posible emitir una recomendación por baja confianza o falta de datos válidos.";
     }
 
+    const isSyntheticReport = (result as any).data_source === "synthetic" || isDemoMode;
+    const currentDataSource = isSyntheticReport ? "synthetic" : "copernicus_cdse";
+
+    (report as any).dataSource = currentDataSource;
+
     await saveInformeDb({
       tenant_id: tenantId,
       predio_id: solicitud.predio_id ?? null,
       solicitud_id: solicitudId,
       tipo_lente: "agro",
       contenido: report as any,
+      data_source: currentDataSource,
     }, accessToken);
 
     const acquisitionDate = (result as any).fecha ?? (result as any).acquired_at;
@@ -288,6 +275,7 @@ export async function processSolicitud(
       valor: result.valor,
       unidad: result.unidad,
       fecha_adquisicion: acquisitionIsoStr,
+      data_source: currentDataSource,
     }], accessToken);
 
     // 5. Determinar proveniencia y guardar escenas STAC de Copernicus

@@ -55,7 +55,6 @@ export const satelliteCatalog: Record<SatelliteId, SatelliteDefinition> = {
       "Sensores de temperatura y color del agua. Ideal para detectar marea roja y monitorear sequía regional. No sirve para predios chicos.",
     actualizacion: "Actualización cada 1–2 días",
     variables: [
-      { variable: "sst", unidad: "°C", rango: [0, 30], descripcion: "Temperatura superficial del mar (No disponible en CDSE - No simulado)" },
       { variable: "clorofila_a", unidad: "mg/m³", rango: [0, 10], descripcion: "Clorofila-a" },
       { variable: "lst", unidad: "°C", rango: [0, 60], descripcion: "Temperatura superficial terrestre" },
       { variable: "ndvi_regional", unidad: "ratio", rango: [0, 1], descripcion: "Contexto regional" },

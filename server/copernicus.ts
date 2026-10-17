@@ -116,7 +116,9 @@ export class CopernicusTokenManager {
   }
 
   public isConfigured(): boolean {
-    return Boolean(this.clientId && this.clientSecret);
+    const client = process.env.COPERNICUS_CLIENT_ID || this.clientId;
+    const secret = process.env.COPERNICUS_CLIENT_SECRET || this.clientSecret;
+    return Boolean(client && secret);
   }
 
   public getCachedToken(): CopernicusAuthToken | null {
@@ -140,10 +142,13 @@ export class CopernicusTokenManager {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      const client = process.env.COPERNICUS_CLIENT_ID || this.clientId;
+      const secret = process.env.COPERNICUS_CLIENT_SECRET || this.clientSecret;
+
       const params = new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
+        client_id: client,
+        client_secret: secret,
       });
 
       const response = await fetch(this.tokenUrl, {
@@ -383,7 +388,8 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           const responseData = await response.json();
           const intervals = responseData?.data;
           const lastInterval = Array.isArray(intervals) ? intervals[intervals.length - 1] : null;
-          const meanValue = lastInterval?.outputs?.default?.bands?.B0?.stats?.mean;
+          const output = lastInterval?.outputs?.[request.variable] ?? lastInterval?.outputs?.default;
+          const meanValue = output?.bands?.B0?.stats?.mean;
           if (!Number.isFinite(meanValue)) {
             throw new Error("Respuesta inválida de Copernicus Statistical API: falta un valor medio numérico");
           }
