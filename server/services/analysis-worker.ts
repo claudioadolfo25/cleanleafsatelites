@@ -18,6 +18,7 @@ import {
   writeWorkflowLogDb,
   type SolicitudRecord,
 } from "../db/repository";
+import { getSupabaseAdminClient } from "../db/supabase-client";
 
 const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
 const copernicusProdPolicy = process.env.COPERNICUS_PROD_POLICY ?? "synthetic_demo_only";
@@ -359,11 +360,13 @@ export async function processSolicitud(
 }
 
 export async function runWorkerIteration(accessToken?: string): Promise<number> {
-  const pendingList = await getPendingSolicitudesDb(accessToken);
+  const tokenToUse = accessToken || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const adminClient = getSupabaseAdminClient();
+  const pendingList = await getPendingSolicitudesDb(tokenToUse);
   if (pendingList.length === 0) return 0;
 
   for (const sol of pendingList) {
-    await processSolicitud(sol, accessToken);
+    await processSolicitud(sol, tokenToUse);
   }
 
   return pendingList.length;

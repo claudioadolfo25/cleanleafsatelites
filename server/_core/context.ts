@@ -6,7 +6,7 @@ export type User = {
   id: string;
   email: string | null;
   name?: string | null;
-  tenantId: string;
+  tenantId: string | null;
   role: string;
 };
 
@@ -15,6 +15,8 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
 };
+
+const ROLES = ["user", "admin", "owner", "super_admin"] as const;
 
 async function verifySupabaseToken(token: string): Promise<User | null> {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -32,14 +34,15 @@ async function verifySupabaseToken(token: string): Promise<User | null> {
       const { data, error } = await supabase.auth.getUser(token);
       if (!error && data?.user) {
         const u = data.user;
-        const appMeta = u.app_metadata || {};
-        const userMeta = u.user_metadata || {};
+        const appMeta = (u.app_metadata ?? {}) as Record<string, unknown>;
+        const tenantId = typeof appMeta.tenant_id === "string" ? appMeta.tenant_id : (typeof appMeta.tenantId === "string" ? appMeta.tenantId : null);
+        const role = ROLES.includes(appMeta.role as any) ? (appMeta.role as string) : "user";
         return {
           id: u.id,
           email: u.email ?? null,
-          name: (userMeta.name || appMeta.name || u.email?.split("@")[0]) ?? null,
-          tenantId: (appMeta.tenant_id || userMeta.tenant_id || appMeta.tenantId || userMeta.tenantId || u.id) as string,
-          role: (appMeta.role || userMeta.role || "user") as string,
+          name: typeof appMeta.name === "string" ? appMeta.name : (u.email?.split("@")[0] ?? null),
+          tenantId,
+          role,
         };
       }
     } catch {
@@ -50,7 +53,6 @@ async function verifySupabaseToken(token: string): Promise<User | null> {
   // 2. Verificación criptográfica con HMAC secret
   const jwtSecret =
     process.env.SUPABASE_JWT_SECRET ||
-    process.env.JWT_SECRET ||
     (process.env.NODE_ENV === "test" ? "test-jwt-secret-12345678901234567890" : "");
 
   if (jwtSecret) {
@@ -58,14 +60,15 @@ async function verifySupabaseToken(token: string): Promise<User | null> {
       const secret = new TextEncoder().encode(jwtSecret);
       const { payload } = await jose.jwtVerify(token, secret);
       if (payload && payload.sub) {
-        const appMeta = (payload.app_metadata as Record<string, any>) || {};
-        const userMeta = (payload.user_metadata as Record<string, any>) || {};
+        const appMeta = (payload.app_metadata ?? {}) as Record<string, unknown>;
+        const tenantId = typeof appMeta.tenant_id === "string" ? appMeta.tenant_id : (typeof appMeta.tenantId === "string" ? appMeta.tenantId : null);
+        const role = ROLES.includes(appMeta.role as any) ? (appMeta.role as string) : "user";
         return {
           id: payload.sub,
           email: (payload.email as string) ?? null,
-          name: (userMeta.name || appMeta.name) ?? null,
-          tenantId: (appMeta.tenant_id || userMeta.tenant_id || payload.tenant_id || payload.sub) as string,
-          role: (appMeta.role || userMeta.role || payload.role || "user") as string,
+          name: typeof appMeta.name === "string" ? appMeta.name : null,
+          tenantId,
+          role,
         };
       }
     } catch {

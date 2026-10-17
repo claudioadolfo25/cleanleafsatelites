@@ -25,7 +25,7 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { isProductionEnv } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, authedProcedure, protectedProcedure, publicProcedure, router, superAdminProcedure, tenantAdminProcedure } from "./_core/trpc";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry, type GeoJSONPolygon } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
 import { getSignedReportDownloadUrlService } from "./reports/storage-service";
@@ -60,17 +60,6 @@ import {
   updateTenantPlanDb,
   writeWorkflowLogDb,
 } from "./db/repository";
-
-const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  const allowedRoles = ["admin", "owner", "super_admin"];
-  if (!allowedRoles.includes(ctx.user.role)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Acceso denegado. Se requieren permisos de administrador o super_admin.",
-    });
-  }
-  return next();
-});
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -335,8 +324,8 @@ async function createAnalysisRequest(
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: protectedProcedure.query(opts => opts.ctx.user),
-    logout: protectedProcedure.mutation(({ ctx }) => {
+    me: authedProcedure.query(opts => opts.ctx.user),
+    logout: authedProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -709,17 +698,17 @@ export const appRouter = router({
     }),
   }),
   admin: router({
-    listTenants: adminProcedure.query(async ({ ctx }) => {
+    listTenants: superAdminProcedure.query(async ({ ctx }) => {
       const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
       return listAllTenantsDb(accessToken);
     }),
-    updatePlan: adminProcedure
+    updatePlan: superAdminProcedure
       .input(z.object({ tenantId: z.string().min(1), planId: planSchema }))
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const success = await updateTenantPlanDb(input.tenantId, input.planId, accessToken);
         await createAuditLogDb({
-          tenant_id: ctx.user.tenantId,
+          tenant_id: ctx.user.tenantId ?? "global",
           user_id: ctx.user.id,
           user_email: ctx.user.email,
           action: "admin.update_plan",
@@ -728,14 +717,15 @@ export const appRouter = router({
         }, accessToken);
         return { success };
       }),
-    listFailedSolicitudes: adminProcedure.query(async ({ ctx }) => {
+    listFailedSolicitudes: superAdminProcedure.query(async ({ ctx }) => {
       const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
       return listFailedSolicitudesDb(accessToken);
     }),
-    retrySolicitud: adminProcedure
+    retrySolicitud: superAdminProcedure
       .input(z.object({ solicitudId: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        if (!ctx.user.tenantId) throw new TRPCError({ code: "FORBIDDEN", message: "Tenant ID requerido" });
         const solicitud = await getSolicitudByIdDb(ctx.user.tenantId, input.solicitudId, accessToken);
         if (!solicitud) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitud no encontrada" });
 
@@ -751,7 +741,7 @@ export const appRouter = router({
 
         return result;
       }),
-    getAuditLogs: adminProcedure
+    getAuditLogs: superAdminProcedure
       .input(z.object({ tenantId: z.string().optional(), action: z.string().optional() }).optional())
       .query(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
@@ -764,6 +754,7 @@ export const appRouter = router({
       create: protectedProcedure.input(analysisInput).mutation(async ({ input, ctx }) => {
         try {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          if (!ctx.user.tenantId) throw new Error("tenant_id no asignado en metadata del usuario");
           return { data: await createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id), error: null };
         } catch (error) {
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
@@ -773,6 +764,7 @@ export const appRouter = router({
         .input(z.object({ id: z.string().min(1) }))
         .query(async ({ input, ctx }) => {
           const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          if (!ctx.user.tenantId) throw new TRPCError({ code: "FORBIDDEN", message: "Tenant ID requerido" });
           const solicitud = await getSolicitudByIdDb(ctx.user.tenantId, input.id, accessToken);
           if (!solicitud) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitud no encontrada" });
 
@@ -790,27 +782,20 @@ export const appRouter = router({
         }),
     }),
     onboarding: router({
-      createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(async ({ input, ctx }) => {
-        const allowedRoles = ["admin", "owner", "super_admin"];
-        if (!allowedRoles.includes(ctx.user.role)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Solo administradores pueden registrar nuevos tenants." });
-        }
+      createTenant: tenantAdminProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const tenant = await createTenantDb({ nombre: input.organizationName, plan_id: input.planId }, accessToken);
         return { data: { tenantId: tenant.id, nombre: tenant.nombre, planId: tenant.plan_id, estado: tenant.estado }, error: null };
       }),
     }),
     apiKeys: router({
-      create: protectedProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(async ({ input, ctx }) => {
-        const allowedRoles = ["admin", "owner", "super_admin"];
-        if (!allowedRoles.includes(ctx.user.role)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Solo administradores pueden generar API keys." });
-        }
+      create: tenantAdminProcedure.input(z.object({ tenantId: z.string().optional(), nombre: z.string().min(2) })).mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const plainKey = `cl_${randomBytes(18).toString("hex")}`;
         const hash = createHash("sha256").update(plainKey).digest("hex");
-        await saveApiKeyHashDb({ tenant_id: input.tenantId, nombre: input.nombre, key_hash: hash }, accessToken);
-        return { data: { tenantId: input.tenantId, nombre: input.nombre, key: plainKey, warning: "La API key solo se muestra una vez. Guárdala en un lugar seguro." }, error: null };
+        const tenantId = ctx.user.tenantId!;
+        await saveApiKeyHashDb({ tenant_id: tenantId, nombre: input.nombre, key_hash: hash }, accessToken);
+        return { data: { tenantId, nombre: input.nombre, key: plainKey, warning: "La API key solo se muestra una vez. Guárdala en un lugar seguro." }, error: null };
       }),
     }),
   }),

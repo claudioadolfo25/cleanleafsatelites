@@ -908,7 +908,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       const adminToken = await createMockJwt({
         sub: "usr_admin_audit",
         email: "admin.audit@cleanleaf.cl",
-        app_metadata: { tenant_id: "tenant-audit-01", role: "admin" },
+        app_metadata: { tenant_id: "tenant-audit-01", role: "super_admin" },
       });
 
       // 1. Ejecutar actualización de plan
