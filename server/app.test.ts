@@ -495,6 +495,128 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Gestión de Perfil y Preferencias de Usuario (tRPC & RLS)", () => {
+    it("obtiene y actualiza preferencias de usuario individual vía tRPC", async () => {
+      const userToken = await createMockJwt({
+        sub: "usr_prefs_test_01",
+        email: "usuario.pref@cleanleaf.cl",
+        app_metadata: { tenant_id: "tenant-pref-01", role: "user" },
+      });
+
+      // 1. Obtener preferencias por defecto
+      const getRes = await request(app)
+        .get("/api/trpc/preferences.getUserPreferences")
+        .set("Authorization", `Bearer ${userToken}`);
+
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.result.data.json).toEqual({
+        sector: "agricultura",
+        necesidad: "monitoreo_general",
+        fuentes_activas: ["sentinel-2"],
+      });
+
+      // 2. Actualizar preferencias
+      const updateRes = await request(app)
+        .post("/api/trpc/preferences.updateUserPreferences")
+        .set("Authorization", `Bearer ${userToken}`)
+        .send({
+          json: {
+            sector: "forestal",
+            necesidad: "deforestacion",
+            fuentes_activas: ["sentinel-1", "sentinel-2"],
+          },
+        });
+
+      expect(updateRes.status).toBe(200);
+
+      // 3. Confirmar que las preferencias se actualizaron
+      const getUpdatedRes = await request(app)
+        .get("/api/trpc/preferences.getUserPreferences")
+        .set("Authorization", `Bearer ${userToken}`);
+
+      expect(getUpdatedRes.status).toBe(200);
+      expect(getUpdatedRes.body.result.data.json).toEqual({
+        sector: "forestal",
+        necesidad: "deforestacion",
+        fuentes_activas: ["sentinel-1", "sentinel-2"],
+      });
+    });
+
+    it("permite actualizar tenant_settings sólo a roles administradores (admin/owner)", async () => {
+      const normalUserToken = await createMockJwt({
+        sub: "usr_normal_01",
+        app_metadata: { tenant_id: "tenant-settings-test", role: "user" },
+      });
+
+      const adminUserToken = await createMockJwt({
+        sub: "usr_admin_01",
+        app_metadata: { tenant_id: "tenant-settings-test", role: "admin" },
+      });
+
+      // 1. Usuario normal intenta actualizar tenant_settings -> Rechazado con 403 FORBIDDEN
+      const normalRes = await request(app)
+        .post("/api/trpc/preferences.updateTenantSettings")
+        .set("Authorization", `Bearer ${normalUserToken}`)
+        .send({
+          json: {
+            sector: "acuicultura",
+            necesidad: "marea_roja",
+            fuentes_activas: ["sentinel-2", "sentinel-3"],
+          },
+        });
+
+      expect(normalRes.status).toBe(403);
+      expect(normalRes.body.error.json.message).toContain("administrador u propietario");
+
+      // 2. Administrador actualiza tenant_settings -> Exitoso 200 OK
+      const adminRes = await request(app)
+        .post("/api/trpc/preferences.updateTenantSettings")
+        .set("Authorization", `Bearer ${adminUserToken}`)
+        .send({
+          json: {
+            sector: "acuicultura",
+            necesidad: "marea_roja",
+            fuentes_activas: ["sentinel-2", "sentinel-3"],
+          },
+        });
+
+      expect(adminRes.status).toBe(200);
+
+      // 3. Usuario normal lee tenant_settings del tenant -> Exitoso 200 OK
+      const getTenantSettingsRes = await request(app)
+        .get("/api/trpc/preferences.getTenantSettings")
+        .set("Authorization", `Bearer ${normalUserToken}`);
+
+      expect(getTenantSettingsRes.status).toBe(200);
+      expect(getTenantSettingsRes.body.result.data.json).toEqual({
+        sector: "acuicultura",
+        necesidad: "marea_roja",
+        fuentes_activas: ["sentinel-2", "sentinel-3"],
+      });
+    });
+
+    it("devuelve los datos de perfil para un usuario autenticado", async () => {
+      const token = await createMockJwt({
+        sub: "usr_profile_123",
+        email: "perfil.test@cleanleaf.cl",
+        app_metadata: { tenant_id: "tenant-profile-99", role: "admin" },
+      });
+
+      const profileRes = await request(app)
+        .get("/api/trpc/profile.get")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(profileRes.status).toBe(200);
+      expect(profileRes.body.result.data.json).toEqual({
+        id: "usr_profile_123",
+        email: "perfil.test@cleanleaf.cl",
+        name: null,
+        role: "admin",
+        tenantId: "tenant-profile-99",
+      });
+    });
+  });
+
   describe("Aislamiento Multi-Tenant (RLS & Filtrado Estricto por Tenant)", () => {
     it("impide que un usuario del Tenant B lea un informe o descargue PDF creado por el Tenant A", async () => {
       const tokenTenantA = await createMockJwt({

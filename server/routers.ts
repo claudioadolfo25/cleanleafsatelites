@@ -37,13 +37,17 @@ import {
   getPredioByIdDb,
   getReportByIdDb,
   getSolicitudByIdDb,
+  getTenantSettingsDb,
   getTenantUsageAndLimits,
+  getUserPreferencesDb,
   getWorkflowLogsDb,
   listPrediosDb,
   listReportsDb,
   recordConsumoDb,
   saveInformeDb,
   saveMedicionesDb,
+  saveTenantSettingsDb,
+  saveUserPreferencesDb,
   updatePredioDb,
   writeWorkflowLogDb,
 } from "./db/repository";
@@ -317,6 +321,88 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+  profile: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      return {
+        id: ctx.user.id,
+        email: ctx.user.email,
+        name: ctx.user.name,
+        role: ctx.user.role,
+        tenantId: ctx.user.tenantId,
+      };
+    }),
+  }),
+  preferences: router({
+    getUserPreferences: protectedProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      const prefs = await getUserPreferencesDb(ctx.user.id, accessToken);
+      if (!prefs) {
+        return {
+          sector: "agricultura",
+          necesidad: "monitoreo_general",
+          fuentes_activas: ["sentinel-2"],
+        };
+      }
+      return {
+        sector: prefs.sector,
+        necesidad: prefs.necesidad,
+        fuentes_activas: prefs.fuentes_activas,
+      };
+    }),
+    updateUserPreferences: protectedProcedure
+      .input(z.object({
+        sector: z.string().min(1),
+        necesidad: z.string().min(1),
+        fuentes_activas: z.array(z.string()).min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        return saveUserPreferencesDb({
+          user_id: ctx.user.id,
+          sector: input.sector,
+          necesidad: input.necesidad,
+          fuentes_activas: input.fuentes_activas,
+        }, accessToken);
+      }),
+    getTenantSettings: protectedProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      const settings = await getTenantSettingsDb(ctx.user.tenantId, accessToken);
+      if (!settings) {
+        return {
+          sector: "agricultura",
+          necesidad: "monitoreo_general",
+          fuentes_activas: ["sentinel-2"],
+        };
+      }
+      return {
+        sector: settings.sector,
+        necesidad: settings.necesidad,
+        fuentes_activas: settings.fuentes_activas,
+      };
+    }),
+    updateTenantSettings: protectedProcedure
+      .input(z.object({
+        sector: z.string().min(1),
+        necesidad: z.string().min(1),
+        fuentes_activas: z.array(z.string()).min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const allowedRoles = ["admin", "owner", "super_admin"];
+        if (!allowedRoles.includes(ctx.user.role)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Solo un administrador u propietario puede actualizar la configuración del tenant.",
+          });
+        }
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        return saveTenantSettingsDb({
+          tenant_id: ctx.user.tenantId,
+          sector: input.sector,
+          necesidad: input.necesidad,
+          fuentes_activas: input.fuentes_activas,
+        }, accessToken);
+      }),
   }),
   predios: router({
     list: protectedProcedure.query(async ({ ctx }) => {

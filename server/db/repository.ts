@@ -711,6 +711,153 @@ export async function getReportByIdDb(
   return null;
 }
 
+export type UserPreferencesRecord = {
+  user_id: string;
+  sector: string;
+  necesidad: string;
+  fuentes_activas: string[];
+  actualizado_en?: string;
+};
+
+export type TenantSettingsRecord = {
+  tenant_id: string;
+  sector: string;
+  necesidad: string;
+  fuentes_activas: string[];
+  actualizado_en?: string;
+};
+
+const memoryUserPreferences = new Map<string, UserPreferencesRecord>();
+const memoryTenantSettings = new Map<string, TenantSettingsRecord>();
+
+export async function getUserPreferencesDb(
+  userId: string,
+  accessToken?: string
+): Promise<UserPreferencesRecord | null> {
+  const client = getSupabaseUserClient(accessToken);
+  if (client) {
+    const { data } = await client
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (data) {
+      return {
+        user_id: data.user_id,
+        sector: data.sector,
+        necesidad: data.necesidad,
+        fuentes_activas: data.fuentes_activas,
+        actualizado_en: data.actualizado_en,
+      };
+    }
+  }
+
+  return memoryUserPreferences.get(userId) ?? null;
+}
+
+export async function saveUserPreferencesDb(
+  prefs: UserPreferencesRecord,
+  accessToken?: string
+): Promise<UserPreferencesRecord> {
+  const client = getSupabaseUserClient(accessToken);
+  const updated: UserPreferencesRecord = {
+    ...prefs,
+    actualizado_en: new Date().toISOString(),
+  };
+
+  if (client) {
+    const { data } = await client
+      .from("user_preferences")
+      .upsert({
+        user_id: prefs.user_id,
+        sector: prefs.sector,
+        necesidad: prefs.necesidad,
+        fuentes_activas: prefs.fuentes_activas,
+        actualizado_en: updated.actualizado_en,
+      })
+      .select()
+      .single();
+
+    if (data) {
+      return {
+        user_id: data.user_id,
+        sector: data.sector,
+        necesidad: data.necesidad,
+        fuentes_activas: data.fuentes_activas,
+        actualizado_en: data.actualizado_en,
+      };
+    }
+  }
+
+  memoryUserPreferences.set(prefs.user_id, updated);
+  return updated;
+}
+
+export async function getTenantSettingsDb(
+  tenantId: string,
+  accessToken?: string
+): Promise<TenantSettingsRecord | null> {
+  const client = getSupabaseUserClient(accessToken);
+  if (client) {
+    const { data } = await client
+      .from("tenant_settings")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (data) {
+      return {
+        tenant_id: data.tenant_id,
+        sector: data.sector,
+        necesidad: data.necesidad,
+        fuentes_activas: data.fuentes_activas,
+        actualizado_en: data.actualizado_en,
+      };
+    }
+  }
+
+  return memoryTenantSettings.get(tenantId) ?? null;
+}
+
+export async function saveTenantSettingsDb(
+  settings: TenantSettingsRecord,
+  accessToken?: string
+): Promise<TenantSettingsRecord> {
+  const client = getSupabaseUserClient(accessToken);
+  const updated: TenantSettingsRecord = {
+    ...settings,
+    actualizado_en: new Date().toISOString(),
+  };
+
+  if (client) {
+    const { data } = await client
+      .from("tenant_settings")
+      .upsert({
+        tenant_id: settings.tenant_id,
+        sector: settings.sector,
+        necesidad: settings.necesidad,
+        fuentes_activas: settings.fuentes_activas,
+        actualizado_en: updated.actualizado_en,
+      })
+      .select()
+      .single();
+
+    if (data) {
+      return {
+        tenant_id: data.tenant_id,
+        sector: data.sector,
+        necesidad: data.necesidad,
+        fuentes_activas: data.fuentes_activas,
+        actualizado_en: data.actualizado_en,
+      };
+    }
+  }
+
+  memoryTenantSettings.set(settings.tenant_id, updated);
+  return updated;
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string

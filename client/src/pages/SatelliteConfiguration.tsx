@@ -8,6 +8,7 @@ import { ArrowLeft, Check, ChevronRight, CloudSun, Info, Leaf, Radio, Save, Spar
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 const icons = { "sentinel-1": Radio, "sentinel-2": CloudSun, "sentinel-3": ThermometerSun };
 const activeForMvp: SatelliteId[] = ["sentinel-1", "sentinel-2"];
@@ -27,18 +28,48 @@ export default function SatelliteConfiguration() {
   const visibleNeeds = needOptions.filter(option => option.verticals.includes(vertical));
   const activeSources = activeForVertical(vertical);
 
+  const { data: serverPrefs, isLoading } = trpc.preferences.getUserPreferences.useQuery(undefined, {
+    retry: false,
+  });
+
+  const updatePrefsMutation = trpc.preferences.updateUserPreferences.useMutation();
+
   useEffect(() => {
-    const saved = localStorage.getItem("cleanleaf-satellite-preferences");
-    if (!saved) return;
-    try {
-      const preferences = JSON.parse(saved) as { vertical?: ConfigSector; need?: NeedId; selected?: SatelliteId[] };
-      if (preferences.vertical) setVertical(preferences.vertical);
-      if (preferences.need) setNeed(preferences.need);
-      if (preferences.selected?.length) setSelected(preferences.selected);
-    } catch {
-      localStorage.removeItem("cleanleaf-satellite-preferences");
+    if (isLoading) return;
+
+    // Check if server preferences are loaded
+    if (serverPrefs) {
+      if (serverPrefs.sector) setVertical(serverPrefs.sector as ConfigSector);
+      if (serverPrefs.necesidad) setNeed(serverPrefs.necesidad as NeedId);
+      if (serverPrefs.fuentes_activas?.length) setSelected(serverPrefs.fuentes_activas as SatelliteId[]);
     }
-  }, []);
+
+    // Auto-migrate localStorage if present
+    const saved = localStorage.getItem("cleanleaf-satellite-preferences");
+    if (saved) {
+      try {
+        const preferences = JSON.parse(saved) as { vertical?: ConfigSector; need?: NeedId; selected?: SatelliteId[] };
+        const localSector = preferences.vertical || "agricultura";
+        const localNeed = preferences.need || "nubosidad";
+        const localSelected = preferences.selected || ["sentinel-2"];
+
+        setVertical(localSector);
+        setNeed(localNeed);
+        setSelected(localSelected as SatelliteId[]);
+
+        updatePrefsMutation.mutate({
+          sector: localSector,
+          necesidad: localNeed,
+          fuentes_activas: localSelected,
+        });
+
+        localStorage.removeItem("cleanleaf-satellite-preferences");
+        toast.info("Configuración migrada desde almacenamiento local al servidor.");
+      } catch {
+        localStorage.removeItem("cleanleaf-satellite-preferences");
+      }
+    }
+  }, [serverPrefs, isLoading]);
 
   useEffect(() => {
     setSelected(current => current.filter(id => activeSources.includes(id)));
@@ -62,9 +93,17 @@ export default function SatelliteConfiguration() {
     toast.success("Recomendación aplicada", { description: recommendation.explanation });
   };
 
-  const save = () => {
-    localStorage.setItem("cleanleaf-satellite-preferences", JSON.stringify({ vertical, need, selected }));
-    toast.success("Configuración guardada", { description: "Se usará como preferencia en tus próximos análisis." });
+  const save = async () => {
+    try {
+      await updatePrefsMutation.mutateAsync({
+        sector: vertical,
+        necesidad: need,
+        fuentes_activas: selected,
+      });
+      toast.success("Configuración guardada en servidor", { description: "Se usará como preferencia en tus próximos análisis." });
+    } catch (err: any) {
+      toast.error("Error al guardar la configuración", { description: err?.message || "Ocurrió un error inesperado." });
+    }
   };
 
   return (

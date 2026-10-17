@@ -9,12 +9,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const SatellitesPlaceholderPage = lazy(() => import("./pages/SatellitesPlaceholderPage"));
 const Home = lazy(() => import("./pages/Home"));
 const SatelliteConfiguration = lazy(() => import("./pages/SatelliteConfiguration"));
 const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
 const ReportDetail = lazy(() => import("./pages/ReportDetail"));
 const PrediosPage = lazy(() => import("./pages/PrediosPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 
 function RouteFallback() {
   return (
@@ -31,11 +33,15 @@ function Router() {
         {/* Rutas Públicas */}
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/auth/restablecer-password" component={ResetPasswordPage} />
         <Route path="/satelites" component={SatellitesPlaceholderPage} />
 
         {/* Rutas Protegidas bajo /dashboard */}
         <Route path="/dashboard">
           {() => <ProtectedRoute component={Home} />}
+        </Route>
+        <Route path="/dashboard/perfil">
+          {() => <ProtectedRoute component={ProfilePage} />}
         </Route>
         <Route path="/dashboard/predios">
           {() => <ProtectedRoute component={PrediosPage} />}
