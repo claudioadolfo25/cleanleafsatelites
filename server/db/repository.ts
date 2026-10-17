@@ -57,13 +57,25 @@ export type MedicionRecord = {
   fecha_adquisicion: string;
 };
 
+export type WorkflowLogRecord = {
+  id?: string;
+  tenant_id: string;
+  workflow_nombre: string;
+  estado: "exitoso" | "fallido";
+  mensaje_error?: string | null;
+  payload?: any;
+  inicio_ejecucion?: string;
+  fin_ejecucion?: string;
+  creado_en?: string;
+};
+
 // Almacenamiento en memoria para fallback en entornos de prueba o locales sin conexión live
 const memoryPredios = new Map<string, PredioRecord>();
 const memorySolicitudes = new Map<string, SolicitudRecord>();
 const memoryInformes = new Map<string, InformeRecord>();
 const memoryMediciones: MedicionRecord[] = [];
 const memoryConsumo: { tenant_id: string; fecha: string; ha_procesadas: number }[] = [];
-const memoryWorkflowLogs: { tenant_id: string; workflow_nombre: string; estado: "exitoso" | "fallido"; mensaje_error?: string | null; payload?: any }[] = [];
+const memoryWorkflowLogs: WorkflowLogRecord[] = [];
 
 function mapInformeToReportRecord(inf: any): ReportRecord {
   const contenido = inf.contenido || {};
@@ -431,7 +443,77 @@ export async function createSolicitudAnalisisDb(
     creado_en: new Date().toISOString(),
   };
   memorySolicitudes.set(memoryKey, created);
+  memorySolicitudes.set(created.id, created);
   return created;
+}
+
+export async function getSolicitudByIdDb(
+  tenantId: string,
+  id: string,
+  accessToken?: string
+): Promise<SolicitudRecord | null> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data } = await client
+      .from("solicitudes_analisis")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (data) return data as SolicitudRecord;
+  }
+
+  const sol = memorySolicitudes.get(id);
+  if (sol && sol.tenant_id === tenantId) return sol;
+  return null;
+}
+
+export async function getPendingSolicitudesDb(
+  accessToken?: string
+): Promise<SolicitudRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data } = await client
+      .from("solicitudes_analisis")
+      .select("*")
+      .eq("estado", "pendiente")
+      .order("creado_en", { ascending: true });
+
+    if (data) return data as SolicitudRecord[];
+  }
+
+  return Array.from(memorySolicitudes.values()).filter(s => s.estado === "pendiente");
+}
+
+export async function updateSolicitudStateDb(
+  tenantId: string,
+  id: string,
+  estado: string,
+  mensajeError?: string | null,
+  accessToken?: string
+): Promise<void> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    await client
+      .from("solicitudes_analisis")
+      .update({
+        estado,
+        mensaje_error: mensajeError ?? null,
+        actualizado_en: new Date().toISOString(),
+      })
+      .eq("tenant_id", tenantId)
+      .eq("id", id);
+  }
+
+  const sol = memorySolicitudes.get(id);
+  if (sol && sol.tenant_id === tenantId) {
+    sol.estado = estado;
+    sol.mensaje_error = mensajeError ?? null;
+  }
 }
 
 export async function saveInformeDb(
@@ -552,7 +634,27 @@ export async function writeWorkflowLogDb(
     estado,
     mensaje_error: mensajeError,
     payload,
+    creado_en: new Date().toISOString(),
   });
+}
+
+export async function getWorkflowLogsDb(
+  tenantId: string,
+  accessToken?: string
+): Promise<WorkflowLogRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    const { data } = await client
+      .from("workflow_logs")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("creado_en", { ascending: true });
+
+    if (data) return data as WorkflowLogRecord[];
+  }
+
+  return memoryWorkflowLogs.filter(w => w.tenant_id === tenantId);
 }
 
 export async function listReportsDb(

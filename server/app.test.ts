@@ -3,6 +3,8 @@ import request from "supertest";
 import * as jose from "jose";
 import { createApp } from "./app";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry } from "./geometry";
+import { processSolicitud } from "./services/analysis-worker";
+import { createSolicitudAnalisisDb, getTenantUsageAndLimits, getWorkflowLogsDb } from "./db/repository";
 
 async function createMockJwt(payload: Record<string, unknown> = {}) {
   const secret = new TextEncoder().encode("test-jwt-secret-12345678901234567890");
@@ -298,6 +300,43 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
         .set("Authorization", `Bearer ${tokenTenantY}`);
       expect(dashY.body.result.data.json.metrics.totalPredios).toBe(0);
       expect(dashY.body.result.data.json.predios).toEqual([]);
+    });
+  });
+
+  describe("Worker Asíncrono, Transiciones de Estado y Consumo de Cuota", () => {
+    it("ejecuta la solicitud a través del worker registrando las transiciones en workflow_logs y el consumo sólo si es exitoso", async () => {
+      const tenantId = "tenant-worker-test-01";
+      const solicitud = await createSolicitudAnalisisDb({
+        tenant_id: tenantId,
+        predio_id: "predio-worker-1",
+        superficie_ha: 45,
+        tier: "tier1_predio",
+        satelites_solicitados: ["sentinel-2"],
+        estado: "pendiente",
+        motor_usado: "processing_api",
+        variables_solicitadas: ["ndvi"],
+        correlation_id: "corr-worker-01",
+        idempotency_key: "idempotency-worker-01",
+      });
+
+      expect(solicitud.estado).toBe("pendiente");
+
+      // Procesar solicitud con el worker
+      const workerResult = await processSolicitud(solicitud);
+      expect(workerResult.success).toBe(true);
+      expect(workerResult.estado).toBe("completado");
+
+      // Verificar que los logs de trazabilidad en workflow_logs registraron las transiciones
+      const logs = await getWorkflowLogsDb(tenantId);
+      const solicitudLogs = logs.filter(l => l.payload?.solicitudId === solicitud.id);
+      expect(solicitudLogs.length).toBeGreaterThanOrEqual(3);
+      expect(solicitudLogs.some(l => l.payload?.estado === "en_cola")).toBe(true);
+      expect(solicitudLogs.some(l => l.payload?.estado === "procesando")).toBe(true);
+      expect(solicitudLogs.some(l => l.payload?.estado === "completado")).toBe(true);
+
+      // Verificar que el consumo de hectáreas se haya registrado
+      const usage = await getTenantUsageAndLimits(tenantId);
+      expect(usage.haMesUsadas).toBeGreaterThanOrEqual(45);
     });
   });
 

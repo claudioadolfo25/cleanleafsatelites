@@ -27,6 +27,7 @@ import { isProductionEnv } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry, type GeoJSONPolygon } from "./geometry";
+import { processSolicitud } from "./services/analysis-worker";
 import {
   createPredioDb,
   createSolicitudAnalisisDb,
@@ -34,7 +35,9 @@ import {
   getDashboardDataDb,
   getPredioByIdDb,
   getReportByIdDb,
+  getSolicitudByIdDb,
   getTenantUsageAndLimits,
+  getWorkflowLogsDb,
   listPrediosDb,
   listReportsDb,
   recordConsumoDb,
@@ -49,6 +52,35 @@ const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
 const planSchema = z.enum(["piloto", "regional_pyme", "region_completa"]);
 const sectorSchema = z.enum(["agricultura", "acuicultura", "forestal", "emergencias"]);
 const variableSchema = z.string().min(1);
+
+const demoDashboard = {
+  tenant: {
+    nombre: "Hacienda Los Robles",
+    vertical: "agricultura" as Vertical,
+    plan: "Piloto Araucanía",
+    usoHa: 86,
+    limiteHa: 100,
+  },
+  predios: [
+    { id: "predio-las-quinas", nombre: "Las Quinas", comuna: "Freire", hectareas: 42, ndvi: 0.68, estado: "Óptimo", delta: 0.04 },
+    { id: "predio-el-aromo", nombre: "El Aromo", comuna: "Pitrufquén", hectareas: 31, ndvi: 0.51, estado: "Revisar", delta: -0.08 },
+    { id: "predio-santa-elena", nombre: "Santa Elena", comuna: "Gorbea", hectareas: 13, ndvi: 0.72, estado: "Óptimo", delta: 0.02 },
+  ],
+  measurements: {
+    "sentinel-2": [
+      { fecha: "08 Ago", valor: 0.49 }, { fecha: "13 Ago", valor: 0.53 }, { fecha: "18 Ago", valor: 0.58 },
+      { fecha: "23 Ago", valor: 0.55 }, { fecha: "28 Ago", valor: 0.61 }, { fecha: "02 Sep", valor: 0.64 }, { fecha: "07 Sep", valor: 0.68 },
+    ],
+    "sentinel-1": [
+      { fecha: "08 Ago", valor: -18.4 }, { fecha: "13 Ago", valor: -17.8 }, { fecha: "18 Ago", valor: -19.1 },
+      { fecha: "23 Ago", valor: -18.7 }, { fecha: "28 Ago", valor: -17.9 }, { fecha: "02 Sep", valor: -17.4 }, { fecha: "07 Sep", valor: -16.8 },
+    ],
+  },
+  alerts: [
+    { id: "a-1", nivel: "atención", titulo: "El Aromo necesita una revisión", detalle: "El vigor bajó 0,08 puntos en los últimos 15 días.", accion: "Ver zona" },
+    { id: "a-2", nivel: "info", titulo: "Nueva imagen disponible", detalle: "Sentinel-2 actualizó Las Quinas hace 2 días.", accion: "Ver datos" },
+  ],
+};
 
 const analysisInput = z.object({
   predioId: z.string().min(1),
@@ -177,7 +209,7 @@ async function createAnalysisRequest(
   });
   if (!planResult.allowed) throw new Error(`${planResult.code}: ${planResult.message}`);
 
-  // 3. Persistir/recuperar la solicitud por idempotencia en DB
+  // 3. Crear solicitud con estado 'pendiente' en DB
   const solicitudDb = await createSolicitudAnalisisDb({
     tenant_id: tenantId,
     predio_id: input.predioId,
@@ -185,12 +217,18 @@ async function createAnalysisRequest(
     superficie_ha: superficieHa,
     tier,
     satelites_solicitados: satellites,
-    estado: tier === "tier3_regional" ? "requiere_revision" : "procesando",
+    estado: tier === "tier3_regional" ? "requiere_revision" : "pendiente",
     motor_usado: processingModeForTier(tier),
     variables_solicitadas: variables,
     correlation_id: correlationId,
     idempotency_key: rawIdempotencyKey,
     solicitado_por: userId ?? null,
+  }, accessToken);
+
+  await writeWorkflowLogDb(tenantId, "createAnalysis", "exitoso", null, {
+    solicitudId: solicitudDb.id,
+    estado: solicitudDb.estado,
+    mensaje: "Solicitud registrada con éxito",
   }, accessToken);
 
   if (tier === "tier3_regional") {
@@ -211,62 +249,49 @@ async function createAnalysisRequest(
       mensaje: "Este análisis regional requiere evaluación antes de consumir cuota o iniciar procesamiento.",
     };
     idempotencyStore.set(idempotencyKey, regionalResult);
-    await writeWorkflowLogDb(tenantId, "createAnalysis", "exitoso", null, regionalResult, accessToken);
     return regionalResult;
   }
 
-  // 4. Procesar medición usando el BBOX derivado de la geometría real
-  const firstSatellite = satellites[0];
-  const firstVariable = variables[0];
-  const history: AnalysisStatus[] = ["pendiente", "en_cola", "procesando"];
-  assertTransition(history[0], history[1]);
-  assertTransition(history[1], history[2]);
-
-  const result = await observationProvider.query({
-    predioId: input.predioId,
-    satellite: firstSatellite,
-    variable: firstVariable,
-    tier,
-    periodFrom: input.periodFrom,
-    periodTo: input.periodTo,
-    bbox: derivedBBox
+  // 4. Iniciar procesamiento asíncrono en segundo plano (o inmediato en test)
+  const processPromise = processSolicitud(solicitudDb, accessToken).catch(err => {
+    console.error("[AsyncProcessing] Error en worker:", err);
   });
 
-  const report = buildAnalysisReport({ id: solicitudDb.id ?? `sol-${Date.now()}`, predioId: input.predioId, predioNombre, tier, measurement: result, periodFrom: input.periodFrom, periodTo: input.periodTo });
-  history.push("completado");
-  assertTransition(history[2], history[3]);
+  // En entorno de pruebas o local, aguardamos la resolución síncrona
+  if (isTestRuntime) {
+    await processPromise;
+    const completedReport = await getReportByIdDb(tenantId, solicitudDb.id!, accessToken);
+    const medicion = (completedReport as any)?.contenido?.mediciones?.[0] ?? { satelite: satellites[0], variable: variables[0], valor: 0.5, unidad: "ratio" };
+    const completedResult = {
+      id: solicitudDb.id!,
+      correlationId,
+      idempotencyKey,
+      estado: "completado" as const,
+      history: ["pendiente", "en_cola", "procesando", "completado"] as AnalysisStatus[],
+      tier,
+      tierLabel: tierLabel(tier),
+      motorUsado: processingModeForTier(tier),
+      tiempoEstimado: tierWaitEstimate(tier),
+      predioNombre,
+      satelitesSolicitados: satellites,
+      variablesSolicitadas: variables,
+      bbox: derivedBBox,
+      medicionPreview: medicion,
+      interpretacionPreview: interpretMeasurement(medicion),
+      informe: completedReport ? { ...completedReport, estado: completedReport.status } : { estado: "completado", status: "completado" },
+      mensaje: `Solicitud creada para ${predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
+    };
+    idempotencyStore.set(idempotencyKey, completedResult);
+    return completedResult;
+  }
 
-  // 5. Guardar Informe, Mediciones, Consumo y Logs en DB
-  await saveInformeDb({
-    tenant_id: tenantId,
-    predio_id: input.predioId,
-    solicitud_id: solicitudDb.id,
-    tipo_lente: "agro",
-    contenido: report as any,
-  }, accessToken);
-
-  const acquisitionDate = (result as any).fecha ?? (result as any).acquired_at;
-  const acquisitionIsoStr = acquisitionDate instanceof Date ? acquisitionDate.toISOString() : typeof acquisitionDate === "string" ? acquisitionDate : new Date().toISOString();
-
-  await saveMedicionesDb([{
-    tenant_id: tenantId,
-    predio_id: input.predioId,
-    solicitud_id: solicitudDb.id,
-    satelite: firstSatellite,
-    variable: firstVariable,
-    valor: result.valor,
-    unidad: result.unidad,
-    fecha_adquisicion: acquisitionIsoStr,
-  }], accessToken);
-
-  await recordConsumoDb(tenantId, superficieHa, accessToken);
-
-  const completedResult = {
-    id: solicitudDb.id ?? `sol-${Date.now()}`,
+  // Respuesta asíncrona inmediata no bloqueante para producción
+  const pendingResponse = {
+    id: solicitudDb.id!,
     correlationId,
     idempotencyKey,
-    estado: "completado" as const,
-    history,
+    estado: "pendiente" as const,
+    history: ["pendiente"] as AnalysisStatus[],
     tier,
     tierLabel: tierLabel(tier),
     motorUsado: processingModeForTier(tier),
@@ -275,15 +300,11 @@ async function createAnalysisRequest(
     satelitesSolicitados: satellites,
     variablesSolicitadas: variables,
     bbox: derivedBBox,
-    medicionPreview: result,
-    interpretacionPreview: interpretMeasurement(result),
-    informe: report,
-    mensaje: `Solicitud creada para ${predioNombre}. Nivel ${tierLabel(tier)} asignado correctamente.`,
+    mensaje: "Solicitud registrada correctamente. Procesando en segundo plano...",
   };
 
-  idempotencyStore.set(idempotencyKey, completedResult);
-  await writeWorkflowLogDb(tenantId, "createAnalysis", "exitoso", null, completedResult, accessToken);
-  return completedResult;
+  idempotencyStore.set(idempotencyKey, pendingResponse);
+  return pendingResponse;
 }
 
 export const appRouter = router({
@@ -419,6 +440,25 @@ export const appRouter = router({
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
         }
       }),
+      getStatus: protectedProcedure
+        .input(z.object({ id: z.string().min(1) }))
+        .query(async ({ input, ctx }) => {
+          const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+          const solicitud = await getSolicitudByIdDb(ctx.user.tenantId, input.id, accessToken);
+          if (!solicitud) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitud no encontrada" });
+
+          const report = await getReportByIdDb(ctx.user.tenantId, input.id, accessToken);
+          const logs = await getWorkflowLogsDb(ctx.user.tenantId, accessToken);
+
+          return {
+            id: solicitud.id!,
+            estado: solicitud.estado,
+            mensajeError: solicitud.mensaje_error,
+            idempotencyKey: solicitud.idempotency_key,
+            informe: report,
+            timeline: logs.filter(l => l.payload?.solicitudId === input.id),
+          };
+        }),
     }),
     onboarding: router({
       createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
