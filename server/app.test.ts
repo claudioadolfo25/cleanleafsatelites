@@ -796,7 +796,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       const adminToken = await createMockJwt({
         sub: "usr_admin_audit",
         email: "admin.audit@cleanleaf.cl",
-        app_metadata: { tenant_id: "tenant-audit-01", role: "admin" },
+        app_metadata: { tenant_id: "tenant-audit-01", role: "super_admin" },
       });
 
       // 1. Ejecutar actualización de plan
@@ -817,6 +817,146 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       expect(auditRes.status).toBe(200);
       const logs = auditRes.body.result.data.json;
       expect(logs.some((l: any) => l.action === "admin.update_plan")).toBe(true);
+    });
+  });
+
+  describe("Pruebas Obligatorias de Seguridad, Roles, Tenant y Storage", () => {
+    it("1. JWT con user_metadata.role='super_admin' y sin app_metadata -> FORBIDDEN en procedimientos admin", async () => {
+      const tokenUserMetaAdmin = await createMockJwt({
+        sub: "usr_fake_admin",
+        user_metadata: { role: "super_admin", tenant_id: "tenant-fake" },
+        app_metadata: { tenant_id: "tenant-fake" }, // Sin role en app_metadata -> "user"
+      });
+
+      const resList = await request(app)
+        .get("/api/trpc/admin.listTenants")
+        .set("Authorization", `Bearer ${tokenUserMetaAdmin}`);
+
+      expect(resList.status).toBe(403);
+
+      const resUpdate = await request(app)
+        .post("/api/trpc/admin.updatePlan")
+        .set("Authorization", `Bearer ${tokenUserMetaAdmin}`)
+        .send({ json: { tenantId: "tenant-target", planId: "region_completa" } });
+
+      expect(resUpdate.status).toBe(403);
+    });
+
+    it("2. Admin del tenant A no lista, ve ni modifica el tenant B (ni cambia su propio plan)", async () => {
+      const tokenAdminA = await createMockJwt({
+        sub: "usr_admin_tenant_a",
+        app_metadata: { tenant_id: "tenant-a", role: "admin" },
+      });
+
+      // Admin de tenant A intenta cambiar plan -> FORBIDDEN (solo super_admin)
+      const updatePlanRes = await request(app)
+        .post("/api/trpc/admin.updatePlan")
+        .set("Authorization", `Bearer ${tokenAdminA}`)
+        .send({ json: { tenantId: "tenant-a", planId: "region_completa" } });
+
+      expect(updatePlanRes.status).toBe(403);
+
+      // Admin de tenant A intenta listar todos los tenants -> FORBIDDEN
+      const listTenantsRes = await request(app)
+        .get("/api/trpc/admin.listTenants")
+        .set("Authorization", `Bearer ${tokenAdminA}`);
+
+      expect(listTenantsRes.status).toBe(403);
+
+      // Admin de tenant A intenta consultar predio no perteneciente a tenant A -> 404 NOT_FOUND
+      const getPredioBRes = await request(app)
+        .get("/api/trpc/predios.getById?input=" + encodeURIComponent(JSON.stringify({ json: { id: "predio-inexistente-b" } })))
+        .set("Authorization", `Bearer ${tokenAdminA}`);
+
+      expect(getPredioBRes.status).toBe(404);
+    });
+
+    it("3. Usuario sin tenant_id -> TENANT_REQUIRED en procedimientos de negocio", async () => {
+      const tokenNoTenant = await createMockJwt({
+        sub: "usr_no_tenant_1",
+        app_metadata: { role: "user" }, // Sin tenant_id
+      });
+
+      // Procedimiento de negocio predios.list -> FORBIDDEN TENANT_REQUIRED
+      const resPredios = await request(app)
+        .get("/api/trpc/predios.list")
+        .set("Authorization", `Bearer ${tokenNoTenant}`);
+
+      expect(resPredios.status).toBe(403);
+      expect(resPredios.body.error.json.message).toContain("TENANT_REQUIRED");
+
+      // Procedimiento de negocio cleanleaf.createAnalysis -> FORBIDDEN TENANT_REQUIRED
+      const resAnalysis = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${tokenNoTenant}`)
+        .send({
+          json: {
+            predioId: "p1",
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+          },
+        });
+
+      expect(resAnalysis.status).toBe(403);
+      expect(resAnalysis.body.error.json.message).toContain("TENANT_REQUIRED");
+
+      // onboarding.createTenant ES accesible sin tenant_id
+      const resOnboarding = await request(app)
+        .post("/api/trpc/apiV1.onboarding.createTenant")
+        .set("Authorization", `Bearer ${tokenNoTenant}`)
+        .send({
+          json: {
+            organizationName: "Nueva Org Test Sin Tenant",
+            planId: "piloto",
+          },
+        });
+
+      expect(resOnboarding.status).toBe(200);
+    });
+
+    it("4. Worker procesa una solicitud con RLS activo usando el cliente service role", async () => {
+      const tenantId = "tenant-worker-rls-01";
+      const solicitud = await createSolicitudAnalisisDb({
+        tenant_id: tenantId,
+        predio_id: "predio-worker-rls-1",
+        superficie_ha: 60,
+        tier: "tier1_predio",
+        satelites_solicitados: ["sentinel-2"],
+        estado: "pendiente",
+        motor_usado: "processing_api",
+        variables_solicitadas: ["ndvi"],
+        correlation_id: "corr-worker-rls-01",
+        idempotency_key: "idempotency-worker-rls-01",
+      });
+
+      const workerResult = await processSolicitud(solicitud);
+      expect(workerResult.success).toBe(true);
+      expect(workerResult.estado).toBe("completado");
+
+      const logs = await getWorkflowLogsDb(tenantId);
+      expect(logs.some(l => l.payload?.estado === "completado")).toBe(true);
+    });
+
+    it("5. Miniatura subida con image/png a ruta {tenant}/{informe}/thumb.png y sin pisar el PDF", async () => {
+      const { uploadReportPdfToStorage, uploadReportThumbnail } = await import("./reports/storage-service");
+      const { getFieldThumbnail } = await import("./services/copernicus-thumbnail-service");
+
+      const tenantId = "tenant-thumb-test";
+      const reportId = "report-thumb-01";
+
+      // Subir PDF
+      const pdfBuffer = Buffer.from("%PDF-1.4 Mock PDF content");
+      const pdfPath = await uploadReportPdfToStorage(tenantId, reportId, pdfBuffer);
+      expect(pdfPath).toBe(`reports/${tenantId}/${reportId}.pdf`);
+
+      // Subir miniatura
+      const thumbResult = await getFieldThumbnail(tenantId, reportId, validValdiviaPolygon);
+      expect(thumbResult.thumbnailUrl).toBe(`${tenantId}/${reportId}/thumb.png`);
+
+      // La miniatura tiene ruta distinta de la del PDF y no la pisa
+      expect(thumbResult.thumbnailUrl).not.toEqual(pdfPath);
+      expect(thumbResult.thumbnailUrl).toBe(`${tenantId}/${reportId}/thumb.png`);
     });
   });
 

@@ -1,5 +1,5 @@
 import type { GeoJSONGeometry } from "../geometry";
-import { uploadReportPdfToStorage } from "../reports/storage-service";
+import { uploadReportThumbnail } from "../reports/storage-service";
 import { createAuditLogDb } from "../db/repository";
 
 export async function getFieldThumbnail(
@@ -15,7 +15,7 @@ export async function getFieldThumbnail(
       "base64"
     );
 
-    const storagePath = await uploadReportPdfToStorage(tenantId, `${solicitudId}-thumb`, mockImageBuffer, accessToken);
+    const storagePath = await uploadReportThumbnail(tenantId, solicitudId, mockImageBuffer, accessToken);
 
     await createAuditLogDb({
       tenant_id: tenantId,
