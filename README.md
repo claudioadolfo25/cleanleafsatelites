@@ -72,7 +72,11 @@ Para desplegar el worker como un servicio independiente en Render:
 
 El frontend consume contratos tipados de tRPC y no contiene reglas de negocio de catálogo o tiers. La selección de satélites se filtra por vertical en una única fuente de verdad, y las consultas stub son asíncronas para mantener el mismo contrato que tendrá el proveedor real. Los tiers aprobados son: Tier 1 para menos de 50 ha, Tier 2 para 50–499 ha y Tier 3 desde 500 ha; en agricultura el Tier 3 queda visible como stub de contexto regional y no activa Sentinel-3 en el selector.
 
-La capa `shared/interpretation.ts` prepara el prompt que recibirá Dify con `satelite`, `variable`, `valor` y `unidad`, y contiene una interpretación determinista de respaldo para NDVI y Sigma0 VV. `supabase/schema.sql` y `supabase/seed.sql` documentan la migración futura a Postgres/Supabase, con `tenant_id`, `get_current_tenant_id()` y políticas RLS por tenant. El seed incluye el caso de rechazo de Sentinel-3 para agricultura.
+La capa `shared/interpretation.ts` prepara el prompt que recibirá Dify con `satelite`, `variable`, `valor` y `unidad`, y contiene una interpretación determinista de respaldo para NDVI y Sigma0 VV.
+
+> **Nota de Validación Agronómica:** Las reglas de recomendación agronómica y umbrales de diagnóstico están centralizados en `server/analysis/recommendation-rules.json`. Este archivo se encuentra en versión borrador v1.0 **"pendiente de validación agronómica"** con expertos de terreno antes de su despliegue comercial definitivo.
+
+`supabase/schema.sql` y `supabase/seed.sql` documentan la migración futura a Postgres/Supabase, con `tenant_id`, `get_current_tenant_id()` y políticas RLS por tenant. El seed incluye el caso de rechazo de Sentinel-3 para agricultura.
 
 Queda fuera de esta fase, de forma intencional: integración real con Sentinel Hub, workflows n8n conectados, Stripe, WhatsApp y autenticación de API keys multi-tenant. Se deben integrar en Fase 2 reemplazando stubs sin cambiar los contratos públicos.
 

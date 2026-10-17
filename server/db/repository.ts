@@ -1319,6 +1319,94 @@ export async function listEscenasForInformeDb(
   return escenaIds.map(id => memoryEscenas.get(id)).filter((e): e is EscenaRecord => Boolean(e));
 }
 
+export type AlertaRecord = {
+  id?: string;
+  tenant_id: string;
+  predio_id: string;
+  tipo_alerta: string;
+  enviada?: boolean;
+  valor_real?: number | null;
+  valor_umbral?: number | null;
+  fecha_activacion?: string;
+};
+
+const memoryAlertas = new Map<string, AlertaRecord>();
+
+export async function createAlertWithDeduplicationDb(
+  tenantId: string,
+  alertData: {
+    predio_id: string;
+    tipo_alerta: string;
+    valor_real?: number | null;
+    valor_umbral?: number | null;
+  },
+  accessToken?: string
+): Promise<{ inserted: boolean; alert: AlertaRecord }> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      // 1. Verificar si ya existe una alerta abierta no enviada del mismo tipo y predio
+      const { data: existing } = await client
+        .from("alertas")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("predio_id", alertData.predio_id)
+        .eq("tipo_alerta", alertData.tipo_alerta)
+        .eq("enviada", false)
+        .maybeSingle();
+
+      if (existing) {
+        return { inserted: false, alert: existing as AlertaRecord };
+      }
+
+      // 2. Insertar nueva alerta
+      const { data: inserted } = await client
+        .from("alertas")
+        .insert({
+          tenant_id: tenantId,
+          predio_id: alertData.predio_id,
+          tipo_alerta: alertData.tipo_alerta,
+          valor_real: alertData.valor_real ?? null,
+          valor_umbral: alertData.valor_umbral ?? null,
+          enviada: false,
+        })
+        .select()
+        .single();
+
+      if (inserted) {
+        return { inserted: true, alert: inserted as AlertaRecord };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback en memoria
+  const deduplicationKey = `${tenantId}:${alertData.predio_id}:${alertData.tipo_alerta}`;
+  const existing = Array.from(memoryAlertas.values()).find(
+    a => a.tenant_id === tenantId && a.predio_id === alertData.predio_id && a.tipo_alerta === alertData.tipo_alerta && !a.enviada
+  );
+
+  if (existing) {
+    return { inserted: false, alert: existing };
+  }
+
+  const createdAlert: AlertaRecord = {
+    id: `alt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    tenant_id: tenantId,
+    predio_id: alertData.predio_id,
+    tipo_alerta: alertData.tipo_alerta,
+    valor_real: alertData.valor_real ?? null,
+    valor_umbral: alertData.valor_umbral ?? null,
+    enviada: false,
+    fecha_activacion: new Date().toISOString(),
+  };
+
+  memoryAlertas.set(createdAlert.id!, createdAlert);
+  return { inserted: true, alert: createdAlert };
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string

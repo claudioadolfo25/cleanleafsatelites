@@ -156,7 +156,46 @@ export async function processSolicitud(
       return { success: false, estado: "error_final", error: errorMessage };
     }
 
-    // 4. Generar Informe y guardar Mediciones
+    // 4. Interpretar serie temporal real y evaluar reglas de recomendación
+    const { interpretTimeSeries } = await import("../analysis/interpret");
+    const { createAlertWithDeduplicationDb, listObservacionesSerieDb } = await import("../db/repository");
+
+    const historySeries = solicitud.predio_id
+      ? await listObservacionesSerieDb(tenantId, solicitud.predio_id, firstSatellite, firstVariable, accessToken)
+      : [];
+
+    const seriesForInterpret = [
+      ...historySeries.map(s => ({
+        valor: s.valor,
+        porcentajePixelesValidos: s.porcentaje_pixeles_validos,
+        nivelConfianza: s.nivel_confianza,
+      })),
+      {
+        valor: result.valor,
+        porcentajePixelesValidos: result.valid_pixel_percentage ?? 0.85,
+        nivelConfianza: result.confidence_level ?? "alta",
+      },
+    ];
+
+    const interpretation = interpretTimeSeries(seriesForInterpret, "agricultura", firstVariable);
+
+    // Si la regla agronómica gatilla alerta, guardarla en DB con deduplicación
+    for (const alertToTrigger of interpretation.alertsTriggered) {
+      if (solicitud.predio_id) {
+        await createAlertWithDeduplicationDb(
+          tenantId,
+          {
+            predio_id: solicitud.predio_id,
+            tipo_alerta: alertToTrigger.titulo,
+            valor_real: interpretation.valorActual,
+            valor_umbral: null,
+          },
+          accessToken
+        );
+      }
+    }
+
+    // Generar Informe enriquecido con interpretación real
     const predioDbForReport = solicitud.predio_id
       ? await getPredioByIdDb(tenantId, solicitud.predio_id, accessToken)
       : null;
@@ -168,6 +207,17 @@ export async function processSolicitud(
       tier: solicitud.tier,
       measurement: result,
     });
+
+    if (interpretation.status === "ok") {
+      (report as any).interpretation = interpretation;
+      (report as any).summary = interpretation.diagnostico;
+      if (interpretation.recomendaciones.length > 0) {
+        (report as any).recommendation = interpretation.recomendaciones[0].recomendacion;
+      }
+    } else {
+      (report as any).summary = "datos insuficientes";
+      (report as any).recommendation = "No es posible emitir una recomendación por baja confianza o falta de datos válidos.";
+    }
 
     await saveInformeDb({
       tenant_id: tenantId,

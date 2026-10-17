@@ -535,6 +535,55 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Módulo de Interpretación Agronómica y Deduplicación de Alertas", () => {
+    it("interpreta tendencia a la baja en NDVI y genera recomendación con ruleId", async () => {
+      const { interpretTimeSeries } = await import("./analysis/interpret");
+      const seriesPoints = [
+        { valor: 0.72, porcentajePixelesValidos: 0.95 },
+        { valor: 0.50, porcentajePixelesValidos: 0.90 }, // Caída de -0.22
+      ];
+
+      const result = interpretTimeSeries(seriesPoints, "agricultura", "ndvi");
+      expect(result.status).toBe("ok");
+      expect(result.variacionPrevio).toBe(-0.22);
+      expect(result.recomendaciones.length).toBeGreaterThan(0);
+      expect(result.recomendaciones[0].ruleId).toBe("RULE_NDVI_DROP_CRITICAL");
+      expect(result.alertsTriggered).toHaveLength(2);
+    });
+
+    it("devuelve 'datos insuficientes' y omite recomendaciones si la confianza es baja o faltan datos", async () => {
+      const { interpretTimeSeries } = await import("./analysis/interpret");
+      const lowConfidencePoints = [
+        { valor: 0.65, porcentajePixelesValidos: 0.30 }, // Nubes o baja calidad
+      ];
+
+      const result = interpretTimeSeries(lowConfidencePoints, "agricultura", "ndvi");
+      expect(result.status).toBe("datos_insuficientes");
+      expect(result.diagnostico).toBe("datos insuficientes");
+      expect(result.recomendaciones).toEqual([]);
+      expect(result.alertsTriggered).toEqual([]);
+    });
+
+    it("deduplica alertas abiertas en la base de datos evitando duplicados del mismo predio y tipo", async () => {
+      const { createAlertWithDeduplicationDb } = await import("./db/repository");
+      const tenantId = "tenant-dedup-test";
+      const alertData = {
+        predio_id: "predio-dedup-01",
+        tipo_alerta: "Caída crítica de vigor vegetativo",
+        valor_real: 0.45,
+      };
+
+      // 1. Primera inserción
+      const res1 = await createAlertWithDeduplicationDb(tenantId, alertData);
+      expect(res1.inserted).toBe(true);
+
+      // 2. Segunda inserción idéntica mientras está abierta -> deduplicada
+      const res2 = await createAlertWithDeduplicationDb(tenantId, alertData);
+      expect(res2.inserted).toBe(false);
+      expect(res2.alert.id).toBe(res1.alert.id);
+    });
+  });
+
   describe("Casos de Uso searchScenes, getProvenance y Atribución Legal", () => {
     it("busca escenas STAC filtrando por cobertura de nubes", async () => {
       const { searchScenes } = await import("./services/copernicus-scenes-service");
