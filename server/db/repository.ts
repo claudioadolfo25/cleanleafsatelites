@@ -1135,6 +1135,104 @@ export async function saveObservationCacheDb(
   memoryObservationCache.set(cacheKey, { datos: data, expira_en: expiresAt });
 }
 
+export type ObservacionesSerieRecord = {
+  id?: string;
+  tenant_id: string;
+  predio_id: string;
+  satelite: string;
+  variable: string;
+  intervalo_desde: string;
+  intervalo_hasta: string;
+  valor: number | null;
+  porcentaje_pixeles_validos?: number;
+  nivel_confianza?: string;
+  evalscript_version?: string;
+  evalscript_hash?: string;
+  creado_en?: string;
+};
+
+const memoryObservacionesSerie: ObservacionesSerieRecord[] = [];
+
+export async function listObservacionesSerieDb(
+  tenantId: string,
+  predioId: string,
+  satelite: string,
+  variable: string,
+  accessToken?: string
+): Promise<ObservacionesSerieRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { data } = await client
+        .from("observaciones_serie")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("predio_id", predioId)
+        .eq("satelite", satelite)
+        .eq("variable", variable)
+        .order("intervalo_desde", { ascending: true });
+
+      if (data && data.length > 0) return data as ObservacionesSerieRecord[];
+    } catch {
+      // Fallback
+    }
+  }
+
+  return memoryObservacionesSerie.filter(
+    s => s.tenant_id === tenantId && s.predio_id === predioId && s.satelite === satelite && s.variable === variable
+  );
+}
+
+export async function saveObservacionesSerieDb(
+  items: ObservacionesSerieRecord[],
+  accessToken?: string
+): Promise<void> {
+  if (items.length === 0) return;
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      await client.from("observaciones_serie").upsert(
+        items.map(item => ({
+          tenant_id: item.tenant_id,
+          predio_id: item.predio_id,
+          satelite: item.satelite,
+          variable: item.variable,
+          intervalo_desde: item.intervalo_desde,
+          intervalo_hasta: item.intervalo_hasta,
+          valor: item.valor,
+          porcentaje_pixeles_validos: item.porcentaje_pixeles_validos ?? 1.0,
+          nivel_confianza: item.nivel_confianza ?? "alta",
+          evalscript_version: item.evalscript_version ?? "v1.0.0",
+          evalscript_hash: item.evalscript_hash,
+        })),
+        { onConflict: "tenant_id,predio_id,satelite,variable,intervalo_desde,intervalo_hasta" }
+      );
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+
+  for (const item of items) {
+    const existingIndex = memoryObservacionesSerie.findIndex(
+      s =>
+        s.tenant_id === item.tenant_id &&
+        s.predio_id === item.predio_id &&
+        s.satelite === item.satelite &&
+        s.variable === item.variable &&
+        s.intervalo_desde === item.intervalo_desde &&
+        s.intervalo_hasta === item.intervalo_hasta
+    );
+    if (existingIndex >= 0) {
+      memoryObservacionesSerie[existingIndex] = { ...memoryObservacionesSerie[existingIndex], ...item };
+    } else {
+      memoryObservacionesSerie.push({ ...item, id: `obs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` });
+    }
+  }
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string

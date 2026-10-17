@@ -535,6 +535,82 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Caso de Uso getIndexTimeSeries y Persistencia en observaciones_serie", () => {
+    it("obtiene y almacena incrementalmente la serie temporal de índices", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-series-test", role: "user" },
+      });
+
+      // 1. Crear predio
+      const predioRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Predio Serie Temporal",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      const predioId = predioRes.body.result.data.json.id;
+
+      // 2. Primera consulta de serie temporal
+      const inputParam = encodeURIComponent(
+        JSON.stringify({
+          json: {
+            predioId,
+            satellite: "sentinel-2",
+            variable: "ndvi",
+            interval: "P5D",
+          },
+        })
+      );
+
+      const seriesRes1 = await request(app)
+        .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(seriesRes1.status).toBe(200);
+      const data1 = seriesRes1.body.result.data.json;
+      expect(data1.source).toBe("copernicus_time_series");
+      expect(data1.points).toHaveLength(3);
+      expect(data1.points[1].status).toBe("sin_dato"); // apoya intervalos sin dato
+
+      // 3. Segunda consulta -> reutiliza puntos guardados en DB (incrementalidad)
+      const seriesRes2 = await request(app)
+        .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(seriesRes2.status).toBe(200);
+      const data2 = seriesRes2.body.result.data.json;
+      expect(data2.source).toBe("observaciones_serie_db");
+      expect(data2.points).toHaveLength(3);
+    });
+
+    it("valida la variable sst para Sentinel-3 y rechaza para Sentinel-2", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-sst-test", role: "user" },
+      });
+
+      const inputInvalid = encodeURIComponent(
+        JSON.stringify({
+          json: {
+            predioId: "predio-1",
+            satellite: "sentinel-2",
+            variable: "sst",
+          },
+        })
+      );
+
+      const res = await request(app)
+        .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputInvalid}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.json.message).toContain("Variable sst no disponible para sentinel-2");
+    });
+  });
+
   describe("Políticas de Producción Copernicus, Cuotas y Calidad", () => {
     it("evalúa la política de producción COPERNICUS_PROD_POLICY correctamente", async () => {
       const { getCopernicusProdPolicy } = await import("./services/copernicus-policy-service");

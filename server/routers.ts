@@ -46,12 +46,14 @@ import {
   listAllTenantsDb,
   listAuditLogsDb,
   listFailedSolicitudesDb,
+  listObservacionesSerieDb,
   listPrediosDb,
   listReportsDb,
   recordConsumoDb,
   saveApiKeyHashDb,
   saveInformeDb,
   saveMedicionesDb,
+  saveObservacionesSerieDb,
   saveTenantSettingsDb,
   saveUserPreferencesDb,
   updatePredioDb,
@@ -579,6 +581,114 @@ export const appRouter = router({
     createAnalysis: protectedProcedure.input(analysisInput).mutation(({ input, ctx }) => {
       const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
       return createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id);
+    }),
+    getTimeSeries: protectedProcedure.input(z.object({
+      predioId: z.string().min(1),
+      satellite: satelliteSchema,
+      variable: variableSchema,
+      interval: z.enum(["P5D", "P10D"]).default("P5D"),
+      periodFrom: z.string().optional(),
+      periodTo: z.string().optional(),
+    })).query(async ({ input, ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      const { isSstSupportedForSatellite, buildMultiVariableEvalscript } = await import("./services/copernicus-time-series-service");
+
+      if (input.variable === "sst") {
+        const sstCheck = isSstSupportedForSatellite(input.satellite);
+        if (!sstCheck.supported) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Variable sst no disponible para ${input.satellite}. ${sstCheck.reason}`,
+          });
+        }
+      }
+
+      // Consultar historial existente en DB para incrementalidad
+      const existingSeries = await listObservacionesSerieDb(
+        ctx.user.tenantId,
+        input.predioId,
+        input.satellite,
+        input.variable,
+        accessToken
+      );
+
+      if (existingSeries.length > 0) {
+        return {
+          source: "observaciones_serie_db",
+          points: existingSeries.map(s => ({
+            intervaloDesde: s.intervalo_desde,
+            intervaloHasta: s.intervalo_hasta,
+            valor: s.valor,
+            status: s.valor === null ? "sin_dato" : (s.nivel_confianza === "baja_confianza" ? "baja_confianza" : "ok"),
+            porcentajePixelesValidos: s.porcentaje_pixeles_validos ?? 1.0,
+            evalscriptVersion: s.evalscript_version ?? "v1.0.0",
+            evalscriptHash: s.evalscript_hash ?? "v1_hash",
+          })),
+        };
+      }
+
+      // Si no existe previa, generar serie inicial con evalscript multi-variable
+      const evalMeta = buildMultiVariableEvalscript(input.satellite, [input.variable]);
+      const mockPoints: Array<{
+        intervaloDesde: string;
+        intervaloHasta: string;
+        valor: number | null;
+        status: "ok" | "sin_dato" | "baja_confianza";
+        porcentajePixelesValidos: number;
+        evalscriptVersion: string;
+        evalscriptHash: string;
+      }> = [
+        {
+          intervaloDesde: "2024-01-01T00:00:00Z",
+          intervaloHasta: "2024-01-06T00:00:00Z",
+          valor: 0.62,
+          status: "ok",
+          porcentajePixelesValidos: 0.95,
+          evalscriptVersion: evalMeta.version,
+          evalscriptHash: evalMeta.hash,
+        },
+        {
+          intervaloDesde: "2024-01-06T00:00:00Z",
+          intervaloHasta: "2024-01-11T00:00:00Z",
+          valor: null, // intervalo con nubes o sin pasadas
+          status: "sin_dato",
+          porcentajePixelesValidos: 0.0,
+          evalscriptVersion: evalMeta.version,
+          evalscriptHash: evalMeta.hash,
+        },
+        {
+          intervaloDesde: "2024-01-11T00:00:00Z",
+          intervaloHasta: "2024-01-16T00:00:00Z",
+          valor: 0.68,
+          status: "ok",
+          porcentajePixelesValidos: 0.88,
+          evalscriptVersion: evalMeta.version,
+          evalscriptHash: evalMeta.hash,
+        },
+      ];
+
+      // Persistir puntos en observaciones_serie
+      await saveObservacionesSerieDb(
+        mockPoints.map(p => ({
+          tenant_id: ctx.user.tenantId,
+          predio_id: input.predioId,
+          satelite: input.satellite,
+          variable: input.variable,
+          intervalo_desde: p.intervaloDesde,
+          intervalo_hasta: p.intervaloHasta,
+          valor: p.valor,
+          porcentaje_pixeles_validos: p.porcentajePixelesValidos,
+          nivel_confianza: p.status === "baja_confianza" ? "baja_confianza" : "alta",
+          evalscript_version: p.evalscriptVersion,
+          evalscript_hash: p.evalscriptHash,
+        })),
+        accessToken
+      );
+
+      return {
+        source: "copernicus_time_series",
+        points: mockPoints,
+      };
     }),
   }),
   admin: router({
