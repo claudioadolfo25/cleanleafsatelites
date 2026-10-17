@@ -17,6 +17,7 @@ const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
 const ReportDetail = lazy(() => import("./pages/ReportDetail"));
 const PrediosPage = lazy(() => import("./pages/PrediosPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
 
 function RouteFallback() {
   return (
@@ -39,6 +40,9 @@ function Router() {
         {/* Rutas Protegidas bajo /dashboard */}
         <Route path="/dashboard">
           {() => <ProtectedRoute component={Home} />}
+        </Route>
+        <Route path="/dashboard/admin">
+          {() => <ProtectedRoute component={AdminDashboardPage} />}
         </Route>
         <Route path="/dashboard/perfil">
           {() => <ProtectedRoute component={ProfilePage} />}

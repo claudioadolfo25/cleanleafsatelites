@@ -175,6 +175,19 @@ export async function processSolicitud(
       accessToken
     );
 
+    // Send completion notification if user ID available
+    if (solicitud.solicitado_por) {
+      const { sendEmailNotification } = await import("./notification-service");
+      await sendEmailNotification(
+        solicitud.solicitado_por,
+        null,
+        "analysis_completed",
+        "Tu análisis satelital está listo",
+        `El análisis para la solicitud ${solicitudId} ha sido procesado con éxito.`,
+        accessToken
+      );
+    }
+
     return { success: true, estado: "completado" };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);

@@ -535,6 +535,63 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Controles de Administración, Auditoría y Seguridad", () => {
+    it("deniega acceso a procedimientos admin a usuarios no autorizados (FORBIDDEN)", async () => {
+      const normalToken = await createMockJwt({
+        sub: "usr_regular",
+        app_metadata: { tenant_id: "tenant-norm", role: "user" },
+      });
+
+      const res = await request(app)
+        .get("/api/trpc/admin.listTenants")
+        .set("Authorization", `Bearer ${normalToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.json.message).toContain("Acceso denegado");
+    });
+
+    it("permite acceso a procedimientos admin para el rol super_admin / admin", async () => {
+      const adminToken = await createMockJwt({
+        sub: "usr_super_admin",
+        app_metadata: { tenant_id: "tenant-admin", role: "super_admin" },
+      });
+
+      const res = await request(app)
+        .get("/api/trpc/admin.listTenants")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.result.data.json)).toBe(true);
+    });
+
+    it("registra automáticamente una entrada en la bitácora de auditoría tras actualizar el plan de un tenant", async () => {
+      const adminToken = await createMockJwt({
+        sub: "usr_admin_audit",
+        email: "admin.audit@cleanleaf.cl",
+        app_metadata: { tenant_id: "tenant-audit-01", role: "admin" },
+      });
+
+      // 1. Ejecutar actualización de plan
+      const updateRes = await request(app)
+        .post("/api/trpc/admin.updatePlan")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          json: { tenantId: "tenant-target-01", planId: "region_completa" },
+        });
+
+      expect(updateRes.status).toBe(200);
+
+      // 2. Consultar la bitácora de auditoría
+      const auditRes = await request(app)
+        .get("/api/trpc/admin.getAuditLogs")
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(auditRes.status).toBe(200);
+      const logs = auditRes.body.result.data.json;
+      expect(logs.some((l: any) => l.action === "admin.update_plan")).toBe(true);
+    });
+  });
+
   describe("Gestión de Perfil y Preferencias de Usuario (tRPC & RLS)", () => {
     it("obtiene y actualiza preferencias de usuario individual vía tRPC", async () => {
       const userToken = await createMockJwt({

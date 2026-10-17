@@ -927,6 +927,151 @@ export async function saveApiKeyHashDb(
   memoryApiKeyHashes.add(data.key_hash);
 }
 
+export type AuditLogRecord = {
+  id?: string;
+  tenant_id: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  action: string;
+  entity: string;
+  payload?: Record<string, unknown>;
+  ip_address?: string | null;
+  created_at?: string;
+};
+
+const memoryAuditLogs: AuditLogRecord[] = [];
+
+export async function createAuditLogDb(
+  log: AuditLogRecord,
+  accessToken?: string
+): Promise<AuditLogRecord> {
+  const client = getSupabaseUserClient(accessToken);
+  const created: AuditLogRecord = {
+    ...log,
+    id: log.id ?? `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    created_at: new Date().toISOString(),
+  };
+
+  if (client) {
+    try {
+      const { data } = await client
+        .from("audit_logs")
+        .insert({
+          tenant_id: log.tenant_id,
+          user_id: log.user_id ?? null,
+          user_email: log.user_email ?? null,
+          action: log.action,
+          entity: log.entity,
+          payload: log.payload ?? {},
+          ip_address: log.ip_address ?? null,
+        })
+        .select()
+        .single();
+
+      if (data) return data as AuditLogRecord;
+    } catch {
+      // Fallback
+    }
+  }
+
+  memoryAuditLogs.push(created);
+  return created;
+}
+
+export async function listAuditLogsDb(
+  filters?: { tenant_id?: string; action?: string; search?: string },
+  accessToken?: string
+): Promise<AuditLogRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      let query = client.from("audit_logs").select("*").order("created_at", { ascending: false });
+      if (filters?.tenant_id) query = query.eq("tenant_id", filters.tenant_id);
+      if (filters?.action) query = query.eq("action", filters.action);
+
+      const { data } = await query;
+      if (data && data.length > 0) return data as AuditLogRecord[];
+    } catch {
+      // Fallback
+    }
+  }
+
+  return memoryAuditLogs.filter(a => {
+    if (filters?.tenant_id && a.tenant_id !== filters.tenant_id) return false;
+    if (filters?.action && a.action !== filters.action) return false;
+    return true;
+  });
+}
+
+export async function listAllTenantsDb(
+  accessToken?: string
+): Promise<TenantInfoRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { data } = await client.from("tenants").select("*");
+      if (data && data.length > 0) return data as TenantInfoRecord[];
+    } catch {
+      // Fallback
+    }
+  }
+
+  return Array.from(memoryTenants.values());
+}
+
+export async function updateTenantPlanDb(
+  tenantId: string,
+  planId: string,
+  accessToken?: string
+): Promise<boolean> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { error } = await client
+        .from("tenants")
+        .update({ plan_id: planId })
+        .eq("id", tenantId);
+      if (!error) return true;
+    } catch {
+      // Fallback
+    }
+  }
+
+  const existing = memoryTenants.get(tenantId);
+  if (existing) {
+    existing.plan_id = planId;
+    return true;
+  }
+  return false;
+}
+
+export async function listFailedSolicitudesDb(
+  accessToken?: string
+): Promise<SolicitudRecord[]> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { data } = await client
+        .from("solicitudes_analisis")
+        .select("*")
+        .in("estado", ["error_final", "error_reintentable", "requiere_revision"])
+        .order("creado_en", { ascending: false });
+
+      if (data) return data as SolicitudRecord[];
+    } catch {
+      // Fallback
+    }
+  }
+
+  return Array.from(memorySolicitudes.values()).filter(s =>
+    ["error_final", "error_reintentable", "requiere_revision"].includes(s.estado)
+  );
+}
+
 export async function getDashboardDataDb(
   tenantId: string,
   accessToken?: string

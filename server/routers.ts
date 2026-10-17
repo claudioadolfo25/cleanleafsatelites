@@ -30,6 +30,7 @@ import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONG
 import { processSolicitud } from "./services/analysis-worker";
 import { getSignedReportDownloadUrlService } from "./reports/storage-service";
 import {
+  createAuditLogDb,
   createPredioDb,
   createSolicitudAnalisisDb,
   createTenantDb,
@@ -42,6 +43,9 @@ import {
   getTenantUsageAndLimits,
   getUserPreferencesDb,
   getWorkflowLogsDb,
+  listAllTenantsDb,
+  listAuditLogsDb,
+  listFailedSolicitudesDb,
   listPrediosDb,
   listReportsDb,
   recordConsumoDb,
@@ -51,8 +55,20 @@ import {
   saveTenantSettingsDb,
   saveUserPreferencesDb,
   updatePredioDb,
+  updateTenantPlanDb,
   writeWorkflowLogDb,
 } from "./db/repository";
+
+const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  const allowedRoles = ["admin", "owner", "super_admin"];
+  if (!allowedRoles.includes(ctx.user.role)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Acceso denegado. Se requieren permisos de administrador o super_admin.",
+    });
+  }
+  return next();
+});
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -564,6 +580,56 @@ export const appRouter = router({
       const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
       return createAnalysisRequest(input, ctx.user.tenantId, accessToken, ctx.user.id);
     }),
+  }),
+  admin: router({
+    listTenants: adminProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      return listAllTenantsDb(accessToken);
+    }),
+    updatePlan: adminProcedure
+      .input(z.object({ tenantId: z.string().min(1), planId: planSchema }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const success = await updateTenantPlanDb(input.tenantId, input.planId, accessToken);
+        await createAuditLogDb({
+          tenant_id: ctx.user.tenantId,
+          user_id: ctx.user.id,
+          user_email: ctx.user.email,
+          action: "admin.update_plan",
+          entity: "tenant",
+          payload: { targetTenantId: input.tenantId, newPlanId: input.planId },
+        }, accessToken);
+        return { success };
+      }),
+    listFailedSolicitudes: adminProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      return listFailedSolicitudesDb(accessToken);
+    }),
+    retrySolicitud: adminProcedure
+      .input(z.object({ solicitudId: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        const solicitud = await getSolicitudByIdDb(ctx.user.tenantId, input.solicitudId, accessToken);
+        if (!solicitud) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitud no encontrada" });
+
+        const result = await processSolicitud(solicitud, accessToken);
+        await createAuditLogDb({
+          tenant_id: ctx.user.tenantId,
+          user_id: ctx.user.id,
+          user_email: ctx.user.email,
+          action: "admin.retry_solicitud",
+          entity: "solicitud_analisis",
+          payload: { solicitudId: input.solicitudId, result },
+        }, accessToken);
+
+        return result;
+      }),
+    getAuditLogs: adminProcedure
+      .input(z.object({ tenantId: z.string().optional(), action: z.string().optional() }).optional())
+      .query(async ({ input, ctx }) => {
+        const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+        return listAuditLogsDb({ tenant_id: input?.tenantId, action: input?.action }, accessToken);
+      }),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: copernicusLiveEnabled || isTestRuntime ? "ok" : "degraded", mode: isTestRuntime ? "test_mock" : copernicusLiveEnabled ? "copernicus_live_staging" : "synthetic_fallback", catalogAuthConfigured: copernicusLiveEnabled }, error: null })),
