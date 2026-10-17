@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "status": "pendiente de validación agronómica",
+  "description": "Reglas de recomendación e interpretación agronómica configurables y versionadas por variable y vertical.",
+  "rules": [
+    {
+      "ruleId": "RULE_NDVI_DROP_CRITICAL",
+      "vertical": "agricultura",
+      "variable": "ndvi",
+      "thresholdDelta": -0.15,
+      "severity": "atención",
+      "title": "Caída crítica de vigor vegetativo",
+      "diagnosis": "El índice NDVI cayó más de 0.15 puntos respecto al período anterior.",
+      "recommendation": "Inspeccionar sector en terreno por posible plaga, déficit hídrico o estrés fitosanitario agudo.",
+      "enabled": true
+    },
+    {
+      "ruleId": "RULE_NDVI_DROP_MODERATE",
+      "vertical": "agricultura",
+      "variable": "ndvi",
+      "thresholdDelta": -0.08,
+      "severity": "info",
+      "title": "Descenso moderado de vigor vegetativo",
+      "diagnosis": "El vigor vegetativo bajó levemente en los últimos días.",
+      "recommendation": "Verificar programa de riego y estado nutricional foliar.",
+      "enabled": true
+    },
+    {
+      "ruleId": "RULE_SIGMA0_DRY_SOIL",
+      "vertical": "agricultura",
+      "variable": "sigma0_vv",
+      "thresholdMax": -20.0,
+      "severity": "atención",
+      "title": "Humedad de suelo críticamente baja",
+      "diagnosis": "La retrodispersión radar bajó de -20 dB, indicando sequedad extrema en los primeros centímetros.",
+      "recommendation": "Activar ciclo de riego prioritario para prevenir marchitez permanente.",
+      "enabled": true
+    },
+    {
+      "ruleId": "RULE_SST_HIGH_TEMPERATURE",
+      "vertical": "acuicultura",
+      "variable": "sst",
+      "thresholdMin": 18.0,
+      "severity": "atención",
+      "title": "Temperatura superficial de agua elevada",
+      "diagnosis": "La temperatura del agua supera los 18°C.",
+      "recommendation": "Aumentar frecuencia de monitoreo de oxígeno disuelto por riesgo de microalgas nocivas.",
+      "enabled": true
+    }
+  ]
+}

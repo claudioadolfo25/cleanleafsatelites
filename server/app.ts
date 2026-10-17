@@ -5,11 +5,53 @@ import { registerStorageProxy } from "./_core/storageProxy";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
 
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function createInMemoryRateLimiter(maxRequests: number, windowMs: number) {
+  return (req: Request, res: Response, next: () => void) => {
+    const ip = req.ip || req.headers["x-forwarded-for"] || "127.0.0.1";
+    const key = `${req.path}:${ip}`;
+    const now = Date.now();
+
+    const record = rateLimitMap.get(key);
+    if (!record || now > record.resetAt) {
+      rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (record.count >= maxRequests) {
+      res.status(429).json({
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: "Demasiadas peticiones desde esta IP. Intenta nuevamente en un minuto.",
+        },
+      });
+      return;
+    }
+
+    record.count++;
+    next();
+  };
+}
+
 export function createApp(): Express {
   const app = express();
 
   // Trust Render reverse proxy for x-forwarded-proto and client IP
   app.set("trust proxy", 1);
+
+  // Security headers & CORS
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
+
+  // Rate Limiting general para API
+  app.use("/api/trpc/cleanleaf.createAnalysis", createInMemoryRateLimiter(20, 60 * 1000));
+  app.use("/api/trpc", createInMemoryRateLimiter(300, 60 * 1000));
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
