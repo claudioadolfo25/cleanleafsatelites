@@ -35,6 +35,15 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
   const { data: catalog = [], isLoading: catalogLoading } = trpc.cleanleaf.catalog.useQuery({ vertical: "agricultura" });
   const { data: configStatus } = trpc.cleanleaf.configStatus.useQuery({ vertical: "agricultura" });
   const { data: copernicusResources = [] } = trpc.cleanleaf.resources.useQuery({ sector: "agricultura" });
+  const catalogDefinitions = useMemo(() => catalog as SatelliteDefinition[], [catalog]);
+  const catalogById = useMemo(
+    () => new Map(catalogDefinitions.map(definition => [definition.id, definition])),
+    [catalogDefinitions]
+  );
+  const selectedVariablesForRequest = useMemo(
+    () => satellites.map(satellite => selectedVariables[satellite] ?? catalogById.get(satellite)?.variables[0]?.variable ?? "ndvi"),
+    [catalogById, satellites, selectedVariables]
+  );
 
   const createAnalysis = trpc.cleanleaf.createAnalysis.useMutation({
     onSuccess: result => {
@@ -93,7 +102,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
       predioNombre: targetPredioNombre,
       vertical: "agricultura",
       satellites,
-      variables: satellites.map(satellite => selectedVariables[satellite] ?? (catalog as SatelliteDefinition[]).find(item => item.id === satellite)?.variables[0]?.variable ?? "ndvi"),
+      variables: selectedVariablesForRequest,
       periodFrom: new Date(`${periodFrom}T00:00:00Z`).toISOString(),
       periodTo: new Date(`${periodTo}T23:59:59Z`).toISOString(),
     });
