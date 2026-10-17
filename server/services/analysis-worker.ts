@@ -72,36 +72,71 @@ export async function processSolicitud(
     const firstSatellite = (solicitud.satelites_solicitados[0] ?? "sentinel-2") as any;
     const firstVariable = solicitud.variables_solicitadas[0] ?? "ndvi";
 
-    // 3. Ejecutar consulta satelital con reintentos para 429 / 5xx
-    const maxAttempts = 3;
+    // 3. Verificar si es Tier 3 (>5.000 ha): requiere revisión manual
+    if (solicitud.tier === "tier3_regional") {
+      await updateSolicitudStateDb(tenantId, solicitudId, "requiere_revision", "Solicitud regional de superficie superior a 5.000 ha retenida para evaluación administrativa manual.", accessToken);
+      await writeWorkflowLogDb(
+        tenantId,
+        "processSolicitud",
+        "exitoso",
+        null,
+        { solicitudId, estado: "requiere_revision" },
+        accessToken
+      );
+      return { success: true, estado: "requiere_revision" };
+    }
+
+    // 4. Consultar caché o ejecutar consulta satelital con reintentos para 429 / 5xx
+    const { generateCacheKey, evaluateDataQuality } = await import("./copernicus-policy-service");
+    const { getObservationCacheDb, saveObservationCacheDb } = await import("../db/repository");
+
+    const predioDb = solicitud.predio_id
+      ? await getPredioByIdDb(tenantId, solicitud.predio_id, accessToken)
+      : null;
+
+    const geometryToUse = (predioDb?.geometria as GeoJSONGeometry) || (solicitud.geometria as GeoJSONGeometry);
+    const derivedBBox = geometryToUse ? computeBBox(geometryToUse) : undefined;
+
+    const queryReq = {
+      predioId: solicitud.predio_id ?? "predio-default",
+      satellite: firstSatellite,
+      variable: firstVariable,
+      tier: solicitud.tier,
+      bbox: derivedBBox,
+    };
+
+    const cacheKey = generateCacheKey(queryReq);
+    let result = await getObservationCacheDb(cacheKey, accessToken);
+
     let lastError: Error | null = null;
-    let result: any = null;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const predioDb = solicitud.predio_id
-          ? await getPredioByIdDb(tenantId, solicitud.predio_id, accessToken)
-          : null;
+    if (!result) {
+      const maxAttempts = 3;
 
-        const geometryToUse = (predioDb?.geometria as GeoJSONGeometry) || (solicitud.geometria as GeoJSONGeometry);
-        const derivedBBox = geometryToUse ? computeBBox(geometryToUse) : undefined;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          result = await workerObservationProvider.query(queryReq);
 
-        result = await workerObservationProvider.query({
-          predioId: solicitud.predio_id ?? "predio-default",
-          satellite: firstSatellite,
-          variable: firstVariable,
-          tier: solicitud.tier,
-          bbox: derivedBBox,
-        });
+          if (result) {
+            // Evaluar calidad SCL si está disponible
+            const sclPercentage = (result as any).valid_pixel_percentage ?? 0.85;
+            const quality = evaluateDataQuality(sclPercentage);
+            result.confidence_level = quality.confidence;
+            if (quality.warningMessage) {
+              result.quality_warning = quality.warningMessage;
+            }
 
-        if (result) break; // Exitoso
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[Worker] Intento ${attempt}/${maxAttempts} falló para solicitud ${solicitudId}: ${lastError.message}`);
+            await saveObservationCacheDb(cacheKey, result, 300, accessToken);
+            break;
+          }
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          console.warn(`[Worker] Intento ${attempt}/${maxAttempts} falló para solicitud ${solicitudId}: ${lastError.message}`);
 
-        if (attempt < maxAttempts) {
-          const backoffMs = Math.pow(2, attempt) * 200; // Delay corto para tests/worker
-          await delay(backoffMs);
+          if (attempt < maxAttempts) {
+            const backoffMs = Math.pow(2, attempt) * 200;
+            await delay(backoffMs);
+          }
         }
       }
     }

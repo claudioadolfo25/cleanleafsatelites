@@ -535,6 +535,71 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
   });
 
+  describe("Políticas de Producción Copernicus, Cuotas y Calidad", () => {
+    it("evalúa la política de producción COPERNICUS_PROD_POLICY correctamente", async () => {
+      const { getCopernicusProdPolicy } = await import("./services/copernicus-policy-service");
+      expect(getCopernicusProdPolicy({ COPERNICUS_PROD_POLICY: "live" } as any)).toBe("live");
+      expect(getCopernicusProdPolicy({ COPERNICUS_PROD_POLICY: "disabled" } as any)).toBe("disabled");
+      expect(getCopernicusProdPolicy({} as any)).toBe("synthetic_demo_only");
+    });
+
+    it("evalúa el nivel de confianza según el porcentaje de píxeles válidos (SCL)", async () => {
+      const { evaluateDataQuality } = await import("./services/copernicus-policy-service");
+      const highQuality = evaluateDataQuality(0.85);
+      expect(highQuality.confidence).toBe("alta");
+      expect(highQuality.warningMessage).toBeUndefined();
+
+      const lowQuality = evaluateDataQuality(0.40);
+      expect(lowQuality.confidence).toBe("baja_confianza");
+      expect(lowQuality.warningMessage).toContain("Alto nivel de nubosidad");
+    });
+
+    it("almacena y recupera resultados en la caché de observaciones", async () => {
+      const { getObservationCacheDb, saveObservationCacheDb } = await import("./db/repository");
+      const testKey = "sentinel-2:ndvi:bbox-test:2024-01-01:2024-01-10";
+      const testData = { valor: 0.72, satelite: "sentinel-2", variable: "ndvi" };
+
+      await saveObservationCacheDb(testKey, testData, 300);
+      const retrieved = await getObservationCacheDb(testKey);
+      expect(retrieved).toEqual(testData);
+    });
+
+    it("procesa correctamente solicitudes dentro del límite del plan", async () => {
+      const adminToken = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-tier2-test", role: "admin" },
+      });
+
+      const predioRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          json: {
+            nombre: "Predio Tier 2",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      const predioId = predioRes.body.result.data.json.id;
+
+      const analysisRes = await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          json: {
+            predioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "key-tier2-test-01",
+          },
+        });
+
+      expect(analysisRes.status).toBe(200);
+      const data = analysisRes.body.result.data.json;
+      expect(data.estado).toBe("completado");
+    });
+  });
+
   describe("Controles de Administración, Auditoría y Seguridad", () => {
     it("deniega acceso a procedimientos admin a usuarios no autorizados (FORBIDDEN)", async () => {
       const normalToken = await createMockJwt({

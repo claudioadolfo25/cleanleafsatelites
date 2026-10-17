@@ -1043,9 +1043,15 @@ export async function updateTenantPlanDb(
   const existing = memoryTenants.get(tenantId);
   if (existing) {
     existing.plan_id = planId;
-    return true;
+  } else {
+    memoryTenants.set(tenantId, {
+      id: tenantId,
+      nombre: `Tenant (${tenantId})`,
+      plan_id: planId,
+      estado: "activa",
+    });
   }
-  return false;
+  return true;
 }
 
 export async function listFailedSolicitudesDb(
@@ -1070,6 +1076,63 @@ export async function listFailedSolicitudesDb(
   return Array.from(memorySolicitudes.values()).filter(s =>
     ["error_final", "error_reintentable", "requiere_revision"].includes(s.estado)
   );
+}
+
+const memoryObservationCache = new Map<string, { datos: any; expira_en: string }>();
+
+export async function getObservationCacheDb(
+  cacheKey: string,
+  accessToken?: string
+): Promise<any | null> {
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      const { data } = await client
+        .from("observation_cache")
+        .select("datos, expira_en")
+        .eq("cache_key", cacheKey)
+        .gte("expira_en", new Date().toISOString())
+        .maybeSingle();
+
+      if (data) return data.datos;
+    } catch {
+      // Fallback
+    }
+  }
+
+  const cached = memoryObservationCache.get(cacheKey);
+  if (cached && new Date(cached.expira_en).getTime() > Date.now()) {
+    return cached.datos;
+  }
+  return null;
+}
+
+export async function saveObservationCacheDb(
+  cacheKey: string,
+  data: any,
+  ttlSeconds = 300,
+  accessToken?: string
+): Promise<void> {
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  const client = getSupabaseUserClient(accessToken);
+
+  if (client) {
+    try {
+      await client.from("observation_cache").upsert({
+        cache_key: cacheKey,
+        satelite: data.satelite ?? "sentinel-2",
+        variable: data.variable ?? "ndvi",
+        datos: data,
+        expira_en: expiresAt,
+      });
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+
+  memoryObservationCache.set(cacheKey, { datos: data, expira_en: expiresAt });
 }
 
 export async function getDashboardDataDb(
