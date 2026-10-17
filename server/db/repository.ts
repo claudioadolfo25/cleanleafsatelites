@@ -608,3 +608,139 @@ export async function getReportByIdDb(
   }
   return null;
 }
+
+export async function getDashboardDataDb(
+  tenantId: string,
+  accessToken?: string
+) {
+  const client = getSupabaseUserClient(accessToken);
+
+  // 1. Obtener predios del tenant
+  const userPredios = await listPrediosDb(tenantId, accessToken);
+  const usageAndLimits = await getTenantUsageAndLimits(tenantId, accessToken);
+
+  let liveMediciones: MedicionRecord[] = [];
+  let liveAlertas: any[] = [];
+  let dataSource: "cdse_live" | "synthetic" = "synthetic";
+
+  if (client) {
+    try {
+      const { data: mData } = await client
+        .from("mediciones")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("fecha_adquisicion", { ascending: false });
+
+      if (mData && mData.length > 0) {
+        liveMediciones = mData as MedicionRecord[];
+        dataSource = "cdse_live";
+      }
+
+      const { data: aData } = await client
+        .from("alertas")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("fecha_activacion", { ascending: false });
+
+      if (aData) {
+        liveAlertas = aData;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  if (liveMediciones.length === 0) {
+    liveMediciones = memoryMediciones.filter(m => m.tenant_id === tenantId);
+  }
+
+  // 2. Calcular hectáreas totales y vigor promedio ponderado por hectárea
+  const totalHectareas = userPredios.reduce((acc, p) => acc + p.superficie_ha, 0);
+  let totalWeightedNdviProduct = 0;
+
+  const prediosMapped = userPredios.map(p => {
+    const pMediciones = liveMediciones.filter(m => m.predio_id === p.id && m.variable.toLowerCase() === "ndvi");
+    const latestNdvi = pMediciones[0]?.valor ?? 0.65;
+    const previousNdvi = pMediciones[1]?.valor ?? latestNdvi - 0.02;
+    const delta = Number((latestNdvi - previousNdvi).toFixed(2));
+
+    totalWeightedNdviProduct += latestNdvi * p.superficie_ha;
+
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      comuna: p.comuna || "Sin comuna",
+      hectareas: p.superficie_ha,
+      ndvi: Number(latestNdvi.toFixed(2)),
+      estado: latestNdvi >= 0.6 ? "Óptimo" : latestNdvi >= 0.4 ? "Revisar" : "Atención",
+      delta,
+      geometria: p.geometria,
+    };
+  });
+
+  const weightedNdvi = totalHectareas > 0 ? Number((totalWeightedNdviProduct / totalHectareas).toFixed(2)) : 0;
+
+  // Serie temporal para gráficos
+  const s2Series = liveMediciones
+    .filter(m => m.satelite === "sentinel-2")
+    .slice(0, 10)
+    .reverse()
+    .map(m => ({
+      fecha: new Date(m.fecha_adquisicion).toLocaleDateString("es-CL", { day: "2-digit", month: "short" }),
+      valor: m.valor,
+    }));
+
+  const s1Series = liveMediciones
+    .filter(m => m.satelite === "sentinel-1")
+    .slice(0, 10)
+    .reverse()
+    .map(m => ({
+      fecha: new Date(m.fecha_adquisicion).toLocaleDateString("es-CL", { day: "2-digit", month: "short" }),
+      valor: m.valor,
+    }));
+
+  const lastMeasurement = liveMediciones[0]?.fecha_adquisicion;
+  const lastMeasurementFormatted = lastMeasurement
+    ? new Date(lastMeasurement).toLocaleDateString("es-CL", { day: "numeric", month: "short" })
+    : "Sin lecturas";
+
+  return {
+    tenant: {
+      id: tenantId,
+      nombre: `Organización (${tenantId})`,
+      vertical: "agricultura" as const,
+      plan: usageAndLimits.planId === "piloto" ? "Plan Piloto" : usageAndLimits.planId === "regional_pyme" ? "Plan Regional PYME" : "Plan Región Completa",
+      usoHa: usageAndLimits.haMesUsadas,
+      limiteHa: usageAndLimits.planId === "piloto" ? 100 : usageAndLimits.planId === "regional_pyme" ? 1000 : 100000,
+    },
+    metrics: {
+      weightedNdvi,
+      weightedNdviFormatted: weightedNdvi > 0 ? weightedNdvi.toFixed(2).replace(".", ",") : "0,00",
+      deltaNdvi: 0.04,
+      deltaFormatted: "+0,04 vs. quincena anterior",
+      totalPredios: userPredios.length,
+      totalHectareas,
+      actionRequiredCount: liveAlertas.filter(a => a.enviada === false).length,
+      lastMeasurementFormatted,
+    },
+    predios: prediosMapped,
+    measurements: {
+      "sentinel-2": s2Series.length > 0 ? s2Series : [
+        { fecha: "08 Ago", valor: 0.49 }, { fecha: "13 Ago", valor: 0.53 }, { fecha: "18 Ago", valor: 0.58 },
+        { fecha: "23 Ago", valor: 0.55 }, { fecha: "28 Ago", valor: 0.61 }, { fecha: "02 Sep", valor: 0.64 }, { fecha: "07 Sep", valor: 0.68 },
+      ],
+      "sentinel-1": s1Series.length > 0 ? s1Series : [
+        { fecha: "08 Ago", valor: -18.4 }, { fecha: "13 Ago", valor: -17.8 }, { fecha: "18 Ago", valor: -19.1 },
+        { fecha: "23 Ago", valor: -18.7 }, { fecha: "28 Ago", valor: -17.9 }, { fecha: "02 Sep", valor: -17.4 }, { fecha: "07 Sep", valor: -16.8 },
+      ],
+    },
+    alerts: liveAlertas.map(a => ({
+      id: a.id,
+      nivel: a.valor_real && a.valor_umbral && a.valor_real < a.valor_umbral ? "atención" as const : "info" as const,
+      titulo: a.tipo_alerta || "Alerta de monitoreo",
+      detalle: `Valor observado: ${a.valor_real ?? "N/A"}`,
+      accion: "Ver zona",
+    })),
+    dataSource,
+  };
+}

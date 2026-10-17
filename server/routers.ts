@@ -31,6 +31,7 @@ import {
   createPredioDb,
   createSolicitudAnalisisDb,
   deletePredioDb,
+  getDashboardDataDb,
   getPredioByIdDb,
   getReportByIdDb,
   getTenantUsageAndLimits,
@@ -48,35 +49,6 @@ const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
 const planSchema = z.enum(["piloto", "regional_pyme", "region_completa"]);
 const sectorSchema = z.enum(["agricultura", "acuicultura", "forestal", "emergencias"]);
 const variableSchema = z.string().min(1);
-
-const demoDashboard = {
-  tenant: {
-    nombre: "Hacienda Los Robles",
-    vertical: "agricultura" as Vertical,
-    plan: "Piloto Araucanía",
-    usoHa: 86,
-    limiteHa: 100,
-  },
-  predios: [
-    { id: "predio-las-quinas", nombre: "Las Quinas", comuna: "Freire", hectareas: 42, ndvi: 0.68, estado: "Óptimo", delta: 0.04 },
-    { id: "predio-el-aromo", nombre: "El Aromo", comuna: "Pitrufquén", hectareas: 31, ndvi: 0.51, estado: "Revisar", delta: -0.08 },
-    { id: "predio-santa-elena", nombre: "Santa Elena", comuna: "Gorbea", hectareas: 13, ndvi: 0.72, estado: "Óptimo", delta: 0.02 },
-  ],
-  measurements: {
-    "sentinel-2": [
-      { fecha: "08 Ago", valor: 0.49 }, { fecha: "13 Ago", valor: 0.53 }, { fecha: "18 Ago", valor: 0.58 },
-      { fecha: "23 Ago", valor: 0.55 }, { fecha: "28 Ago", valor: 0.61 }, { fecha: "02 Sep", valor: 0.64 }, { fecha: "07 Sep", valor: 0.68 },
-    ],
-    "sentinel-1": [
-      { fecha: "08 Ago", valor: -18.4 }, { fecha: "13 Ago", valor: -17.8 }, { fecha: "18 Ago", valor: -19.1 },
-      { fecha: "23 Ago", valor: -18.7 }, { fecha: "28 Ago", valor: -17.9 }, { fecha: "02 Sep", valor: -17.4 }, { fecha: "07 Sep", valor: -16.8 },
-    ],
-  },
-  alerts: [
-    { id: "a-1", nivel: "atención", titulo: "El Aromo necesita una revisión", detalle: "El vigor bajó 0,08 puntos en los últimos 15 días.", accion: "Ver zona" },
-    { id: "a-2", nivel: "info", titulo: "Nueva imagen disponible", detalle: "Sentinel-2 actualizó Las Quinas hace 2 días.", accion: "Ver datos" },
-  ],
-};
 
 const analysisInput = z.object({
   predioId: z.string().min(1),
@@ -378,18 +350,9 @@ export const appRouter = router({
       }),
   }),
   cleanleaf: router({
-    dashboard: protectedProcedure.query(({ ctx }) => {
-      const isDemoMode = process.env.DEMO_MODE === "true" && !isProductionEnv();
-      if (isDemoMode) {
-        return demoDashboard;
-      }
-      return {
-        ...demoDashboard,
-        tenant: {
-          ...demoDashboard.tenant,
-          nombre: `Organización (${ctx.user.tenantId})`,
-        },
-      };
+    dashboard: protectedProcedure.query(async ({ ctx }) => {
+      const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
+      return getDashboardDataDb(ctx.user.tenantId, accessToken);
     }),
     reports: router({
       list: protectedProcedure

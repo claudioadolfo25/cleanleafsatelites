@@ -203,6 +203,104 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     }
   });
 
+  describe("Dashboard Dinámico Real & Aislamiento Multi-Tenant", () => {
+    it("devuelve estado vacío para un tenant recién registrado sin predios ni análisis", async () => {
+      const tokenEmptyTenant = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-empty-999", role: "user" },
+      });
+
+      const res = await request(app)
+        .get("/api/trpc/cleanleaf.dashboard")
+        .set("Authorization", `Bearer ${tokenEmptyTenant}`);
+
+      expect(res.status).toBe(200);
+      const data = res.body.result.data.json;
+      expect(data.metrics.totalPredios).toBe(0);
+      expect(data.metrics.totalHectareas).toBe(0);
+      expect(data.predios).toEqual([]);
+    });
+
+    it("calcula métricas ponderadas reales cuando el tenant crea un predio y análisis", async () => {
+      const token = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-dashboard-data", role: "user" },
+      });
+
+      // 1. Crear predio de 400+ ha
+      const createPredioRes = await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            nombre: "Fundo Curicó",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      expect(createPredioRes.status).toBe(200);
+      const predioId = createPredioRes.body.result.data.json.id;
+
+      // 2. Ejecutar análisis
+      await request(app)
+        .post("/api/trpc/cleanleaf.createAnalysis")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          json: {
+            predioId,
+            vertical: "agricultura",
+            satellites: ["sentinel-2"],
+            variables: ["ndvi"],
+            idempotencyKey: "analysis-key-curico-01",
+          },
+        });
+
+      // 3. Consultar dashboard
+      const dashboardRes = await request(app)
+        .get("/api/trpc/cleanleaf.dashboard")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(dashboardRes.status).toBe(200);
+      const dashboardData = dashboardRes.body.result.data.json;
+      expect(dashboardData.metrics.totalPredios).toBe(1);
+      expect(dashboardData.metrics.totalHectareas).toBeGreaterThan(100);
+      expect(dashboardData.predios).toHaveLength(1);
+      expect(dashboardData.predios[0].nombre).toBe("Fundo Curicó");
+    });
+
+    it("garantiza que dos tenants distintos vean dashboards aislados", async () => {
+      const tokenTenantX = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-dash-x", role: "user" },
+      });
+
+      const tokenTenantY = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-dash-y", role: "user" },
+      });
+
+      // Tenant X crea un predio
+      await request(app)
+        .post("/api/trpc/predios.create")
+        .set("Authorization", `Bearer ${tokenTenantX}`)
+        .send({
+          json: {
+            nombre: "Predio Exclusivo X",
+            geometria: validValdiviaPolygon,
+          },
+        });
+
+      // Tenant X ve 1 predio
+      const dashX = await request(app)
+        .get("/api/trpc/cleanleaf.dashboard")
+        .set("Authorization", `Bearer ${tokenTenantX}`);
+      expect(dashX.body.result.data.json.metrics.totalPredios).toBe(1);
+
+      // Tenant Y ve 0 predios
+      const dashY = await request(app)
+        .get("/api/trpc/cleanleaf.dashboard")
+        .set("Authorization", `Bearer ${tokenTenantY}`);
+      expect(dashY.body.result.data.json.metrics.totalPredios).toBe(0);
+      expect(dashY.body.result.data.json.predios).toEqual([]);
+    });
+  });
+
   describe("Gestión de Predios y Generación Dinámica de BBOX en Análisis", () => {
     it("confirma que dos predios en distintas ubicaciones generen BBOX distintos en la consulta de análisis", async () => {
       const token = await createMockJwt({
