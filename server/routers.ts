@@ -23,8 +23,9 @@ import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { isProductionEnv } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const satelliteSchema = z.enum(["sentinel-1", "sentinel-2", "sentinel-3"]);
 const verticalSchema = z.enum(["agricultura", "acuicultura", "forestal"]);
@@ -97,7 +98,7 @@ const catalogClient = createCatalogClient({
     : undefined,
 });
 
-async function createAnalysisRequest(input: AnalysisInput) {
+async function createAnalysisRequest(input: AnalysisInput, tenantId: string = "tenant-default") {
   const satellites = input.satellites as SatelliteId[];
   if (!validarSatelitesSolicitados(input.vertical, satellites)) {
     throw new Error(satelliteValidationMessage(input.vertical, satellites));
@@ -106,14 +107,21 @@ async function createAnalysisRequest(input: AnalysisInput) {
   const variables = satellites.map((satellite, index) => input.variables[index] ?? satelliteCatalog[satellite].variables[0]?.variable).filter((value): value is string => Boolean(value));
   satellites.forEach((satellite, index) => validateSatelliteVariable(satellite, variables[index]));
   const correlationId = input.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const idempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
+  const rawIdempotencyKey = input.idempotencyKey ?? `${input.predioId}:${satellites.join(",")}:${variables.join(",")}:${input.periodFrom ?? "default"}:${input.periodTo ?? "default"}`;
+  const idempotencyKey = `${tenantId}:${rawIdempotencyKey}`;
   const previous = idempotencyStore.get(idempotencyKey);
   if (previous) return previous;
 
   const tier = getTierForSuperficie(input.hectareas);
-  const planResult = validatePlanLimits(input.planId as PlanId, tier, input.hectareas, {
-    haMesUsadas: input.haMesUsadas,
-    prediosActivos: input.prediosActivos,
+
+  // TODO (Fase 2): Derivar planId, haMesUsadas y prediosActivos desde la base de datos (Supabase) según el tenantId/usuario.
+  const planId: PlanId = "regional_pyme";
+  const haMesUsadas = 0;
+  const prediosActivos = 1;
+
+  const planResult = validatePlanLimits(planId, tier, input.hectareas, {
+    haMesUsadas,
+    prediosActivos,
   });
   if (!planResult.allowed) throw new Error(`${planResult.code}: ${planResult.message}`);
 
@@ -172,32 +180,38 @@ async function createAnalysisRequest(input: AnalysisInput) {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    me: protectedProcedure.query(opts => opts.ctx.user),
+    logout: protectedProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
   cleanleaf: router({
-    dashboard: publicProcedure.query(({ ctx }) => {
-      const isPublic = process.env.DEMO_PUBLIC_DASHBOARD !== "false";
-      if (!isPublic && !ctx.user) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Sesión requerida para acceder al dashboard." });
+    dashboard: protectedProcedure.query(({ ctx }) => {
+      const isDemoMode = process.env.DEMO_MODE === "true" && !isProductionEnv();
+      if (isDemoMode) {
+        return demoDashboard;
       }
-      return demoDashboard;
+      return {
+        ...demoDashboard,
+        tenant: {
+          ...demoDashboard.tenant,
+          nombre: `Organización (${ctx.user.tenantId})`,
+        },
+      };
     }),
     reports: router({
-      list: publicProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
-      getById: publicProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
+      list: protectedProcedure.input(z.object({ search: z.string().optional(), predio: z.string().optional(), satellite: z.string().optional(), status: z.enum(["todos", "pendiente", "en_cola", "procesando", "completado", "error_reintentable", "error_final", "requiere_revision", "cancelado"]).optional() }).optional()).query(({ input }) => listReports(input)),
+      getById: protectedProcedure.input(z.object({ id: z.string().min(1) })).query(({ input }) => getReport(input.id) ?? null),
     }),
     catalog: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => {
       const vertical = input?.vertical ?? "agricultura";
       return getSatelitesHabilitados(vertical).map(id => satelliteCatalog[id]);
     }),
     configStatus: publicProcedure.input(z.object({ vertical: verticalSchema }).optional()).query(({ input }) => getSatelliteConfigurationStatus(input?.vertical ?? "agricultura")),
-    resources: publicProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
-    catalogSearch: publicProcedure.input(z.object({
+    resources: protectedProcedure.input(z.object({ sector: sectorSchema }).optional()).query(({ input }) => getCopernicusResources((input?.sector ?? "agricultura") as Sector)),
+    catalogSearch: protectedProcedure.input(z.object({
       bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
       datetime: z.string().optional(),
       collections: z.array(z.string().min(1)).min(1).max(5),
@@ -213,27 +227,27 @@ export const appRouter = router({
       }
       return catalogClient(input);
     }),
-    createAnalysis: publicProcedure.input(analysisInput).mutation(({ input }) => createAnalysisRequest(input)),
+    createAnalysis: protectedProcedure.input(analysisInput).mutation(({ input, ctx }) => createAnalysisRequest(input, ctx.user.tenantId)),
   }),
   apiV1: router({
     health: publicProcedure.query(() => ({ data: { api: "v1", status: copernicusLiveEnabled || isTestRuntime ? "ok" : "degraded", mode: isTestRuntime ? "test_mock" : copernicusLiveEnabled ? "copernicus_live_staging" : "synthetic_fallback", catalogAuthConfigured: copernicusLiveEnabled }, error: null })),
     solicitudes: router({
-      create: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
+      create: protectedProcedure.input(analysisInput).mutation(async ({ input, ctx }) => {
         try {
-          return { data: await createAnalysisRequest(input), error: null };
+          return { data: await createAnalysisRequest(input, ctx.user.tenantId), error: null };
         } catch (error) {
           return { data: null, error: { code: "REQUEST_REJECTED", message: error instanceof Error ? error.message : "Solicitud rechazada" } };
         }
       }),
     }),
     onboarding: router({
-      createTenant: publicProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
+      createTenant: protectedProcedure.input(z.object({ organizationName: z.string().min(2), planId: planSchema })).mutation(({ input }) => ({
         data: { tenantId: `tenant-${Date.now()}`, nombre: input.organizationName, planId: input.planId, estado: "trial" as const },
         error: null,
       })),
     }),
     apiKeys: router({
-      create: publicProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(({ input }) => {
+      create: protectedProcedure.input(z.object({ tenantId: z.string().min(1), nombre: z.string().min(2) })).mutation(({ input }) => {
         const plainKey = `cl_${randomBytes(18).toString("hex")}`;
         const hash = createHash("sha256").update(plainKey).digest("hex");
         return { data: { tenantId: input.tenantId, nombre: input.nombre, key: plainKey, hash, warning: "La key se muestra una sola vez en este stub." }, error: null };
