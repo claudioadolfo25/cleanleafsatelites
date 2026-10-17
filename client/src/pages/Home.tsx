@@ -1,3 +1,4 @@
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
@@ -10,12 +11,17 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bell,
+  CheckCircle2,
   ChevronDown,
   CircleHelp,
-  Cloud,
   CloudSun,
+  Database,
   FileText,
+  HelpCircle,
+  Info,
+  Layers,
   Leaf,
+  MapPin,
   MapPinned,
   Menu,
   MoreHorizontal,
@@ -31,14 +37,14 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 import SolicitudAnalisisForm from "../components/SolicitudAnalisisForm";
 
 const navigation = [
-  { label: "Resumen", icon: Sparkles, href: "#resumen" },
-  { label: "Mis predios", icon: MapPinned, href: "#predios" },
-  { label: "Análisis", icon: ScanLine, href: "#analisis" },
+  { label: "Resumen", icon: Sparkles, href: "/dashboard" },
+  { label: "Mis predios", icon: MapPinned, href: "/dashboard/predios" },
   { label: "Informes", icon: FileText, href: "/dashboard/informes" },
-  { label: "Fuentes satelitales", icon: Settings, href: "/dashboard/configuracion/satelites" },
+  { label: "Configuración", icon: Settings, href: "/dashboard/configuracion/satelites" },
 ];
 
 const satelliteMeta = {
@@ -62,26 +68,36 @@ const satelliteMeta = {
   },
 };
 
-function formatDate() {
-  return new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "long", year: "numeric" }).format(new Date(2026, 8, 7));
+function formatCurrentDate() {
+  return new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 }
 
 export default function Home() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const { data, isLoading, isError, error, refetch } = trpc.cleanleaf.dashboard.useQuery();
+
   const [selectedSatellite, setSelectedSatellite] = useState<"sentinel-2" | "sentinel-1">("sentinel-2");
-  const [selectedPredio, setSelectedPredio] = useState("Las Quinas");
+  const [selectedPredioId, setSelectedPredioId] = useState<string>("");
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
 
   const meta = satelliteMeta[selectedSatellite];
   const chartData = data?.measurements[selectedSatellite] ?? [];
-  const selectedProperty = useMemo(() => data?.predios.find(predio => predio.nombre === selectedPredio) ?? data?.predios[0], [data?.predios, selectedPredio]);
+
+  const selectedProperty = useMemo(() => {
+    if (!data?.predios || data.predios.length === 0) return null;
+    return data.predios.find(p => p.id === selectedPredioId) ?? data.predios[0] ?? null;
+  }, [data?.predios, selectedPredioId]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
-  if (isError || !data || !selectedProperty) {
+  if (isError || !data) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f7f2] p-6 text-center">
         <div className="mx-auto max-w-md rounded-3xl border border-stone-200 bg-white p-8 shadow-xl">
@@ -96,8 +112,8 @@ export default function Home() {
             <Button onClick={() => refetch()} className="rounded-xl bg-emerald-700 font-medium hover:bg-emerald-800">
               <RefreshCw className="mr-2 h-4 w-4" /> Reintentar
             </Button>
-            <Button variant="outline" asChild className="rounded-xl border-stone-200">
-              <a href="/login">Ir a Iniciar Sesión</a>
+            <Button variant="outline" onClick={() => setLocation("/auth")} className="rounded-xl border-stone-200">
+              Ir a Iniciar Sesión
             </Button>
           </div>
         </div>
@@ -105,7 +121,8 @@ export default function Home() {
     );
   }
 
-  const alertCount = data.alerts.filter(alert => alert.nivel === "atención").length;
+  const alertCount = data.alerts.length;
+  const isLive = data.dataSource === "cdse_live";
 
   return (
     <div className="min-h-screen bg-[#f7f7f2] text-stone-800">
@@ -124,10 +141,10 @@ export default function Home() {
         </nav>
         <div className="mt-auto rounded-2xl bg-[#e8f1dc] p-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-white"><Sprout size={16} /></div>
-          <p className="mt-3 text-sm font-semibold text-stone-800">Plan Piloto</p>
-          <p className="mt-1 text-xs leading-5 text-stone-500">{data.tenant.usoHa} de {data.tenant.limiteHa} ha monitoreadas</p>
-          <Progress value={(data.tenant.usoHa / data.tenant.limiteHa) * 100} className="mt-3 h-1.5 bg-white [&>div]:bg-emerald-700" />
-          <button onClick={() => toast.info("Plan Piloto Araucanía", { description: "El periodo de evaluación finaliza el 30 de septiembre." })} className="mt-3 text-xs font-semibold text-emerald-800 transition hover:text-emerald-950">Ver detalles del plan →</button>
+          <p className="mt-3 text-sm font-semibold text-stone-800">{data.tenant.plan}</p>
+          <p className="mt-1 text-xs leading-5 text-stone-500">{data.tenant.usoHa} de {data.tenant.limiteHa} ha monitoreadas este mes</p>
+          <Progress value={Math.min(100, (data.tenant.usoHa / data.tenant.limiteHa) * 100)} className="mt-3 h-1.5 bg-white [&>div]:bg-emerald-700" />
+          <button onClick={() => setPlanModalOpen(true)} className="mt-3 text-xs font-semibold text-emerald-800 transition hover:text-emerald-950">Ver detalles del plan →</button>
         </div>
         <a href="/dashboard/configuracion/satelites" className="mt-5 flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"><Settings size={18} className="text-stone-400" />Configuración satelital</a>
       </aside>
@@ -141,20 +158,26 @@ export default function Home() {
             <Brand compact />
           </div>
           <div className="hidden lg:block">
-            <p className="text-xs font-medium text-stone-400">{formatDate()}</p>
-            <p className="mt-0.5 text-sm font-semibold text-stone-700">Hacienda Los Robles · La Araucanía</p>
+            <p className="text-xs font-medium text-stone-400">{formatCurrentDate()}</p>
+            <p className="mt-0.5 text-sm font-semibold text-stone-700">{data.tenant.nombre}</p>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button onClick={() => toast.info("Sin novedades urgentes", { description: "Tienes 1 alerta de monitoreo para revisar." })} className="relative flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-white hover:text-stone-800" aria-label="Notificaciones">
+            <button onClick={() => setAlertsModalOpen(true)} className="relative flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-white hover:text-stone-800" aria-label="Notificaciones">
               <Bell size={19} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#f7f7f2] bg-amber-500" />
+              {alertCount > 0 ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#f7f7f2] bg-amber-500" /> : null}
             </button>
             <div className="hidden items-center gap-2 rounded-xl border border-transparent px-2 py-1.5 transition hover:border-stone-200 hover:bg-white sm:flex">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ddc6a6] text-xs font-bold text-[#5e3e20]">EM</span>
-              <span className="pr-1 text-left"><span className="block text-xs font-semibold leading-4 text-stone-700">Emilia Muñoz</span><span className="block text-[10px] leading-3 text-stone-400">Administradora</span></span>
-              <ChevronDown size={14} className="text-stone-400" />
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ddc6a6] text-xs font-bold text-[#5e3e20]">
+                {(user?.name || user?.email || "U").charAt(0).toUpperCase()}
+              </span>
+              <span className="pr-1 text-left">
+                <span className="block text-xs font-semibold leading-4 text-stone-700">{user?.name || user?.email?.split("@")[0] || "Usuario"}</span>
+                <span className="block text-[10px] leading-3 text-stone-400">{user?.role || "Agro"}</span>
+              </span>
             </div>
-            <Button onClick={() => setAnalysisOpen(true)} className="h-10 rounded-xl bg-emerald-700 px-3 text-xs font-semibold shadow-[0_10px_22px_-13px_rgba(4,120,87,0.85)] hover:bg-emerald-800 sm:px-4 sm:text-sm"><Plus className="mr-1.5 h-4 w-4" /> <span className="hidden sm:inline">Nuevo análisis</span><span className="sm:hidden">Análisis</span></Button>
+            <Button onClick={() => setAnalysisOpen(true)} className="h-10 rounded-xl bg-emerald-700 px-3 text-xs font-semibold shadow-[0_10px_22px_-13px_rgba(4,120,87,0.85)] hover:bg-emerald-800 sm:px-4 sm:text-sm">
+              <Plus className="mr-1.5 h-4 w-4" /> <span className="hidden sm:inline">Nuevo análisis</span><span className="sm:hidden">Análisis</span>
+            </Button>
           </div>
         </header>
 
@@ -163,57 +186,326 @@ export default function Home() {
         <div className="mx-auto max-w-[1520px] px-4 py-8 sm:px-7 lg:px-10 lg:py-10">
           <section id="resumen" className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
             <div>
-              <div className="mb-3 flex items-center gap-2"><span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"><Sparkles size={12} /></span><span className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Resumen de temporada</span></div>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"><Sparkles size={12} /></span>
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Resumen de temporada</span>
+              </div>
               <h1 className="font-serif text-[32px] leading-[1.07] tracking-[-0.035em] text-stone-800 sm:text-[42px]">Tu campo, visto con claridad.</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">El estado general de tus cultivos se mantiene saludable. Hay una zona que merece atención esta semana.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
+                Monitoreo espacial en tiempo real. Revisa el vigor vegetativo, humedad de suelo y métricas calculadas en servidor.
+              </p>
             </div>
-            <div className="flex items-center gap-3 rounded-xl border border-[#e0e3d7] bg-[#f1f5ea] px-4 py-3 text-sm text-stone-600"><Cloud className="h-5 w-5 text-[#6f8b99]" /><span><strong className="font-semibold text-stone-700">Nubosidad parcial</strong><span className="mx-1.5 text-stone-300">·</span>Temuco, 12 °C</span></div>
+            <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-sm">
+              <Database size={15} className={isLive ? "text-emerald-600" : "text-amber-600"} />
+              <span>{isLive ? "Datos satelitales reales (Copernicus CDSE)" : "Datos de demostración (Simulador Copernicus)"}</span>
+            </div>
           </section>
 
           <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Vigor promedio" value="0,64" hint="NDVI · +0,04 vs. quincena anterior" tone="green" icon={<TrendingUp size={18} />} trend="↑ 6,7%" />
-            <MetricCard label="Predios monitoreados" value="3" hint="86 hectáreas en seguimiento" tone="sand" icon={<MapPinned size={18} />} trend="Sin cambios" />
-            <MetricCard label="Acción requerida" value={String(alertCount)} hint="El Aromo · revisar humedad" tone="amber" icon={<AlertTriangle size={18} />} trend="Esta semana" />
-            <MetricCard label="Última lectura" value="Hace 2 días" hint="Sentinel-2 · 10 m de resolución" tone="sky" icon={<CloudSun size={18} />} trend="Ver detalle" />
+            <MetricCard label="Vigor promedio ponderado" value={data.metrics.weightedNdviFormatted} hint="NDVI promedio por hectárea" tone="green" icon={<TrendingUp size={18} />} trend={data.metrics.deltaFormatted} />
+            <MetricCard label="Predios monitoreados" value={String(data.metrics.totalPredios)} hint={`${data.metrics.totalHectareas} hectáreas en seguimiento`} tone="sand" icon={<MapPinned size={18} />} trend="Puntos WGS84" />
+            <MetricCard label="Alertas abiertas" value={String(data.metrics.actionRequiredCount)} hint="Alertas pendientes de revisión" tone="amber" icon={<AlertTriangle size={18} />} trend={data.metrics.actionRequiredCount > 0 ? "Atención requerida" : "Sin novedades"} />
+            <MetricCard label="Última lectura" value={data.metrics.lastMeasurementFormatted} hint="Sentinel-2 / Sentinel-1" tone="sky" icon={<CloudSun size={18} />} trend={isLive ? "En vivo" : "Simulado"} />
           </section>
 
-          <section className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.58fr)_minmax(330px,0.82fr)]">
-            <div className="overflow-hidden rounded-[22px] border border-[#e5e6dc] bg-white shadow-[0_18px_45px_-38px_rgba(56,75,44,0.5)]">
-              <div className="flex flex-col gap-4 border-b border-stone-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                <div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Vista de tus predios</p><h2 className="mt-1 text-lg font-semibold tracking-tight text-stone-800">Estado actual del terreno</h2></div>
-                <button onClick={() => document.getElementById("predios")?.scrollIntoView({ behavior: "smooth" })} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">Ver lista completa <ArrowUpRight size={14} /></button>
+          {data.predios.length === 0 ? (
+            <section className="mt-8 rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center">
+              <MapPin className="mx-auto h-12 w-12 text-stone-300" />
+              <h3 className="mt-4 text-base font-bold text-stone-800">Agrega tu primer predio</h3>
+              <p className="mt-2 text-xs leading-5 text-stone-500 max-w-md mx-auto">
+                No tienes predios registrados en esta organización. Delinea sus polígonos GeoJSON WGS84 para calcular superficie y BBOX dinámico.
+              </p>
+              <div className="mt-5 flex justify-center gap-3">
+                <Button onClick={() => setLocation("/dashboard/predios")} className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold">
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear Predio
+                </Button>
+                <Button onClick={() => setAnalysisOpen(true)} variant="outline" className="text-xs font-semibold">
+                  Solicitar análisis de prueba
+                </Button>
               </div>
-              <MapPreview selected={selectedProperty.nombre} onSelect={setSelectedPredio} />
-              <div className="grid divide-y divide-stone-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                {data.predios.map(predio => <button key={predio.id} onClick={() => setSelectedPredio(predio.nombre)} className={`p-4 text-left transition hover:bg-stone-50 ${selectedPredio === predio.nombre ? "bg-emerald-50/45" : ""}`}><p className="text-xs text-stone-400">{predio.comuna} · {predio.hectareas} ha</p><div className="mt-1.5 flex items-baseline justify-between"><p className="text-sm font-semibold text-stone-800">{predio.nombre}</p><span className={`text-xs font-bold ${predio.delta > 0 ? "text-emerald-700" : "text-amber-700"}`}>{predio.delta > 0 ? "+" : ""}{predio.delta.toFixed(2).replace(".", ",")}</span></div><div className="mt-3 flex items-center gap-2"><span className={`h-1.5 w-1.5 rounded-full ${predio.estado === "Óptimo" ? "bg-emerald-500" : "bg-amber-500"}`} /><span className="text-xs font-medium text-stone-500">{predio.estado} · NDVI {predio.ndvi.toFixed(2).replace(".", ",")}</span></div></button>)}
+            </section>
+          ) : (
+            <section className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.58fr)_minmax(330px,0.82fr)]">
+              <div className="overflow-hidden rounded-[22px] border border-[#e5e6dc] bg-white shadow-[0_18px_45px_-38px_rgba(56,75,44,0.5)]">
+                <div className="flex flex-col gap-4 border-b border-stone-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Vista territorial de tus parcelas</p>
+                    <h2 className="mt-1 text-lg font-semibold tracking-tight text-stone-800">Geometrías WGS84 Registradas</h2>
+                  </div>
+                  <button onClick={() => setLocation("/dashboard/predios")} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">
+                    Gestionar predios <ArrowUpRight size={14} />
+                  </button>
+                </div>
+
+                <div className="relative h-[300px] overflow-hidden bg-[#b8c494] sm:h-[330px]" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(125deg, #b5c98e 0%, #98b274 38%, #bfd09f 38%, #bdcd95 100%)", backgroundSize: "11px 11px, 100% 100%" }}>
+                  <div className="absolute inset-0 opacity-60" style={{ backgroundImage: "repeating-linear-gradient(23deg, transparent 0 26px, rgba(95,110,66,.17) 27px 28px)" }} />
+                  <div className="absolute inset-0 p-6 flex flex-wrap gap-4 items-center justify-center">
+                    {data.predios.map((predio) => (
+                      <button
+                        key={predio.id}
+                        onClick={() => setSelectedPredioId(predio.id)}
+                        className={`relative rounded-xl border-2 p-4 text-left transition ${
+                          selectedProperty?.id === predio.id ? "border-emerald-800 bg-white shadow-lg ring-2 ring-emerald-500/20" : "border-white/80 bg-white/85 hover:bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <MapPin size={15} className="text-emerald-700 shrink-0" />
+                          <span className="font-bold text-xs text-stone-800">{predio.nombre}</span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-stone-500">{predio.comuna} · {predio.hectareas} ha</p>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-semibold">
+                          <span className="text-stone-600">NDVI {predio.ndvi.toFixed(2).replace(".", ",")}</span>
+                          <span className={predio.delta >= 0 ? "text-emerald-700" : "text-amber-700"}>{predio.delta >= 0 ? "+" : ""}{predio.delta}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid divide-y divide-stone-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  {data.predios.map(predio => (
+                    <button
+                      key={predio.id}
+                      onClick={() => setSelectedPredioId(predio.id)}
+                      className={`p-4 text-left transition hover:bg-stone-50 ${selectedProperty?.id === predio.id ? "bg-emerald-50/45" : ""}`}
+                    >
+                      <p className="text-xs text-stone-400">{predio.comuna} · {predio.hectareas} ha</p>
+                      <div className="mt-1.5 flex items-baseline justify-between">
+                        <p className="text-sm font-semibold text-stone-800">{predio.nombre}</p>
+                        <span className={`text-xs font-bold ${predio.delta >= 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                          {predio.delta >= 0 ? "+" : ""}{predio.delta.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className={`h-1.5 w-1.5 rounded-full ${predio.estado === "Óptimo" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                        <span className="text-xs font-medium text-stone-500">{predio.estado} · NDVI {predio.ndvi.toFixed(2).replace(".", ",")}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div id="analisis" className="rounded-[22px] border border-[#dce6d3] bg-[#f2f7ec] p-5 shadow-[0_18px_45px_-38px_rgba(56,75,44,0.5)] sm:p-6">
-              <div className="flex items-start justify-between"><div><span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm"><ScanLine size={16} /></span><h2 className="mt-4 text-lg font-semibold tracking-tight text-stone-800">¿Qué cambió en tu campo?</h2><p className="mt-1 text-sm leading-5 text-stone-500">Sigue el vigor de {selectedProperty.nombre} con los datos más recientes.</p></div><button onClick={() => toast.info("Ayuda de indicadores", { description: "El NDVI muestra el vigor de la vegetación. Valores más altos indican mayor actividad vegetal." })} className="text-stone-400 hover:text-stone-600" aria-label="Ayuda"><CircleHelp size={18} /></button></div>
-              <Tabs value={selectedSatellite} onValueChange={value => setSelectedSatellite(value as "sentinel-2" | "sentinel-1")} className="mt-5">
-                <TabsList className="h-10 w-full rounded-xl bg-[#e5efda] p-1">
-                  {Object.entries(satelliteMeta).map(([id, detail]) => { const Icon = detail.icon; return <TabsTrigger key={id} value={id} className="h-8 flex-1 rounded-lg text-xs font-semibold text-stone-500 data-[state=active]:bg-white data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm"><Icon className="mr-1.5 h-3.5 w-3.5" />{detail.label}</TabsTrigger> })}
-                </TabsList>
-              </Tabs>
-              <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm"><div className="flex items-end justify-between"><div><p className="text-xs font-medium text-stone-400">{meta.description}</p><p className="mt-1 text-3xl font-semibold tracking-tight text-stone-800">{selectedSatellite === "sentinel-2" ? "0,68" : "−16,8"}<span className="ml-1 text-sm font-medium text-stone-400">{meta.unit}</span></p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">Actualizado</span></div><div className="mt-3 h-[156px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{ top: 10, right: 2, left: -26, bottom: 0 }}><defs><linearGradient id={`fill-${selectedSatellite}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={meta.fill} stopOpacity={0.25} /><stop offset="100%" stopColor={meta.fill} stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#edf0e9" /><XAxis dataKey="fecha" tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} interval="preserveStartEnd" /><YAxis domain={meta.domain} tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} tickFormatter={value => selectedSatellite === "sentinel-2" ? Number(value).toFixed(1).replace(".", ",") : value} /><Tooltip cursor={{ stroke: "#d9e5d1", strokeWidth: 1 }} contentStyle={{ borderRadius: 12, border: "1px solid #e7ebe2", boxShadow: "0 8px 24px -12px rgba(45,64,33,.25)", fontSize: 12 }} formatter={(value: number) => [selectedSatellite === "sentinel-2" ? value.toFixed(2).replace(".", ",") : `${value.toFixed(1)} dB`, meta.unit]} /><Area type="monotone" dataKey="valor" stroke={meta.stroke} strokeWidth={2.5} fill={`url(#fill-${selectedSatellite})`} dot={{ r: 2.8, fill: meta.stroke, strokeWidth: 0 }} activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }} /></AreaChart></ResponsiveContainer></div></div>
-              <div className="mt-4 flex gap-3 rounded-xl border border-[#dce6d3] bg-[#f6faef] p-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700"><Sparkles size={14} /></span><p className="text-xs leading-5 text-stone-600"><strong className="font-semibold text-stone-700">Lectura simple:</strong> el vigor se recuperó bien tras las lluvias. Mantén el monitoreo normal en esta zona.</p></div>
-            </div>
-          </section>
+              <div id="analisis" className="rounded-[22px] border border-[#dce6d3] bg-[#f2f7ec] p-5 shadow-[0_18px_45px_-38px_rgba(56,75,44,0.5)] sm:p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm"><ScanLine size={16} /></span>
+                    <h2 className="mt-4 text-lg font-semibold tracking-tight text-stone-800">Serie Temporal del Terreno</h2>
+                    <p className="mt-1 text-sm leading-5 text-stone-500">
+                      Evolución de mediciones satelitales en {selectedProperty?.nombre ?? "tu predio"}.
+                    </p>
+                  </div>
+                  <button onClick={() => setHelpModalOpen(true)} className="text-stone-400 hover:text-stone-600" aria-label="Ayuda">
+                    <CircleHelp size={18} />
+                  </button>
+                </div>
 
-          <section id="predios" className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(330px,0.95fr)]">
+                <Tabs value={selectedSatellite} onValueChange={value => setSelectedSatellite(value as "sentinel-2" | "sentinel-1")} className="mt-5">
+                  <TabsList className="h-10 w-full rounded-xl bg-[#e5efda] p-1">
+                    {Object.entries(satelliteMeta).map(([id, detail]) => {
+                      const Icon = detail.icon;
+                      return (
+                        <TabsTrigger key={id} value={id} className="h-8 flex-1 rounded-lg text-xs font-semibold text-stone-500 data-[state=active]:bg-white data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm">
+                          <Icon className="mr-1.5 h-3.5 w-3.5" />{detail.label}
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </Tabs>
+
+                <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-stone-400">{meta.description}</p>
+                      <p className="mt-1 text-3xl font-semibold tracking-tight text-stone-800">
+                        {chartData[chartData.length - 1]?.valor?.toFixed(2).replace(".", ",") ?? (selectedSatellite === "sentinel-2" ? "0,68" : "−16,8")}
+                        <span className="ml-1 text-sm font-medium text-stone-400">{meta.unit}</span>
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+                      {isLive ? "CDSE Live" : "Sintético"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 h-[156px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 2, left: -26, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id={`fill-${selectedSatellite}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={meta.fill} stopOpacity={0.25} />
+                            <stop offset="100%" stopColor={meta.fill} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} stroke="#edf0e9" />
+                        <XAxis dataKey="fecha" tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} interval="preserveStartEnd" />
+                        <YAxis domain={meta.domain} tickLine={false} axisLine={false} tick={{ fill: "#a5a59d", fontSize: 10 }} tickFormatter={value => selectedSatellite === "sentinel-2" ? Number(value).toFixed(1).replace(".", ",") : value} />
+                        <Tooltip cursor={{ stroke: "#d9e5d1", strokeWidth: 1 }} contentStyle={{ borderRadius: 12, border: "1px solid #e7ebe2", boxShadow: "0 8px 24px -12px rgba(45,64,33,.25)", fontSize: 12 }} formatter={(value: any) => [selectedSatellite === "sentinel-2" ? Number(value).toFixed(2).replace(".", ",") : `${Number(value).toFixed(1)} dB`, meta.unit]} />
+                        <Area type="monotone" dataKey="valor" stroke={meta.stroke} strokeWidth={2.5} fill={`url(#fill-${selectedSatellite})`} dot={{ r: 2.8, fill: meta.stroke, strokeWidth: 0 }} activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-3 rounded-xl border border-[#dce6d3] bg-[#f6faef] p-3">
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700"><Sparkles size={14} /></span>
+                  <p className="text-xs leading-5 text-stone-600">
+                    <strong className="font-semibold text-stone-700">Lectura de terreno:</strong> Serie derivada de la base de datos para {selectedProperty?.nombre}.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section id="predios-section" className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(330px,0.95fr)]">
             <div className="rounded-[22px] border border-[#e5e6dc] bg-white p-5 shadow-[0_18px_45px_-38px_rgba(56,75,44,0.5)] sm:p-6">
-              <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Atención esta semana</p><h2 className="mt-1 text-lg font-semibold tracking-tight text-stone-800">Alertas que vale la pena mirar</h2></div><button onClick={() => toast.info("Historial de alertas", { description: "No hay alertas adicionales en el periodo actual." })} className="rounded-lg p-2 text-stone-400 transition hover:bg-stone-100 hover:text-stone-600"><MoreHorizontal size={18} /></button></div>
-              <div className="mt-4 divide-y divide-stone-100">{data.alerts.map(alert => <div key={alert.id} className="flex gap-3 py-4 first:pt-0 last:pb-0"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${alert.nivel === "atención" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>{alert.nivel === "atención" ? <AlertTriangle size={17} /> : <CloudSun size={17} />}</span><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-stone-800">{alert.titulo}</p><p className="mt-1 text-xs leading-5 text-stone-500">{alert.detalle}</p></div><button onClick={() => { if (alert.nivel === "atención") setSelectedPredio("El Aromo"); toast.success(`${alert.accion}: ${alert.titulo}`, { description: alert.nivel === "atención" ? "Se destacó El Aromo en tu mapa." : "Los datos se encuentran actualizados." }); }} className="self-center whitespace-nowrap text-xs font-semibold text-emerald-700 hover:text-emerald-900">{alert.accion}</button></div>)}</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">Atención en terreno</p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-stone-800">Alertas de Monitoreo</h2>
+                </div>
+                <button onClick={() => setAlertsModalOpen(true)} className="rounded-lg p-2 text-stone-400 transition hover:bg-stone-100 hover:text-stone-600">
+                  <MoreHorizontal size={18} />
+                </button>
+              </div>
+
+              {data.alerts.length === 0 ? (
+                <div className="mt-6 py-6 text-center text-xs text-stone-400">
+                  Sin alertas activas en tus predios. Todo se encuentra dentro de los umbrales normales.
+                </div>
+              ) : (
+                <div className="mt-4 divide-y divide-stone-100">
+                  {data.alerts.map(alert => (
+                    <div key={alert.id} className="flex gap-3 py-4 first:pt-0 last:pb-0">
+                      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${alert.nivel === "atención" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>
+                        {alert.nivel === "atención" ? <AlertTriangle size={17} /> : <CloudSun size={17} />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-stone-800">{alert.titulo}</p>
+                        <p className="mt-1 text-xs leading-5 text-stone-500">{alert.detalle}</p>
+                      </div>
+                      <button
+                        onClick={() => toast.success(`${alert.accion}: ${alert.titulo}`)}
+                        className="self-center whitespace-nowrap text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                      >
+                        {alert.accion}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div id="informes" className="relative overflow-hidden rounded-[22px] bg-[#173d32] p-6 text-white shadow-[0_18px_45px_-38px_rgba(23,61,50,0.75)]"><div className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-emerald-400/20 blur-2xl" /><div className="relative"><span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-emerald-200"><FileText size={17} /></span><p className="mt-5 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-200">Informe quincenal</p><h2 className="mt-2 max-w-xs text-2xl font-semibold leading-tight tracking-tight">Una lectura clara para tomar decisiones.</h2><p className="mt-3 max-w-sm text-sm leading-6 text-emerald-50/70">Recibe un resumen por predio, alertas y recomendaciones en un formato simple.</p><Button onClick={() => toast.success("Informe preparado", { description: "El informe de septiembre se descargará cuando esté disponible." })} variant="outline" className="mt-6 h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-semibold text-white hover:bg-white/20 hover:text-white">Preparar informe <ArrowDownRight className="ml-1.5 h-4 w-4" /></Button></div></div>
+
+            <div id="informes" className="relative overflow-hidden rounded-[22px] bg-[#173d32] p-6 text-white shadow-[0_18px_45px_-38px_rgba(23,61,50,0.75)]">
+              <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-emerald-400/20 blur-2xl" />
+              <div className="relative">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-emerald-200"><FileText size={17} /></span>
+                <p className="mt-5 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-200">Informes Quincenales</p>
+                <h2 className="mt-2 max-w-xs text-2xl font-semibold leading-tight tracking-tight">Lecturas claras para toma de decisiones.</h2>
+                <p className="mt-3 max-w-sm text-sm leading-6 text-emerald-50/70">Revisa la lista de informes guardados en la base de datos de tu organización.</p>
+                <Button onClick={() => setLocation("/dashboard/informes")} variant="outline" className="mt-6 h-10 rounded-xl border-white/20 bg-white/10 px-4 text-xs font-semibold text-white hover:bg-white/20 hover:text-white">
+                  Preparar informe <ArrowDownRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </section>
         </div>
       </main>
 
+      {/* Modal: Detalles del Plan */}
+      <Dialog open={planModalOpen} onOpenChange={setPlanModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sprout className="h-5 w-5 text-emerald-700" />
+              Detalles de tu Plan
+            </DialogTitle>
+            <DialogDescription>
+              Información de suscripción y límites de procesamiento activos para tu organización.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2 text-xs">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-stone-500">Plan Actual</span>
+              <span className="font-bold text-stone-800">{data.tenant.plan}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-stone-500">Consumo Mensual</span>
+              <span className="font-bold text-emerald-800">{data.tenant.usoHa} / {data.tenant.limiteHa} ha</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-stone-500">Soporte Regional (Tier 3)</span>
+              <span className="font-medium text-stone-700">{data.tenant.limiteHa >= 1000 ? "Habilitado" : "Requiere evaluación"}</span>
+            </div>
+            <div className="rounded-xl bg-emerald-50 p-3 text-emerald-900">
+              <p className="font-semibold">Cuota disponible</p>
+              <p className="mt-1 text-stone-600">Te quedan {Math.max(0, data.tenant.limiteHa - data.tenant.usoHa)} ha disponibles este mes.</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Ayuda e Indicadores */}
+      <Dialog open={helpModalOpen} onOpenChange={setHelpModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-emerald-700" />
+              Glosario de Indicadores Satelitales
+            </DialogTitle>
+            <DialogDescription>
+              Aprende cómo interpretar las métricas calculadas en la plataforma.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2 text-xs">
+            <div className="rounded-xl border border-stone-200 p-3">
+              <p className="font-bold text-stone-800">NDVI (Vigor Vegetativo)</p>
+              <p className="mt-1 text-stone-600">Índice Óptico de Vigor (0 a 1). Mide la clorofila y actividad fotosintética. Valores &gt;0.6 indican vegetación densa y saludable.</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 p-3">
+              <p className="font-bold text-stone-800">Sigma0 VV (Humedad Radar Sentinel-1)</p>
+              <p className="mt-1 text-stone-600">Retrodispersión radar en decibelios (dB). Atraviesa nubes y mide rugosidad y contenido de agua en los primeros centímetros del suelo.</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 p-3">
+              <p className="font-bold text-stone-800">Evapotranspiración FAO ($ET_0$)</p>
+              <p className="mt-1 text-stone-600">Pérdida de agua por evaporación del suelo y transpiración del cultivo en mm/día.</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Alertas */}
+      <Dialog open={alertsModalOpen} onOpenChange={setAlertsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-amber-600" />
+              Alertas del Tenant
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {data.alerts.length === 0 ? (
+              <p className="py-4 text-center text-xs text-stone-500">Sin alertas pendientes para revisar.</p>
+            ) : (
+              data.alerts.map(a => (
+                <div key={a.id} className="rounded-xl border border-stone-200 p-3 text-xs">
+                  <p className="font-bold text-stone-800">{a.titulo}</p>
+                  <p className="mt-1 text-stone-500">{a.detalle}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Solicitar Análisis */}
       <Dialog open={analysisOpen} onOpenChange={setAnalysisOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto border-stone-200 bg-[#fcfcf8] p-0 sm:max-w-[620px]">
-          <DialogHeader className="border-b border-stone-100 px-6 pb-5 pt-6"><div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><ScanLine size={19} /></div><DialogTitle className="text-xl tracking-tight text-stone-800">Solicita un nuevo análisis</DialogTitle><DialogDescription className="pt-1 text-sm leading-6 text-stone-500">Define el área y las fuentes de datos. Cleanleaf asigna automáticamente el nivel adecuado para tu solicitud.</DialogDescription></DialogHeader>
+          <DialogHeader className="border-b border-stone-100 px-6 pb-5 pt-6">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><ScanLine size={19} /></div>
+            <DialogTitle className="text-xl tracking-tight text-stone-800">Solicita un nuevo análisis</DialogTitle>
+            <DialogDescription className="pt-1 text-sm leading-6 text-stone-500">
+              Selecciona tu predio registrado y el rango de fechas para procesar el análisis satelital.
+            </DialogDescription>
+          </DialogHeader>
           <div className="px-6 pb-6 pt-5"><SolicitudAnalisisForm onSuccess={() => setAnalysisOpen(false)} /></div>
         </DialogContent>
       </Dialog>
@@ -228,23 +520,6 @@ function Brand({ compact = false }: { compact?: boolean }) {
 function MetricCard({ label, value, hint, tone, icon, trend }: { label: string; value: string; hint: string; tone: "green" | "sand" | "amber" | "sky"; icon: React.ReactNode; trend: string }) {
   const styles = { green: "bg-[#eef6e7] text-emerald-700", sand: "bg-[#f7f1e8] text-[#9a6c39]", amber: "bg-[#fff6e5] text-amber-700", sky: "bg-[#eef6f7] text-sky-700" }[tone];
   return <div className="rounded-2xl border border-[#e5e6dc] bg-white p-4.5 shadow-[0_16px_35px_-35px_rgba(56,75,44,0.45)]"><div className="flex items-start justify-between"><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${styles}`}>{icon}</span><span className="text-[11px] font-semibold text-stone-400">{trend}</span></div><p className="mt-5 text-[13px] font-medium text-stone-500">{label}</p><p className="mt-1 text-2xl font-semibold tracking-[-0.035em] text-stone-800">{value}</p><p className="mt-1 text-[11px] leading-4 text-stone-400">{hint}</p></div>;
-}
-
-function MapPreview({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
-  const fields = [
-    { name: "Las Quinas", className: "left-[17%] top-[20%] h-[45%] w-[34%] bg-[#6e9e4b]", marker: "left-[33%] top-[39%]" },
-    { name: "El Aromo", className: "right-[13%] top-[14%] h-[52%] w-[29%] bg-[#b7ad55]", marker: "right-[22%] top-[40%]" },
-    { name: "Santa Elena", className: "bottom-[8%] left-[40%] h-[31%] w-[29%] bg-[#477c52]", marker: "bottom-[20%] left-[51%]" },
-  ];
-  return <div className="relative h-[300px] overflow-hidden bg-[#b8c494] sm:h-[330px]" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(125deg, #b5c98e 0%, #98b274 38%, #bfd09f 38%, #bdcd95 100%)", backgroundSize: "11px 11px, 100% 100%" }}>
-    <div className="absolute inset-0 opacity-65" style={{ backgroundImage: "repeating-linear-gradient(23deg, transparent 0 26px, rgba(95,110,66,.17) 27px 28px), repeating-linear-gradient(113deg, transparent 0 44px, rgba(255,255,255,.20) 45px 47px)" }} />
-    <div className="absolute -left-5 top-[64%] h-6 w-[116%] rotate-[-9deg] border-y border-white/45 bg-[#8b8b79]/50 shadow-[0_0_0_4px_rgba(126,132,115,.12)]" />
-    <div className="absolute bottom-[-30px] left-[5%] h-44 w-[14px] -rotate-[25deg] rounded-full bg-[#5b88a0]/70 blur-[1px]" />
-    {fields.map(field => <button key={field.name} onClick={() => onSelect(field.name)} className={`absolute z-10 border-2 transition duration-200 hover:brightness-110 ${field.className} ${selected === field.name ? "border-white shadow-[0_0_0_4px_rgba(22,128,59,.35)]" : "border-white/45"}`} style={{ clipPath: "polygon(8% 9%, 90% 0, 100% 72%, 72% 100%, 0 87%)", backgroundImage: "repeating-linear-gradient(90deg, rgba(255,255,255,.13) 0 2px, transparent 2px 12px)" }} aria-label={`Seleccionar ${field.name}`} />)}
-    {fields.map(field => <button key={`${field.name}-marker`} onClick={() => onSelect(field.name)} className={`absolute z-20 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold shadow-lg transition ${field.marker} ${selected === field.name ? "bg-stone-900 text-white" : "bg-white/90 text-stone-700 hover:bg-white"}`}><span className={`h-1.5 w-1.5 rounded-full ${field.name === "El Aromo" ? "bg-amber-500" : "bg-emerald-500"}`} />{field.name}</button>)}
-    <div className="absolute bottom-4 left-4 z-20 rounded-lg border border-white/40 bg-stone-900/80 px-3 py-2 text-[11px] font-medium text-white backdrop-blur"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />Sentinel-2 · imagen del 5 Sep</div>
-    <div className="absolute right-4 top-4 z-20 rounded-lg bg-white/90 px-3 py-2 text-[11px] font-medium text-stone-600 shadow-sm backdrop-blur">42,3° S · 72,1° O</div>
-  </div>;
 }
 
 function MobileNav({ onNavigate }: { onNavigate: () => void }) {

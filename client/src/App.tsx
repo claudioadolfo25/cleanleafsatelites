@@ -9,11 +9,15 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const SatellitesPlaceholderPage = lazy(() => import("./pages/SatellitesPlaceholderPage"));
 const Home = lazy(() => import("./pages/Home"));
 const SatelliteConfiguration = lazy(() => import("./pages/SatelliteConfiguration"));
 const ReportsDashboard = lazy(() => import("./pages/ReportsDashboard"));
 const ReportDetail = lazy(() => import("./pages/ReportDetail"));
+const PrediosPage = lazy(() => import("./pages/PrediosPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
 
 function RouteFallback() {
   return (
@@ -27,14 +31,24 @@ function Router() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Switch>
-        {/* Rutas Públicas (Fase 1 & Fase 2) */}
+        {/* Rutas Públicas */}
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/auth/restablecer-password" component={ResetPasswordPage} />
         <Route path="/satelites" component={SatellitesPlaceholderPage} />
 
         {/* Rutas Protegidas bajo /dashboard */}
         <Route path="/dashboard">
           {() => <ProtectedRoute component={Home} />}
+        </Route>
+        <Route path="/dashboard/admin">
+          {() => <ProtectedRoute component={AdminDashboardPage} />}
+        </Route>
+        <Route path="/dashboard/perfil">
+          {() => <ProtectedRoute component={ProfilePage} />}
+        </Route>
+        <Route path="/dashboard/predios">
+          {() => <ProtectedRoute component={PrediosPage} />}
         </Route>
         <Route path="/dashboard/configuracion/satelites">
           {() => <ProtectedRoute component={SatelliteConfiguration} />}

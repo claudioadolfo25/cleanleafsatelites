@@ -41,11 +41,42 @@ pnpm test
 pnpm check
 ```
 
+## Arquitectura Asíncrona & Worker de Procesamiento
+
+El procesamiento de solicitudes de análisis satelital (`createAnalysis`) se ejecuta de forma asíncrona no bloqueante:
+
+1. **API Server (`server/routers.ts`)**: Valida la entrada, comprueba los límites de cuota en el servidor, registra la solicitud en `solicitudes_analisis` con estado `pendiente` y responde inmediatamente en HTTP 200 con su ID.
+2. **Background Worker (`server/worker.ts`)**: Bucle de procesamiento que consume solicitudes con estado `pendiente`, transiciona su estado en DB (`pendiente` $\to$ `en_cola` $\to$ `procesando` $\to$ `completado` / `error_final`) y escribe la trazabilidad paso a paso en `workflow_logs`.
+3. **Reintentos & Tolerancia a Fallos**: Ante errores de rate-limit (429) o fallos de servidor (5xx) de Copernicus CDSE, el worker reintenta con backoff exponencial (máximo 3 intentos). Si se agotan los reintentos, transiciona a `error_final`. El consumo de hectáreas se registra **únicamente** tras completar con éxito.
+
+### Ejecución Local del Worker
+
+Para ejecutar el worker de procesamiento de solicitudes localmente:
+
+```bash
+pnpm start:worker
+```
+
+### Despliegue en Render (Background Worker)
+
+Para desplegar el worker como un servicio independiente en Render:
+
+1. Crear un nuevo servicio de tipo **Background Worker** en el Dashboard de Render.
+2. Seleccionar el repositorio `agropulso-cleanleaf`.
+3. Configurar los comandos:
+   - **Build Command**: `pnpm install --frozen-lockfile`
+   - **Start Command**: `pnpm start:worker`
+4. Asignar las mismas variables de entorno del servidor API (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `COPERNICUS_CLIENT_ID`, `COPERNICUS_CLIENT_SECRET`, `COPERNICUS_MODE`).
+
 ## Buenas prácticas y límites del MVP
 
 El frontend consume contratos tipados de tRPC y no contiene reglas de negocio de catálogo o tiers. La selección de satélites se filtra por vertical en una única fuente de verdad, y las consultas stub son asíncronas para mantener el mismo contrato que tendrá el proveedor real. Los tiers aprobados son: Tier 1 para menos de 50 ha, Tier 2 para 50–499 ha y Tier 3 desde 500 ha; en agricultura el Tier 3 queda visible como stub de contexto regional y no activa Sentinel-3 en el selector.
 
-La capa `shared/interpretation.ts` prepara el prompt que recibirá Dify con `satelite`, `variable`, `valor` y `unidad`, y contiene una interpretación determinista de respaldo para NDVI y Sigma0 VV. `supabase/schema.sql` y `supabase/seed.sql` documentan la migración futura a Postgres/Supabase, con `tenant_id`, `get_current_tenant_id()` y políticas RLS por tenant. El seed incluye el caso de rechazo de Sentinel-3 para agricultura.
+La capa `shared/interpretation.ts` prepara el prompt que recibirá Dify con `satelite`, `variable`, `valor` y `unidad`, y contiene una interpretación determinista de respaldo para NDVI y Sigma0 VV.
+
+> **Nota de Validación Agronómica:** Las reglas de recomendación agronómica y umbrales de diagnóstico están centralizados en `server/analysis/recommendation-rules.json`. Este archivo se encuentra en versión borrador v1.0 **"pendiente de validación agronómica"** con expertos de terreno antes de su despliegue comercial definitivo.
+
+`supabase/schema.sql` y `supabase/seed.sql` documentan la migración futura a Postgres/Supabase, con `tenant_id`, `get_current_tenant_id()` y políticas RLS por tenant. El seed incluye el caso de rechazo de Sentinel-3 para agricultura.
 
 Queda fuera de esta fase, de forma intencional: integración real con Sentinel Hub, workflows n8n conectados, Stripe, WhatsApp y autenticación de API keys multi-tenant. Se deben integrar en Fase 2 reemplazando stubs sin cambiar los contratos públicos.
 
@@ -71,6 +102,6 @@ El centro operativo de informes está en `/dashboard/informes`, con detalle en `
 
 ## Copernicus como catálogo de recursos
 
-Cleanleaf no trata Copernicus solo como una lista de satélites. `shared/copernicus-catalog.ts` organiza recursos por **sector**, **necesidad**, **variables**, **fuente oficial** y **fase de integración**. CDSE Statistical API queda como fuente MVP para agricultura y también como contrato común para acuicultura y forestal. CMEMS se ofrece como recurso futuro para temperatura, clorofila, corrientes y nivel del mar; CLMS para uso de suelo y vegetación; CEMS para inundaciones, incendios y sequía; CDS para contexto climático; y CAMS para atmósfera y humo. Los recursos futuros son visibles en la interfaz, pero permanecen desactivados hasta validar caso de uso, autenticación y límites.
+Cleanleaf no trata Copernicus solo como una lista de satélites. `shared/copernicus-catalog.ts` organiza recursos por **sector**, **necesidad**, **variables**, **fuente oficial** y **fase de integración**. CDSE Statistical API queda como fuente MVP para agricultura y también como contrato común para acuicultura y forestal. CMEMS se ofrece como recurso futuro para temperatura, clorofila, corrientes y nivel del mar; CLMS para uso de suelo y vegetación; CEMS para inundaciones, incendios y sequía; CDS para contexto climático; y CAMS para atmósfera y humo. Los recursos futuros son visibles en la interfaz, pero permanecen desactivados hasta validar caso de uso, autenticación del catálogo y límites.
 
 Referencias oficiales: [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/), [Sentinel-1](https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-1), [Sentinel-2](https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-2) y [servicios Copernicus](https://dataspace.copernicus.eu/copernicus-services). La integración real de CDSE requiere credenciales OAuth2 server-side y queda para la siguiente fase; nunca se deben exponer secretos Copernicus en el frontend.
