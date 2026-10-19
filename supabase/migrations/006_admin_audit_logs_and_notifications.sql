@@ -1,7 +1,7 @@
 -- Migration 006: Audit Logs and Email Notification Preferences
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   user_id TEXT,
   user_email TEXT,
   action TEXT NOT NULL,

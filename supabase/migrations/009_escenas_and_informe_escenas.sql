@@ -23,9 +23,9 @@ CREATE POLICY "escenas_insert_all" ON public.escenas
 
 
 CREATE TABLE IF NOT EXISTS public.informe_escenas (
-  informe_id TEXT NOT NULL,
+  informe_id UUID NOT NULL REFERENCES public.informes(id) ON DELETE CASCADE,
   escena_id TEXT NOT NULL REFERENCES public.escenas(id) ON DELETE CASCADE,
-  tenant_id TEXT NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   PRIMARY KEY (informe_id, escena_id)
 );
 
@@ -35,12 +35,12 @@ DROP POLICY IF EXISTS "informe_escenas_select_tenant" ON public.informe_escenas;
 CREATE POLICY "informe_escenas_select_tenant" ON public.informe_escenas
   FOR SELECT
   USING (
-    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')
+    tenant_id = coalesce((nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id'), (nullif(current_setting('request.jwt.claims', true), '')::json ->> 'tenant_id'))::uuid
   );
 
 DROP POLICY IF EXISTS "informe_escenas_insert_tenant" ON public.informe_escenas;
 CREATE POLICY "informe_escenas_insert_tenant" ON public.informe_escenas
   FOR INSERT
   WITH CHECK (
-    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')
+    tenant_id = coalesce((nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id'), (nullif(current_setting('request.jwt.claims', true), '')::json ->> 'tenant_id'))::uuid
   );

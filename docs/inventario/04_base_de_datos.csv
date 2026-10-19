@@ -1,0 +1,61 @@
+objeto,tipo,definido_en,n_definiciones,rls_habilitado_en_texto,referenciado_en_codigo,n_referencias
+tenants [CANDIDATO DUPLICADO],tabla,supabase/schema.sql:6; supabase/migrations/005_api_keys_and_tenants.sql:2,2,si,client/src/pages/AdminDashboardPage.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/DIAGNOSTICO_FLUJOS.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/reports-dashboard-guide.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/app.test.ts; server/db/repository.ts,11
+planes,tabla,supabase/schema.sql:13,1,si,README.md; client/src/pages/AdminDashboardPage.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/v7-diagnostic.md; server/db/repository.ts,6
+users,tabla,supabase/schema.sql:23,1,si,docs/architecture-map.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; drizzle/meta/0000_snapshot.json; server/_core/heartbeat.ts; template.json,8
+predios,tabla,supabase/schema.sql:31,1,si,client/src/App.tsx; client/src/components/DashboardLayout.tsx; client/src/components/SolicitudAnalisisForm.tsx; client/src/pages/Home.tsx; client/src/pages/LandingPage.tsx; client/src/pages/PrediosPage.tsx; client/src/pages/ReportsDashboard.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/JULES_HANDOFF.md; docs/architecture-diagram.mmd; docs/architecture-map.md; docs/inventario/02_rutas_backend.csv; docs/inventario/03_rutas_frontend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/inventario/scripts/generate_03_rutas_frontend.py; docs/satellite-selection-guide.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; n8n/workflows/sentinel-weekly-update.json; server/app.test.ts; server/db/repository.ts; server/routers.ts; shared/plan-limits.ts; shared/satellite-catalog.ts; shared/satellite-guidance.ts,26
+suscripciones,tabla,supabase/schema.sql:42,1,si,docs/architecture-map.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/db/repository.ts,4
+solicitudes_analisis,tabla,supabase/schema.sql:54,1,si,README.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/JULES_HANDOFF.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/reports-dashboard-guide.md; server/db/repository.ts,8
+informes,tabla,supabase/schema.sql:74,1,si,README.md; client/src/App.tsx; client/src/components/DashboardLayout.tsx; client/src/pages/Home.tsx; client/src/pages/LandingPage.tsx; client/src/pages/ReportDetail.tsx; client/src/pages/ReportsDashboard.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/DIAGNOSTICO_FLUJOS.md; docs/JULES_HANDOFF.md; docs/architecture-map.md; docs/inventario/02_rutas_backend.csv; docs/inventario/03_rutas_frontend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/inventario/scripts/generate_03_rutas_frontend.py; docs/reports-dashboard-guide.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/app.test.ts; server/db/repository.ts; server/satellite-domain.test.ts,22
+mediciones,tabla,supabase/schema.sql:87,1,si,client/src/pages/Home.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/DIAGNOSTICO_FLUJOS.md; docs/JULES_HANDOFF.md; docs/handoffs/MANUS_TO_JULES.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/reports-dashboard-guide.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/db/repository.ts; server/routers.ts; shared/observation-provider.ts; shared/report-catalog.ts,15
+consumo,tabla,supabase/schema.sql:100,1,si,README.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/DIAGNOSTICO_FLUJOS.md; docs/JULES_HANDOFF.md; docs/architecture-diagram.mmd; docs/architecture-map.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/app.test.ts; server/db/repository.ts; server/services/analysis-worker.ts; shared/report-catalog.ts,13
+alertas,tabla,supabase/schema.sql:109,1,si,README.md; client/src/pages/Home.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/JULES_HANDOFF.md; docs/architecture-map.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md; server/app.test.ts; server/db/repository.ts; shared/copernicus-catalog.ts,11
+api_keys [CANDIDATO DUPLICADO],tabla,supabase/schema.sql:121; supabase/migrations/005_api_keys_and_tenants.sql:20,2,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/JULES_HANDOFF.md; docs/architecture-map.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/v7-diagnostic.md; server/db/repository.ts,7
+workflow_logs,tabla,supabase/schema.sql:132,1,si,README.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; docs/JULES_HANDOFF.md; docs/architecture-map.md; docs/inventario/02_rutas_backend.csv; docs/inventario/scripts/generate_02_rutas_backend.py; docs/reports-dashboard-guide.md; docs/v6-coverage-audit.md; server/app.test.ts; server/db/repository.ts,11
+get_current_tenant_id,funcion,supabase/schema.sql:146,1,no_aplica,README.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/v6-coverage-audit.md; docs/v7-diagnostic.md,4
+get_current_role,funcion,supabase/schema.sql:151,1,no_aplica,ninguno,0
+tenants_isolation ON tenants,politica,supabase/schema.sql:169,1,no_aplica,ninguno,0
+planes_read ON planes,politica,supabase/schema.sql:170,1,no_aplica,ninguno,0
+users_isolation ON users,politica,supabase/schema.sql:171,1,no_aplica,ninguno,0
+predios_isolation ON predios,politica,supabase/schema.sql:172,1,no_aplica,ninguno,0
+suscripciones_isolation ON suscripciones,politica,supabase/schema.sql:173,1,no_aplica,ninguno,0
+solicitudes_isolation ON solicitudes_analisis,politica,supabase/schema.sql:174,1,no_aplica,ninguno,0
+informes_isolation ON informes,politica,supabase/schema.sql:175,1,no_aplica,ninguno,0
+mediciones_isolation ON mediciones,politica,supabase/schema.sql:176,1,no_aplica,ninguno,0
+consumo_isolation ON consumo,politica,supabase/schema.sql:177,1,no_aplica,ninguno,0
+alertas_isolation ON alertas,politica,supabase/schema.sql:178,1,no_aplica,ninguno,0
+api_keys_isolation ON api_keys,politica,supabase/schema.sql:179,1,no_aplica,ninguno,0
+workflow_logs_isolation ON workflow_logs,politica,supabase/schema.sql:180,1,no_aplica,ninguno,0
+idx_predios_tenant,indice,supabase/schema.sql:182,1,no_aplica,ninguno,0
+idx_mediciones_predio_fecha,indice,supabase/schema.sql:183,1,no_aplica,ninguno,0
+idx_mediciones_satelite_variable,indice,supabase/schema.sql:184,1,no_aplica,ninguno,0
+idx_solicitudes_tenant_estado,indice,supabase/schema.sql:185,1,no_aplica,ninguno,0
+uq_solicitudes_tenant_idempotency [CANDIDATO DUPLICADO],indice,supabase/schema.sql:186; supabase/migrations/003_auth_hook_and_idempotency.sql:41,2,no_aplica,ninguno,0
+idx_api_keys_tenant_active,indice,supabase/schema.sql:187,1,no_aplica,ninguno,0
+uq_mediciones_request_source_variable_date,indice,supabase/schema.sql:188,1,no_aplica,ninguno,0
+custom_access_token_hook,funcion,supabase/migrations/003_auth_hook_and_idempotency.sql:4,1,no_aplica,ninguno,0
+user_preferences,tabla,supabase/migrations/004_user_preferences_and_tenant_settings.sql:2,1,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; server/db/repository.ts,2
+user_preferences_select_own ON user_preferences,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:13,1,no_aplica,ninguno,0
+user_preferences_insert_own ON user_preferences,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:18,1,no_aplica,ninguno,0
+user_preferences_update_own ON user_preferences,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:23,1,no_aplica,ninguno,0
+tenant_settings,tabla,supabase/migrations/004_user_preferences_and_tenant_settings.sql:29,1,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; server/app.test.ts; server/db/repository.ts,3
+tenant_settings_select_tenant ON tenant_settings,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:40,1,no_aplica,ninguno,0
+tenant_settings_insert_admin ON tenant_settings,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:47,1,no_aplica,ninguno,0
+tenant_settings_update_admin ON tenant_settings,politica,supabase/migrations/004_user_preferences_and_tenant_settings.sql:55,1,no_aplica,ninguno,0
+tenants_select_own ON tenants,politica,supabase/migrations/005_api_keys_and_tenants.sql:13,1,no_aplica,ninguno,0
+api_keys_select_admin ON api_keys,politica,supabase/migrations/005_api_keys_and_tenants.sql:31,1,no_aplica,ninguno,0
+api_keys_insert_admin ON api_keys,politica,supabase/migrations/005_api_keys_and_tenants.sql:39,1,no_aplica,ninguno,0
+audit_logs,tabla,supabase/migrations/006_admin_audit_logs_and_notifications.sql:2,1,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; server/db/repository.ts,2
+audit_logs_select_admin ON audit_logs,politica,supabase/migrations/006_admin_audit_logs_and_notifications.sql:17,1,no_aplica,ninguno,0
+audit_logs_insert_authenticated ON audit_logs,politica,supabase/migrations/006_admin_audit_logs_and_notifications.sql:24,1,no_aplica,ninguno,0
+observation_cache,tabla,supabase/migrations/007_observation_cache_and_quality.sql:2,1,si,docs/COPERNICUS_OPERACION.md; server/db/repository.ts,2
+observation_cache_select_all ON observation_cache,politica,supabase/migrations/007_observation_cache_and_quality.sql:17,1,no_aplica,ninguno,0
+observation_cache_insert_all ON observation_cache,politica,supabase/migrations/007_observation_cache_and_quality.sql:22,1,no_aplica,ninguno,0
+observaciones_serie,tabla,supabase/migrations/008_observaciones_serie_and_index_time_series.sql:2,1,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; server/app.test.ts; server/db/repository.ts; server/reports/pdf-service.ts; server/routers.ts,6
+observaciones_serie_select_tenant ON observaciones_serie,politica,supabase/migrations/008_observaciones_serie_and_index_time_series.sql:22,1,no_aplica,ninguno,0
+observaciones_serie_insert_tenant ON observaciones_serie,politica,supabase/migrations/008_observaciones_serie_and_index_time_series.sql:29,1,no_aplica,ninguno,0
+escenas,tabla,supabase/migrations/009_escenas_and_informe_escenas.sql:2,1,si,client/src/components/CopernicusResourcePanel.tsx; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md; server/app.test.ts; server/db/repository.ts; server/reports/report-view-model.ts; server/services/analysis-worker.ts,6
+escenas_select_all ON escenas,politica,supabase/migrations/009_escenas_and_informe_escenas.sql:15,1,no_aplica,ninguno,0
+escenas_insert_all ON escenas,politica,supabase/migrations/009_escenas_and_informe_escenas.sql:20,1,no_aplica,ninguno,0
+informe_escenas,tabla,supabase/migrations/009_escenas_and_informe_escenas.sql:25,1,si,server/db/repository.ts,1
+informe_escenas_select_tenant ON informe_escenas,politica,supabase/migrations/009_escenas_and_informe_escenas.sql:35,1,no_aplica,ninguno,0
+informe_escenas_insert_tenant ON informe_escenas,politica,supabase/migrations/009_escenas_and_informe_escenas.sql:42,1,no_aplica,ninguno,0

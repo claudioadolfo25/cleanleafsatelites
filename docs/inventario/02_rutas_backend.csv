@@ -1,0 +1,55 @@
+tipo,nombre_o_ruta,metodo,archivo:linea,guard_o_middleware,esquema_entrada,tablas_o_servicios_que_toca,referenciado_por_cliente,donde_se_referencia
+express,/api/trpc/auth*,USE,server/app.ts:61,rateLimiter,ninguno,tRPC Router Dispatcher,no,ninguno
+express,/api/trpc/cleanleaf.createAnalysis,USE,server/app.ts:62,rateLimiter,ninguno,tRPC Router Dispatcher,no,ninguno
+express,/api/trpc,USE,server/app.ts:65,rateLimiter,ninguno,tRPC Router Dispatcher,no,ninguno
+express,/api/health,GET,server/app.ts:75,ninguno,ninguno,salud del sistema,no,ninguno
+express,/api/trpc,USE,server/app.ts:97,trpcMiddleware,ninguno,tRPC Router Dispatcher,no,ninguno
+express,/trpc,USE,server/app.ts:98,trpcMiddleware,ninguno,ninguno,no,ninguno
+express,/api/*,USE,server/app.ts:101,ninguno,ninguno,Fallback 404 handler,no,ninguno
+trpc,system.health,QUERY,server/_core/systemRouter.ts:6,publicProcedure,z.object({ timestamp: z.number() }),ninguno,no,ninguno
+trpc,system.notifyOwner,MUTATION,server/_core/systemRouter.ts:16,adminProcedure,"z.object({ title: z.string(), content: z.string() })",notifyOwner service,no,ninguno
+trpc,auth.me,MUTATION,server/routers.ts:338,tenantOptionalProcedure,ninguno,users,si,client/src/_core/hooks/useAuth.ts
+trpc,auth.logout,MUTATION,server/routers.ts:339,tenantOptionalProcedure,ninguno,users,si,client/src/_core/hooks/useAuth.ts
+trpc,profile.get,QUERY,server/routers.ts:346,tenantOptionalProcedure,ninguno,users,no,ninguno
+trpc,preferences.getUserPreferences,QUERY,server/routers.ts:357,protectedProcedure,ninguno,users,si,client/src/pages/SatelliteConfiguration.tsx
+trpc,preferences.updateUserPreferences,MUTATION,server/routers.ts:373,protectedProcedure,"z.object({
+        sector: z.string(",users,si,client/src/pages/SatelliteConfiguration.tsx
+trpc,preferences.getTenantSettings,QUERY,server/routers.ts:388,protectedProcedure,ninguno,users,no,ninguno
+trpc,preferences.updateTenantSettings,MUTATION,server/routers.ts:404,tenantAdminProcedure,"z.object({
+        sector: z.string(",users,no,ninguno
+trpc,predios.list,QUERY,server/routers.ts:421,protectedProcedure,idInput,"users, predios",si,client/src/components/SolicitudAnalisisForm.tsx; client/src/pages/PrediosPage.tsx
+trpc,predios.getById,MUTATION,server/routers.ts:425,protectedProcedure,idInput,"users, predios",no,ninguno
+trpc,predios.create,MUTATION,server/routers.ts:433,protectedProcedure,"z.object({
+        nombre: z.string(","users, predios",si,client/src/pages/PrediosPage.tsx
+trpc,predios.update,MUTATION,server/routers.ts:450,protectedProcedure,"z.object({
+        id: identifierSchema,
+        nombre: z.string(","users, predios",no,ninguno
+trpc,predios.delete,MUTATION,server/routers.ts:464,protectedProcedure,idInput,"users, predios",si,client/src/pages/PrediosPage.tsx
+trpc,cleanleaf.dashboard,QUERY,server/routers.ts:474,protectedProcedure,"z.object({
+          search: z.string(",users,si,client/src/pages/Home.tsx
+trpc,cleanleaf.reports.list,QUERY,server/routers.ts:479,protectedProcedure,"z.object({
+          search: z.string(","users, informes",si,client/src/pages/ReportsDashboard.tsx
+trpc,cleanleaf.reports.getById,QUERY,server/routers.ts:494,protectedProcedure,idInput,"users, informes",si,client/src/pages/ReportDetail.tsx
+trpc,cleanleaf.reports.getDownloadUrl,QUERY,server/routers.ts:504,protectedProcedure,idInput,"users, informes",si,client/src/components/ReportDownloadActions.tsx
+trpc,cleanleaf.reports.getGeoJson,QUERY,server/routers.ts:517,protectedProcedure,idInput,"users, predios, informes",si,client/src/components/ReportDownloadActions.tsx
+trpc,cleanleaf.catalog,QUERY,server/routers.ts:552,publicProcedure,z.object({ vertical: verticalSchema },Copernicus CDSE Service,si,client/src/components/SolicitudAnalisisForm.tsx
+trpc,cleanleaf.configStatus,MUTATION,server/routers.ts:556,publicProcedure,z.object({ vertical: verticalSchema },Copernicus CDSE Service,si,client/src/components/SolicitudAnalisisForm.tsx
+trpc,cleanleaf.resources,MUTATION,server/routers.ts:557,protectedProcedure,z.object({ sector: sectorSchema },Copernicus CDSE Service,si,client/src/components/SolicitudAnalisisForm.tsx
+trpc,cleanleaf.catalogSearch,MUTATION,server/routers.ts:558,protectedProcedure,"z.object({
+      bbox: z.tuple([z.number(",Copernicus CDSE Service,si,client/src/components/CopernicusResourcePanel.tsx
+trpc,cleanleaf.createAnalysis,MUTATION,server/routers.ts:591,protectedProcedure,analysisInput,"users, solicitudes_analisis",si,client/src/components/SolicitudAnalisisForm.tsx
+trpc,cleanleaf.getTimeSeries,QUERY,server/routers.ts:595,protectedProcedure,"z.object({
+      predioId: identifierSchema,
+      satellite: satelliteSchema,
+      variable: variableSchema,
+      interval: z.enum([""P5D"", ""P10D""]","Copernicus CDSE Service, mediciones",no,ninguno
+trpc,admin.listTenants,MUTATION,server/routers.ts:705,superAdminProcedure,z.object({ tenantId: z.string(,users,si,client/src/pages/AdminDashboardPage.tsx
+trpc,admin.updatePlan,MUTATION,server/routers.ts:709,superAdminProcedure,z.object({ tenantId: z.string(,"users, tenants",si,client/src/pages/AdminDashboardPage.tsx
+trpc,admin.listFailedSolicitudes,MUTATION,server/routers.ts:724,superAdminProcedure,z.object({ solicitudId: z.string(,"users, solicitudes_analisis",si,client/src/pages/AdminDashboardPage.tsx
+trpc,admin.retrySolicitud,MUTATION,server/routers.ts:728,superAdminProcedure,z.object({ solicitudId: z.string(,"users, workflow_logs, solicitudes_analisis",si,client/src/pages/AdminDashboardPage.tsx
+trpc,admin.getAuditLogs,MUTATION,server/routers.ts:747,superAdminProcedure,z.object({ tenantId: z.string(,"users, solicitudes_analisis",si,client/src/pages/AdminDashboardPage.tsx
+trpc,apiV1.health,MUTATION,server/routers.ts:755,publicProcedure,analysisInput,"users, solicitudes_analisis",no,ninguno
+trpc,apiV1.solicitudes.create,MUTATION,server/routers.ts:757,protectedProcedure,analysisInput,"users, solicitudes_analisis",no,ninguno
+trpc,apiV1.solicitudes.getStatus,QUERY,server/routers.ts:765,protectedProcedure,z.object({ id: z.string(,"users, solicitudes_analisis",no,ninguno
+trpc,apiV1.onboarding.createTenant,MUTATION,server/routers.ts:786,tenantOptionalProcedure,z.object({ organizationName: z.string(,"users, tenants",no,ninguno
+trpc,apiV1.apiKeys.create,MUTATION,server/routers.ts:793,tenantAdminProcedure,z.object({ tenantId: z.string(,"users, api_keys",no,ninguno
