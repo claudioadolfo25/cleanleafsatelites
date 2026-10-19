@@ -17,7 +17,7 @@ Este informe representa la **Auditoría Consolidada v5** de la plataforma **Clea
 3. **Construcción de Producción Exitosa (`pnpm build`):**
    - Servidor Node.js ESM empaquetado en `dist/index.js` (83.3 kB).
    - Cliente SPA Vite empaquetado en `dist/public/` con chunks optimizados (Recharts ~405 kB, Radix UI ~95 kB, Query ~83 kB, Icons ~25 kB).
-4. **Validación Estricta de Esquemas Zod (PR #34):** Todos los endpoints de tRPC imponen esquemas de entrada y salida con Zod estrictos, sanitizando coordenadas BBOX, filtros de fecha e identificadores UUID/Nanoid.
+4. **Validación Estricta de Esquemas Zod (PR #34):** Todos los endpoints de tRPC imponen esquemas de entrada y salida con Zod strictly typed, sanitizando coordenadas BBOX, filtros de fecha e identificadores UUID/Nanoid.
 5. **Aislamiento Multi-Tenant y Seguridad RLS:**
    - La extracción de `tenantId` y `role` en `server/_core/context.ts` se realiza exclusivamente desde los `app_metadata` firmados en el JWT de Supabase.
    - Procedimiento de super-administrador (`superAdminProcedure`) restringe llamadas globales exclusivamente a usuarios con rol `super_admin`.
@@ -28,7 +28,30 @@ Este informe representa la **Auditoría Consolidada v5** de la plataforma **Clea
 
 ---
 
-## 2. Matriz de Evolución y Cierre de Hallazgos Históricos
+## 2. Posicionamiento Estratégico: Cleanleaf como Servicio de Valor Agregado sobre Copernicus
+
+Cleanleaf no opera únicamente como un prototipo o MVP funcional, sino como un **servicio comercial y operativo especializado** construido sobre la infraestructura de datos satelitales de Copernicus Data Space Ecosystem (CDSE).
+
+Copernicus proporciona el motor científico de Observación de la Tierra (EO) de clase mundial; Cleanleaf actúa como la capa de empaque, estructuración, interpretación agronómica y entrega de experiencia de usuario que transforma datos masivos en **decisiones informadas y estructuradas**.
+
+### Matriz de Alineación entre los Objetivos del Ecosistema Copernicus / EO y el Servicio Cleanleaf:
+
+| Objetivos del Ecosistema EO / Copernicus | Implementación y Valor Agregado en la Plataforma Cleanleaf |
+| --- | --- |
+| **1. Intercambio técnico y enfocado en aplicaciones** | Cleanleaf estructura datos satelitales brutos (Sentinel-1 SAR, Sentinel-2 Multiespectral) en un modelo de dominio unificado con métricas e índices agronómicos (NDVI, NDWI, EVI, NDMI, VH/VV). |
+| **2. Avances recientes y enfoques agénticos en EO** | Integración del worker asíncrono con motor de interpretación agronómica determinista y agente agéntico Dify/LLM (`server/analysis/interpret.ts`), convirtiendo series de datos en diagnósticos en lenguaje natural. |
+| **3. Desafíos operacionales y limitaciones** | Gestión resiliente de cuotas, trazabilidad explícita (`copernicus_cdse` vs `synthetic`), enrutamiento por superficie (Tiers 1, 2 y 3) y manejo de fallas de red con reintentos exponenciales sin pérdida de datos. |
+| **4. Prioridades comerciales e industriales** | Modelo SaaS Multi-Tenant aislado por Row Level Security (RLS), control de consumo de hectáreas por plan, generación de informes ejecutivos en PDF y miniaturas PNG. |
+| **5. Ecosistemas abiertos e interoperables** | Soporte para estándares abiertos de la industria EO: GeoJSON, catálogo STAC (`server/stac-client.ts`), trazabilidad en `data_source` y descarga de datos vectoriales. |
+| **6. Aplicación en productos operacionales y servicios** | Dashboard responsive de alta disponibilidad, mapas dinámicos interactivos, tableros de control multi-predio y alertas automáticas de anomalías de vegetación/humedad. |
+| **7. Mejores prácticas en sistemas agénticos** | Desacoplamiento total entre la ingesta de datos, la cola de ejecución del worker, el motor de reglas agronómicas y la generación de reportes final. |
+| **8. Intercambio interdisciplinario (Agro/Sat/Tech)** | Mapeo de terminología científica de satélites a recomendaciones agrícolas accionables para agricultores, agrónomos y administradores de campo. |
+| **9. Demonstradores y proyectos piloto** | Piloto operativo enfocado en la Región de La Araucanía con calibración regional de cultivos y suelos de la zona sur de Chile. |
+| **10. Capacitación y empoderamiento del usuario** | Interfaz simplificada e intuitiva que elimina la barrera técnica de consultar APIs satelitales complejas, permitiendo decisiones ágiles y fundamentadas. |
+
+---
+
+## 3. Matriz de Evolución y Cierre de Hallazgos Históricos
 
 | ID | Hallazgo Original (v1 - v3b) | Estado v4 / PR #28 | Estado Actual (v5 / PR #34) | Solución Implementada / Evidencia |
 | --- | --- | --- | --- | --- |
@@ -45,32 +68,32 @@ Este informe representa la **Auditoría Consolidada v5** de la plataforma **Clea
 
 ---
 
-## 3. Evaluación Detallada por Módulo
+## 4. Evaluación Detallada por Módulo
 
-### 3.1. Módulo de Autenticación y Contexto Tenant
+### 4.1. Módulo de Autenticación y Contexto Tenant
 - **Implementación:** `server/_core/context.ts` extrae los claims `tenantId` y `role` de `app_metadata`.
 - **Fortaleza:** Se evitan consultas recursivas a la base de datos para obtener el tenant en cada request tRPC.
 - **Verificación:** Pruebas en `server/app.test.ts` confirman que peticiones sin `tenantId` en `app_metadata` son rechazadas con error HTTP 403 `TENANT_REQUIRED` al intentar operaciones de negocio.
 
-### 3.2. Worker Asíncrono de Análisis y Trazabilidad Satelital
+### 4.2. Worker Asíncrono de Análisis y Trazabilidad Satelital
 - **Implementación:** `server/services/analysis-worker.ts` procesa la cola de solicitudes.
 - **Comportamiento CDSE:**
   - En entorno `staging` con `COPERNICUS_MODE=live` y credenciales válidas, consulta Copernicus CDSE Statistical API.
   - En caso de falla o en entornos demo (`DEMO_MODE=true`), conmuta silenciosamente a `SyntheticCopernicusProvider` solo si la política lo autoriza.
   - En política `COPERNICUS_PROD_POLICY=live`, la falla de CDSE no genera datos sintéticos y marca la solicitud como `error_final`.
 
-### 3.3. Reportes, PDFKit y Storage
+### 4.3. Reportes, PDFKit y Storage
 - **Implementación:** `server/reports/pdf-service.ts` genera informes vectoriales enriquecidos con métricas, gráficos e interpretación agronómica.
 - **Almacenamiento:** Los archivos PDF e imágenes PNG se suben a Supabase Storage con URLs firmadas con expiración de 1 hora (`getReportDownloadUrl`).
 
-### 3.4. Catálogo Satelital y Reglas de Dominio
+### 4.4. Catálogo Satelital y Reglas de Dominio
 - **Soportados:** Sentinel-2 (Óptico/Multiespectral) y Sentinel-1 (Radar SAR).
 - **Exclusiones Explicitas:** Sentinel-3 está restringido a acuicultura; Sentinel-4, Sentinel-5P y Sentinel-6 no son habilitables en agricultura para evitar sobrecostos o incoherencias agronómicas.
 - **Variables no disponibles:** SST (Sea Surface Temperature) se rechaza explícitamente en agricultura por falta de soporte SLSTR en CDSE.
 
 ---
 
-## 4. Brechas Pendientes y Trabajo Futuro
+## 5. Brechas Pendientes y Trabajo Futuro
 
 Aunque el sistema es operacionalmente sólido y sus pruebas están al 100%, existen los siguientes puntos de atención para el escalado a producción:
 
@@ -86,7 +109,7 @@ Aunque el sistema es operacionalmente sólido y sus pruebas están al 100%, exis
 
 ---
 
-## 5. Plan de Acción y Hoja de Ruta Actualizada
+## 6. Plan de Acción y Hoja de Ruta Actualizada
 
 ### Fase 1: Despliegue y Validación en Staging (Inmediata)
 - **Acción 1.1:** Mantener el despliegue automático en Render Staging (`https://agropulso-cleanleaf-staging.onrender.com`).
@@ -100,8 +123,8 @@ Aunque el sistema es operacionalmente sólido y sus pruebas están al 100%, exis
 
 ---
 
-## 6. Conclusión y Veredicto Final
+## 7. Conclusión y Veredicto Final
 
 **VEREDICTO: LISTO PARA PRODUCCIÓN EN STAGING / PRE-PRODUCCIÓN**
 
-La arquitectura de **Cleanleaf / AgroPulso** en el commit `d2e6ab3` cumple con todos los estándares de seguridad multi-tenant, aislamiento RLS, validación estricta Zod, resiliencia asíncrona y trazabilidad satelital exigidos.
+La arquitectura de **Cleanleaf / AgroPulso** en el commit `d2e6ab3` cumple con todos los estándares de seguridad multi-tenant, aislamiento RLS, validación estricta Zod, resiliencia asíncrona, trazabilidad satelital y propuesta de valor de servicio sobre el motor Copernicus.
