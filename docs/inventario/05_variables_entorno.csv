@@ -1,0 +1,41 @@
+nombre,en_env_example,en_docs,leida_en_codigo,con_valor_por_defecto,usada_en
+APP_ENV,no,no,server/_core/env.ts:32; shared/data-traceability.ts:14,ninguno,client|server
+APP_ID,si,docs/RENDER_ENV.md:23,no,cleanleaf-app,server
+BUILT_IN_FORGE_API_KEY,no,no,server/_core/env.ts:42,ninguno,server
+BUILT_IN_FORGE_API_URL,no,no,server/_core/env.ts:41,ninguno,server
+COOKIE_SECRET,si,docs/RENDER_ENV.md:21,no,your-cookie-secret-key-at-least-32-chars,server
+COPERNICUS_CATALOG_URL,si,docs/RENDER_ENV.md:75,server/catalog-client.ts:47,https://sh.dataspace.copernicus.eu/catalog/v1/search,server
+COPERNICUS_CLIENT_ID,si,README.md:69; docs/COPERNICUS_OPERACION.md:8; docs/RENDER_ENV.md:18; docs/RENDER_ENV.md:72; docs/handoffs/MANUS_TO_JULES.md:13,server/_core/env.ts:43; server/app.ts:79,sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535,server
+COPERNICUS_CLIENT_SECRET,si,README.md:69; docs/COPERNICUS_OPERACION.md:8; docs/RENDER_ENV.md:19; docs/RENDER_ENV.md:73; docs/handoffs/MANUS_TO_JULES.md:13,server/_core/env.ts:44; server/app.ts:80,ninguno,server
+COPERNICUS_MODE,si,README.md:69; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:105; docs/RENDER_ENV.md:71; docs/handoffs/MANUS_TO_JULES.md:13,server/routers.ts:140; server/services/analysis-worker.ts:23,live,server|worker
+COPERNICUS_OPERACION,no,docs/inventario/01_archivos.csv:106; docs/inventario/04_base_de_datos.csv:50,no,ninguno,server
+COPERNICUS_PROD_POLICY,no,docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md:25; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md:62; docs/COPERNICUS_OPERACION.md:3; docs/COPERNICUS_OPERACION.md:5; docs/COPERNICUS_OPERACION.md:49,server/services/analysis-worker.ts:24,ninguno,worker
+COPERNICUS_TOKEN_URL,si,docs/RENDER_ENV.md:74,server/_core/env.ts:45,https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token,server
+DATABASE_URL,no,no,template.json:13; template.json:13,ninguno,server
+DEMO_MODE,no,no,server/services/analysis-worker.ts:26,ninguno,worker
+DEMO_PUBLIC_DASHBOARD,no,docs/RENDER_ENV.md:24,no,ninguno,server
+FORGE_API_KEY,si,no,no,your-forge-api-key,server
+FORGE_API_URL,si,no,no,https://storage.example.com,server
+JWT_SECRET,no,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:86,no,ninguno,server
+NODE_ENV,si,AGENTS.md:12; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:87; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:87; docs/RENDER_ENV.md:13,server/_core/env.ts:32; server/_core/index.ts:30; server/_core/index.ts:39; server/_core/index.ts:44; server/_core/vite.ts:52; server/routers.ts:141; server/services/analysis-worker.ts:25; server/services/analysis-worker.ts:387; shared/data-traceability.ts:14; vite.config.ts:66,production; development,build|client|server|worker
+OAUTH_SERVER_URL,si,AGENTS.md:24; docs/RENDER_ENV.md:22,no,https://oauth.example.com,server
+PORT,si,AGENTS.md:13; AGENTS.md:29; AGENTS.md:29; docs/RENDER_ENV.md:14,server/_core/index.ts:37,3000,server
+RATE_LIMIT_STORE_DRIVER,no,no,server/app.ts:22,memory,server
+REDIS_URL,no,no,server/app.ts:25,process.env.UPSTASH_REDIS_REST_URL,server
+SUPABASE,no,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:97,no,ninguno,server
+SUPABASE_ANON_KEY,si,README.md:69; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:100; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:134; docs/RENDER_ENV.md:16,server/_core/context.ts:40; server/app.ts:78; server/db/supabase-client.ts:15,your-supabase-anon-key; process.env.VITE_SUPABASE_ANON_KEY,server
+SUPABASE_DB_URL,no,docs/JULES_HANDOFF.md:63; docs/JULES_HANDOFF.md:64; docs/JULES_HANDOFF.md:65,no,ninguno,server
+SUPABASE_JWT_SECRET,no,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:85; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:85; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:89,server/_core/context.ts:68,ninguno,server
+SUPABASE_SERVICE_ROLE_KEY,si,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:101; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:134; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:224; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:242; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md:24; docs/AUDITORIA_ESPEJO_PLATAFORMA_v4.md:80; docs/RENDER_ENV.md:17,server/_core/context.ts:39; server/admin/supabase-client.ts:11; server/db/supabase-client.ts:5; server/services/analysis-worker.ts:387; server/worker.ts:6,your-supabase-service-role-key,server|worker
+SUPABASE_URL,si,README.md:69; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:134; docs/RENDER_ENV.md:15,server/_core/context.ts:37; server/admin/supabase-client.ts:10; server/app.ts:77; server/db/supabase-client.ts:13,process.env.VITE_SUPABASE_URL; https://your-supabase-project.supabase.co,server
+TWILIO_ACCOUNT_SID,si,docs/FASE1_AUTH.md:52,no,your-twilio-account-sid,server
+TWILIO_AUTH_TOKEN,si,docs/FASE1_AUTH.md:53,no,your-twilio-auth-token,server
+TWILIO_MESSAGE_SERVICE_SID,si,docs/FASE1_AUTH.md:54,no,your-twilio-messaging-service-sid,server
+UPSTASH_REDIS_REST_URL,no,no,server/app.ts:25,ninguno,server
+VITE_APP_ID,no,no,client/src/const.ts:17; server/_core/env.ts:39,ninguno,client|server
+VITE_FRONTEND_FORGE_API_KEY,no,no,client/src/components/Map.tsx:89,ninguno,client
+VITE_FRONTEND_FORGE_API_URL,no,no,client/src/components/Map.tsx:91,ninguno,client
+VITE_OAUTH_PORTAL_URL,no,no,client/src/const.ts:16,ninguno,client
+VITE_SUPABASE_ANON_KEY,si,docs/FASE1_AUTH.md:9; docs/FASE1_AUTH.md:25; docs/FASE1_AUTH.md:51; docs/RENDER_ENV.md:35,client/src/lib/supabaseClient.ts:4; server/_core/context.ts:41; server/app.ts:78; server/db/supabase-client.ts:15,your-supabase-anon-key,client|server
+VITE_SUPABASE_URL,si,docs/FASE1_AUTH.md:9; docs/FASE1_AUTH.md:25; docs/FASE1_AUTH.md:50; docs/RENDER_ENV.md:34,client/src/lib/supabaseClient.ts:3; server/_core/context.ts:37; server/admin/supabase-client.ts:10; server/app.ts:77; server/db/supabase-client.ts:13,https://your-supabase-project.supabase.co,client|server
+WORKER,no,docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:97; docs/AUDITORIA_ESPEJO_PLATAFORMA_v3b.md:137,no,ninguno,server
