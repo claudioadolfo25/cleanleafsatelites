@@ -1,8 +1,8 @@
 -- Migration 008: Observations Series and Index Time Series
 CREATE TABLE IF NOT EXISTS public.observaciones_serie (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL,
-  predio_id TEXT NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  predio_id UUID NOT NULL REFERENCES public.predios(id) ON DELETE CASCADE,
   satelite TEXT NOT NULL,
   variable TEXT NOT NULL,
   intervalo_desde TIMESTAMPTZ NOT NULL,
@@ -22,12 +22,12 @@ DROP POLICY IF EXISTS "observaciones_serie_select_tenant" ON public.observacione
 CREATE POLICY "observaciones_serie_select_tenant" ON public.observaciones_serie
   FOR SELECT
   USING (
-    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')
+    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')::uuid
   );
 
 DROP POLICY IF EXISTS "observaciones_serie_insert_tenant" ON public.observaciones_serie;
 CREATE POLICY "observaciones_serie_insert_tenant" ON public.observaciones_serie
   FOR INSERT
   WITH CHECK (
-    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')
+    tenant_id = (nullif(current_setting('request.jwt.claims', true), '')::json -> 'app_metadata' ->> 'tenant_id')::uuid
   );
