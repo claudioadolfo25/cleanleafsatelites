@@ -1,0 +1,24 @@
+name: Verdad Database CI
+
+on:
+  push:
+    branches: [main, chore/r2-baseline-migration]
+  pull_request:
+    branches: [main]
+
+jobs:
+  db-reset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase and Reset Database
+        run: |
+          supabase start
+          supabase db reset
