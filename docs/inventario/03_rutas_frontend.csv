@@ -1,0 +1,20 @@
+ruta,componente,archivo:linea,guard,usa_procedimientos_trpc
+/,LandingPage,client/src/App.tsx:10,ninguno,ninguno
+/auth,AuthPage,client/src/App.tsx:11,ninguno,ninguno
+/auth/restablecer-password,ResetPasswordPage,client/src/App.tsx:12,ninguno,ninguno
+/satelites,SatellitesPlaceholderPage,client/src/App.tsx:13,ninguno,ninguno
+/dashboard,Home,client/src/App.tsx:14,ProtectedRoute,ai.chat; cleanleaf.catalog; cleanleaf.catalogSearch; cleanleaf.configStatus; cleanleaf.createAnalysis; cleanleaf.dashboard; cleanleaf.reports.getDownloadUrl; cleanleaf.reports.getGeoJson; cleanleaf.resources; predios.list
+/dashboard/admin,AdminDashboardPage,client/src/App.tsx:20,ProtectedRoute,admin.getAuditLogs; admin.listFailedSolicitudes; admin.listTenants; admin.retrySolicitud; admin.updatePlan
+/dashboard/perfil,ProfilePage,client/src/App.tsx:19,ProtectedRoute,ninguno
+/dashboard/predios,PrediosPage,client/src/App.tsx:18,ProtectedRoute,cleanleaf.catalog; cleanleaf.configStatus; cleanleaf.createAnalysis; cleanleaf.resources; predios.create; predios.delete; predios.list
+/dashboard/configuracion/satelites,SatelliteConfiguration,client/src/App.tsx:15,ProtectedRoute,preferences.getUserPreferences; preferences.updateUserPreferences
+/dashboard/informes/:id,ReportDetail,client/src/App.tsx:17,ProtectedRoute,cleanleaf.reports.getById; cleanleaf.reports.getDownloadUrl; cleanleaf.reports.getGeoJson
+/dashboard/informes,ReportsDashboard,client/src/App.tsx:16,ProtectedRoute,cleanleaf.reports.getDownloadUrl; cleanleaf.reports.getGeoJson; cleanleaf.reports.list
+/404,NotFound,client/src/App.tsx:3,ninguno,ninguno
+*,NotFound,client/src/App.tsx:3,ninguno,ninguno
+sin_ruta_asignada,DashboardLayout,client/src/components/DashboardLayout.tsx:1,no_aplica,ninguno
+sin_ruta_asignada,DashboardLayoutSkeleton,client/src/components/DashboardLayoutSkeleton.tsx:1,no_aplica,ninguno
+sin_ruta_asignada,ErrorBoundary,client/src/components/ErrorBoundary.tsx:1,no_aplica,ninguno
+sin_ruta_asignada,ManusDialog,client/src/components/ManusDialog.tsx:1,no_aplica,ninguno
+sin_ruta_asignada,ProtectedRoute,client/src/components/ProtectedRoute.tsx:1,no_aplica,ninguno
+sin_ruta_asignada,SatelliteSelector,client/src/components/SatelliteSelector.tsx:1,no_aplica,ninguno
