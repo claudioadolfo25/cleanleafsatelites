@@ -832,10 +832,11 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     it("almacena y recupera resultados en la caché de observaciones", async () => {
       const { getObservationCacheDb, saveObservationCacheDb } = await import("./db/repository");
       const testKey = "sentinel-2:ndvi:bbox-test:2024-01-01:2024-01-10";
+      const testTenantId = "tenant-cache-test";
       const testData = { valor: 0.72, satelite: "sentinel-2", variable: "ndvi" };
 
-      await saveObservationCacheDb(testKey, testData, 300);
-      const retrieved = await getObservationCacheDb(testKey);
+      await saveObservationCacheDb(testKey, testData, 300, testTenantId);
+      const retrieved = await getObservationCacheDb(testKey, testTenantId);
       expect(retrieved).toEqual(testData);
     });
 

@@ -111,7 +111,7 @@ export async function processSolicitud(
     };
 
     const cacheKey = generateCacheKey(queryReq);
-    let result = await getObservationCacheDb(cacheKey, accessToken);
+    let result = await getObservationCacheDb(cacheKey, tenantId, accessToken);
 
     if (result) {
       await writeWorkflowLogDb(
@@ -143,7 +143,7 @@ export async function processSolicitud(
             }
 
             // Persistir en observacion_cache para evitar llamadas redundantes a Copernicus CDSE
-            await saveObservationCacheDb(cacheKey, result, 300, accessToken);
+            await saveObservationCacheDb(cacheKey, result, 300, tenantId, accessToken);
             break;
           }
         } catch (err) {

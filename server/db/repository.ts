@@ -1078,10 +1078,11 @@ export async function listFailedSolicitudesDb(
   );
 }
 
-const memoryObservationCache = new Map<string, { datos: any; expira_en: string }>();
+const memoryObservationCache = new Map<string, { datos: any; expira_en: string; tenant_id: string }>();
 
 export async function getObservationCacheDb(
   cacheKey: string,
+  tenantId: string,
   accessToken?: string
 ): Promise<any | null> {
   const client = getSupabaseUserClient(accessToken);
@@ -1092,6 +1093,7 @@ export async function getObservationCacheDb(
         .from("observation_cache")
         .select("datos, expira_en")
         .eq("cache_key", cacheKey)
+        .eq("tenant_id", tenantId)
         .gte("expira_en", new Date().toISOString())
         .maybeSingle();
 
@@ -1101,7 +1103,7 @@ export async function getObservationCacheDb(
     }
   }
 
-  const cached = memoryObservationCache.get(cacheKey);
+  const cached = memoryObservationCache.get(`${tenantId}:${cacheKey}`);
   if (cached && new Date(cached.expira_en).getTime() > Date.now()) {
     return cached.datos;
   }
@@ -1112,6 +1114,7 @@ export async function saveObservationCacheDb(
   cacheKey: string,
   data: any,
   ttlSeconds = 300,
+  tenantId: string,
   accessToken?: string
 ): Promise<void> {
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
@@ -1121,6 +1124,7 @@ export async function saveObservationCacheDb(
     try {
       await client.from("observation_cache").upsert({
         cache_key: cacheKey,
+        tenant_id: tenantId,
         satelite: data.satelite ?? "sentinel-2",
         variable: data.variable ?? "ndvi",
         datos: data,
@@ -1132,7 +1136,7 @@ export async function saveObservationCacheDb(
     }
   }
 
-  memoryObservationCache.set(cacheKey, { datos: data, expira_en: expiresAt });
+  memoryObservationCache.set(`${tenantId}:${cacheKey}`, { datos: data, expira_en: expiresAt, tenant_id: tenantId });
 }
 
 export type ObservacionesSerieRecord = {
@@ -1235,6 +1239,7 @@ export async function saveObservacionesSerieDb(
 
 export type EscenaRecord = {
   id: string;
+  tenant_id?: string;
   satelite: string;
   producto: string;
   fecha_sensado: string;
@@ -1260,6 +1265,7 @@ export async function saveEscenasAndProvenanceDb(
       await client.from("escenas").upsert(
         escenas.map(e => ({
           id: e.id,
+          tenant_id: tenantId,
           satelite: e.satelite,
           producto: e.producto,
           fecha_sensado: e.fecha_sensado,
