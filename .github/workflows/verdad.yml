@@ -91,6 +91,37 @@ jobs:
           END \$\$;
           "
 
+          echo "== Read-Only CI Environment & Role Diagnostic =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+            v_roles TEXT;
+            v_memberships TEXT;
+          BEGIN
+            RAISE NOTICE 'DIAGNOSTIC: session_user=%, current_user=%', session_user, current_user;
+
+            SELECT string_agg(
+              rolname || ' (super=' || rolsuper || ', bypassrls=' || rolbypassrls || ', canlogin=' || rolcanlogin || ')',
+              '; '
+            )
+            INTO v_roles
+            FROM pg_roles
+            WHERE rolname IN ('postgres', 'supabase_admin', 'supabase_auth_admin', 'service_role', 'authenticated', 'anon');
+
+            RAISE NOTICE 'DIAGNOSTIC: Role Attributes: %', v_roles;
+
+            SELECT string_agg(
+              'grantee=' || m.roleid::regrole || ' -> role=' || m.member::regrole ||
+              ' (admin_opt=' || m.admin_option || ', inherit_opt=' || m.inherit_option || ', set_opt=' || m.set_option || ')',
+              '; '
+            )
+            INTO v_memberships
+            FROM pg_auth_members m;
+
+            RAISE NOTICE 'DIAGNOSTIC: Role Memberships: %', COALESCE(v_memberships, 'None');
+          END \$\$;
+          "
+
           echo "== Executing RLS Isolation Assertion Suites =="
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
