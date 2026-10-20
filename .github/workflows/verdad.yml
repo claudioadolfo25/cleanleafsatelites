@@ -22,7 +22,56 @@ jobs:
         with:
           version: latest
 
+      - name: Install psql client if needed
+        run: |
+          if ! command -v psql &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+          fi
+
       - name: Run Supabase start and db reset
         run: |
           supabase start
           supabase db reset
+
+      - name: Verify audit_logs RLS Policies and Isolation Test
+        run: |
+          DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+          echo "== Checking audit_logs SELECT policies =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+            v_count_admin INT;
+            v_count_tenant_admin_owner INT;
+            v_count_super_admin INT;
+          BEGIN
+            SELECT count(*) INTO v_count_admin
+            FROM pg_policies
+            WHERE tablename = 'audit_logs' AND policyname = 'audit_logs_select_admin';
+
+            SELECT count(*) INTO v_count_tenant_admin_owner
+            FROM pg_policies
+            WHERE tablename = 'audit_logs' AND policyname = 'audit_logs_select_tenant_admin_owner';
+
+            SELECT count(*) INTO v_count_super_admin
+            FROM pg_policies
+            WHERE tablename = 'audit_logs' AND policyname = 'audit_logs_select_super_admin';
+
+            IF v_count_admin > 0 THEN
+              RAISE EXCEPTION 'POLICY CHECK FAILED: Legacy policy audit_logs_select_admin still exists!';
+            END IF;
+
+            IF v_count_tenant_admin_owner = 0 THEN
+              RAISE EXCEPTION 'POLICY CHECK FAILED: Expected policy audit_logs_select_tenant_admin_owner is missing!';
+            END IF;
+
+            IF v_count_super_admin = 0 THEN
+              RAISE EXCEPTION 'POLICY CHECK FAILED: Expected policy audit_logs_select_super_admin is missing!';
+            END IF;
+
+            RAISE NOTICE 'POLICY CHECK PASSED: audit_logs SELECT policies are correctly configured.';
+          END \$\$;
+          "
+
+          echo "== Executing RLS Isolation Assertion Suite =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
