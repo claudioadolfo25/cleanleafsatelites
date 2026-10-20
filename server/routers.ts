@@ -35,6 +35,7 @@ import {
 } from "./_core/trpc";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry, type GeoJSONPolygon } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
+import { getCopernicusProdPolicy } from "./services/copernicus-policy-service";
 import { getSignedReportDownloadUrlService } from "./reports/storage-service";
 import {
   createAuditLogDb,
@@ -489,7 +490,12 @@ export const appRouter = router({
           if (dbReports && dbReports.length > 0) {
             return dbReports;
           }
-          return listReports(input);
+          // Para tenants reales (no tenant-demo y no DEMO_MODE explícito), no devolver catálogo demo fallback
+          const isDemoContext = ctx.user.tenantId === "tenant-demo" || (process.env.DEMO_MODE === "true" && getCopernicusProdPolicy() !== "live");
+          if (isDemoContext) {
+            return listReports(input);
+          }
+          return [];
         }),
       getById: protectedProcedure
         .input(idInput)
@@ -499,7 +505,11 @@ export const appRouter = router({
           if (dbReport) {
             return dbReport;
           }
-          return getReport(input.id) ?? null;
+          const isDemoContext = ctx.user.tenantId === "tenant-demo" || (process.env.DEMO_MODE === "true" && getCopernicusProdPolicy() !== "live");
+          if (isDemoContext) {
+            return getReport(input.id) ?? null;
+          }
+          return null;
         }),
       getDownloadUrl: protectedProcedure
         .input(idInput)
@@ -614,13 +624,20 @@ export const appRouter = router({
       }
 
       // Consultar historial existente en DB para incrementalidad
-      const existingSeries = await listObservacionesSerieDb(
+      let existingSeries = await listObservacionesSerieDb(
         ctx.user.tenantId,
         input.predioId,
         input.satellite,
         input.variable,
         accessToken
       );
+
+      // Si la política es 'live', se filtran filas sintéticas previamente guardadas (evalscript_version/hash terminados en '_demo')
+      if (getCopernicusProdPolicy() === "live") {
+        existingSeries = existingSeries.filter(
+          s => !s.evalscript_version?.endsWith("_demo") && !s.evalscript_hash?.endsWith("_demo")
+        );
+      }
 
       if (existingSeries.length > 0) {
         return {
@@ -637,7 +654,16 @@ export const appRouter = router({
         };
       }
 
-      // Si no existe previa, generar serie inicial con evalscript multi-variable
+      // Si la política de producción es 'live', NUNCA devolver o persistir simulaciones como observaciones reales.
+      const prodPolicy = getCopernicusProdPolicy();
+      if (prodPolicy === "live") {
+        return {
+          source: "copernicus_time_series",
+          points: [],
+        };
+      }
+
+      // En modo demo / sintético (no live), se devuelven mock points conservando su funcionamiento y marcando su procedencia inequívoca ("demo_synthetic")
       const evalMeta = buildMultiVariableEvalscript(input.satellite, [input.variable]);
       const mockPoints: Array<{
         intervaloDesde: string;
@@ -654,17 +680,17 @@ export const appRouter = router({
           valor: 0.62,
           status: "ok",
           porcentajePixelesValidos: 0.95,
-          evalscriptVersion: evalMeta.version,
-          evalscriptHash: evalMeta.hash,
+          evalscriptVersion: `${evalMeta.version}_demo`,
+          evalscriptHash: `${evalMeta.hash}_demo`,
         },
         {
           intervaloDesde: "2024-01-06T00:00:00Z",
           intervaloHasta: "2024-01-11T00:00:00Z",
-          valor: null, // intervalo con nubes o sin pasadas
+          valor: null,
           status: "sin_dato",
           porcentajePixelesValidos: 0.0,
-          evalscriptVersion: evalMeta.version,
-          evalscriptHash: evalMeta.hash,
+          evalscriptVersion: `${evalMeta.version}_demo`,
+          evalscriptHash: `${evalMeta.hash}_demo`,
         },
         {
           intervaloDesde: "2024-01-11T00:00:00Z",
@@ -672,8 +698,8 @@ export const appRouter = router({
           valor: 0.68,
           status: "ok",
           porcentajePixelesValidos: 0.88,
-          evalscriptVersion: evalMeta.version,
-          evalscriptHash: evalMeta.hash,
+          evalscriptVersion: `${evalMeta.version}_demo`,
+          evalscriptHash: `${evalMeta.hash}_demo`,
         },
       ];
 
@@ -696,7 +722,7 @@ export const appRouter = router({
       );
 
       return {
-        source: "copernicus_time_series",
+        source: "demo_synthetic",
         points: mockPoints,
       };
     }),
