@@ -20,8 +20,14 @@ BEGIN
 
     RAISE EXCEPTION 'TEST FAILED [Case 1]: Authenticated user direct INSERT should have been blocked by RLS!';
   EXCEPTION
-    WHEN insufficient_privilege OR row_level_security_violation THEN
+    WHEN insufficient_privilege THEN
       RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Direct authenticated user INSERT blocked by RLS violation 42501)';
+    WHEN OTHERS THEN
+      IF SQLSTATE = '42501' THEN
+        RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Direct authenticated user INSERT blocked by RLS violation 42501)';
+      ELSE
+        RAISE EXCEPTION 'TEST FAILED [Case 1]: Expected RLS violation 42501 but got error (SQLSTATE %): %', SQLSTATE, SQLERRM;
+      END IF;
   END;
 END $$;
 
@@ -36,8 +42,14 @@ BEGIN
 
     RAISE EXCEPTION 'TEST FAILED [Case 2]: Super admin client JWT direct INSERT should have been blocked by RLS!';
   EXCEPTION
-    WHEN insufficient_privilege OR row_level_security_violation THEN
-      RAISE NOTICE 'ASSERTION PASSED: Test Case 2 (Super admin client JWT direct INSERT blocked by RLS)';
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'ASSERTION PASSED: Test Case 2 (Super admin client JWT direct INSERT blocked by RLS violation 42501)';
+    WHEN OTHERS THEN
+      IF SQLSTATE = '42501' THEN
+        RAISE NOTICE 'ASSERTION PASSED: Test Case 2 (Super admin client JWT direct INSERT blocked by RLS violation 42501)';
+      ELSE
+        RAISE EXCEPTION 'TEST FAILED [Case 2]: Expected RLS violation 42501 but got error (SQLSTATE %): %', SQLSTATE, SQLERRM;
+      END IF;
   END;
 END $$;
 
