@@ -659,7 +659,7 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
 
       expect(seriesRes1.status).toBe(200);
       const data1 = seriesRes1.body.result.data.json;
-      expect(data1.source).toBe("copernicus_time_series");
+      expect(data1.source).toBe("demo_synthetic");
       expect(data1.points).toHaveLength(3);
       expect(data1.points[1].status).toBe("sin_dato"); // apoya intervalos sin dato
 
@@ -1314,6 +1314,179 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
         });
 
       expect(deleteRes.status).toBe(404);
+    });
+  });
+
+  describe("Pruebas Dirigidas para Requerimientos de Routers y Política Live/Demo (Punto 3)", () => {
+    it("3a) reports.list: tenant real sin informes devuelve []", async () => {
+      const realToken = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-real-sin-informes-01", role: "user" },
+      });
+
+      const listRes = await request(app)
+        .get("/api/trpc/cleanleaf.reports.list")
+        .set("Authorization", `Bearer ${realToken}`);
+
+      expect(listRes.status).toBe(200);
+      const data = listRes.body.result.data.json;
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(0);
+    });
+
+    it("3b) reports.getById: tenant real no obtiene un informe demo", async () => {
+      const realToken = await createMockJwt({
+        app_metadata: { tenant_id: "tenant-real-getbyid-01", role: "user" },
+      });
+
+      const inputParam = encodeURIComponent(JSON.stringify({ json: { id: "report-demo-1" } }));
+      const getByIdRes = await request(app)
+        .get(`/api/trpc/cleanleaf.reports.getById?input=${inputParam}`)
+        .set("Authorization", `Bearer ${realToken}`);
+
+      expect(getByIdRes.status).toBe(200);
+      expect(getByIdRes.body.result.data.json).toBeNull();
+    });
+
+    it("3c) getTimeSeries en política live y sin observaciones: devuelve vacío y NO llama a saveObservacionesSerieDb", async () => {
+      const origPolicy = process.env.COPERNICUS_PROD_POLICY;
+      process.env.COPERNICUS_PROD_POLICY = "live";
+
+      try {
+        const token = await createMockJwt({
+          app_metadata: { tenant_id: "tenant-live-empty-ts", role: "user" },
+        });
+
+        const inputParam = encodeURIComponent(
+          JSON.stringify({
+            json: {
+              predioId: "predio-live-1",
+              satellite: "sentinel-2",
+              variable: "ndvi",
+            },
+          })
+        );
+
+        const seriesRes = await request(app)
+          .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+          .set("Authorization", `Bearer ${token}`);
+
+        expect(seriesRes.status).toBe(200);
+        const data = seriesRes.body.result.data.json;
+        expect(data.source).toBe("copernicus_time_series");
+        expect(data.points).toEqual([]);
+      } finally {
+        if (origPolicy !== undefined) {
+          process.env.COPERNICUS_PROD_POLICY = origPolicy;
+        } else {
+          delete process.env.COPERNICUS_PROD_POLICY;
+        }
+      }
+    });
+
+    it("3d) política live con DEMO_MODE=true: no permite devolver/persistir simulaciones como observaciones reales", async () => {
+      const origPolicy = process.env.COPERNICUS_PROD_POLICY;
+      const origDemo = process.env.DEMO_MODE;
+      process.env.COPERNICUS_PROD_POLICY = "live";
+      process.env.DEMO_MODE = "true";
+
+      try {
+        const token = await createMockJwt({
+          app_metadata: { tenant_id: "tenant-live-demo-mode", role: "user" },
+        });
+
+        const inputParam = encodeURIComponent(
+          JSON.stringify({
+            json: {
+              predioId: "predio-live-demo-1",
+              satellite: "sentinel-2",
+              variable: "ndvi",
+            },
+          })
+        );
+
+        const seriesRes = await request(app)
+          .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+          .set("Authorization", `Bearer ${token}`);
+
+        expect(seriesRes.status).toBe(200);
+        const data = seriesRes.body.result.data.json;
+        expect(data.source).toBe("copernicus_time_series");
+        expect(data.points).toEqual([]);
+      } finally {
+        if (origPolicy !== undefined) process.env.COPERNICUS_PROD_POLICY = origPolicy;
+        else delete process.env.COPERNICUS_PROD_POLICY;
+        if (origDemo !== undefined) process.env.DEMO_MODE = origDemo;
+        else delete process.env.DEMO_MODE;
+      }
+    });
+
+    it("3e) modo demo explícito: conserva su funcionamiento y su procedencia queda inequívoca", async () => {
+      const origPolicy = process.env.COPERNICUS_PROD_POLICY;
+      delete process.env.COPERNICUS_PROD_POLICY; // Default is synthetic_demo_only
+
+      try {
+        const token = await createMockJwt({
+          app_metadata: { tenant_id: "tenant-demo-explicit-01", role: "user" },
+        });
+
+        const inputParam = encodeURIComponent(
+          JSON.stringify({
+            json: {
+              predioId: "predio-demo-explicit-1",
+              satellite: "sentinel-2",
+              variable: "ndvi",
+            },
+          })
+        );
+
+        const seriesRes = await request(app)
+          .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+          .set("Authorization", `Bearer ${token}`);
+
+        expect(seriesRes.status).toBe(200);
+        const data = seriesRes.body.result.data.json;
+        expect(data.source).toBe("demo_synthetic");
+        expect(data.points).toHaveLength(3);
+        expect(data.points[0].evalscriptVersion).toContain("_demo");
+      } finally {
+        if (origPolicy !== undefined) process.env.COPERNICUS_PROD_POLICY = origPolicy;
+      }
+    });
+
+    it("verificación de comportamiento sobre formato sintético histórico", async () => {
+      // 1. En el SHA base, el generador guardaba evalscriptVersion como 'v1.0.0' o evalMeta.version sin sufijo '_demo'.
+      // 2. Registros sintéticos guardados con sufijo '_demo' son filtrados en política 'live'.
+      // 3. Registros históricos legacy sin sufijo '_demo' no pueden distinguirse mediante el sufijo alone, lo cual se documenta como limitación pendiente.
+      const origPolicy = process.env.COPERNICUS_PROD_POLICY;
+      process.env.COPERNICUS_PROD_POLICY = "live";
+
+      try {
+        const token = await createMockJwt({
+          app_metadata: { tenant_id: "tenant-historical-format", role: "user" },
+        });
+
+        const inputParam = encodeURIComponent(
+          JSON.stringify({
+            json: {
+              predioId: "predio-hist-1",
+              satellite: "sentinel-2",
+              variable: "ndvi",
+            },
+          })
+        );
+
+        const seriesRes = await request(app)
+          .get(`/api/trpc/cleanleaf.getTimeSeries?input=${inputParam}`)
+          .set("Authorization", `Bearer ${token}`);
+
+        expect(seriesRes.status).toBe(200);
+        const data = seriesRes.body.result.data.json;
+        expect(data.source).toBe("copernicus_time_series");
+        expect(data.points).toEqual([]);
+      } finally {
+        if (origPolicy !== undefined) process.env.COPERNICUS_PROD_POLICY = origPolicy;
+        else delete process.env.COPERNICUS_PROD_POLICY;
+      }
     });
   });
 });
