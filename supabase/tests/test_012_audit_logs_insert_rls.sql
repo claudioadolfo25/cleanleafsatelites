@@ -53,19 +53,23 @@ BEGIN
   END;
 END $$;
 
--- 4. Test Case 3: Privileged backend service role can insert successfully
-RESET ROLE;
-
-INSERT INTO public.audit_logs (id, tenant_id, user_id, action, entity, payload)
-VALUES ('44444444-4444-4444-4444-444444444444'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'service-writer', 'authorized_backend_insert', 'tenant', '{"actor_type": "system"}'::jsonb);
+-- 4. Test Case 3: Direct SQL INSERT under service_role MUST succeed
+SET LOCAL ROLE service_role;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '44444444-4444-4444-4444-444444444444'::uuid) THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 3]: Service role / privileged writer failed to insert audit record!';
+  IF current_user <> 'service_role' THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 3]: Expected current_user to be service_role, but got %', current_user;
   END IF;
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 3 (Privileged backend service role successfully inserted audit record)';
+  INSERT INTO public.audit_logs (id, tenant_id, user_id, action, entity, payload)
+  VALUES ('44444444-4444-4444-4444-444444444444'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'service-writer', 'authorized_backend_insert', 'tenant', '{"actor_type": "system"}'::jsonb);
+
+  IF NOT EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '44444444-4444-4444-4444-444444444444'::uuid) THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 3]: service_role failed to insert or query inserted audit record!';
+  END IF;
+
+  RAISE NOTICE 'ASSERTION PASSED: Test Case 3 (Direct SQL INSERT and SELECT under service_role succeeded)';
 END $$;
 
 ROLLBACK;
