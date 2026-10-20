@@ -737,14 +737,18 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const accessToken = ctx.req?.headers?.authorization?.startsWith("Bearer ") ? ctx.req.headers.authorization.slice(7) : undefined;
         const success = await updateTenantPlanDb(input.tenantId, input.planId, accessToken);
-        await createAuditLogDb({
-          tenant_id: ctx.user.tenantId,
-          user_id: ctx.user.id,
-          user_email: ctx.user.email,
-          action: "admin.update_plan",
-          entity: "tenant",
-          payload: { targetTenantId: input.tenantId, newPlanId: input.planId },
-        }, accessToken);
+        try {
+          await createAuditLogDb({
+            tenant_id: input.tenantId,
+            user_id: ctx.user.id,
+            user_email: ctx.user.email,
+            action: "admin.update_plan",
+            entity: "tenant",
+            payload: { targetTenantId: input.tenantId, newPlanId: input.planId, actor_type: "user", actorTenantId: ctx.user.tenantId },
+          });
+        } catch (auditErr) {
+          console.error("[AuditLogWriteError] Failed to create audit log for admin.updatePlan:", auditErr);
+        }
         return { success };
       }),
     listFailedSolicitudes: superAdminProcedure.query(async ({ ctx }) => {
@@ -759,14 +763,18 @@ export const appRouter = router({
         if (!solicitud) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitud no encontrada" });
 
         const result = await processSolicitud(solicitud, accessToken);
-        await createAuditLogDb({
-          tenant_id: ctx.user.tenantId,
-          user_id: ctx.user.id,
-          user_email: ctx.user.email,
-          action: "admin.retry_solicitud",
-          entity: "solicitud_analisis",
-          payload: { solicitudId: input.solicitudId, result },
-        }, accessToken);
+        try {
+          await createAuditLogDb({
+            tenant_id: solicitud.tenant_id,
+            user_id: ctx.user.id,
+            user_email: ctx.user.email,
+            action: "admin.retry_solicitud",
+            entity: "solicitud_analisis",
+            payload: { solicitudId: input.solicitudId, actor_type: "user", actorTenantId: ctx.user.tenantId },
+          });
+        } catch (auditErr) {
+          console.error("[AuditLogWriteError] Failed to create audit log for admin.retrySolicitud:", auditErr);
+        }
 
         return result;
       }),

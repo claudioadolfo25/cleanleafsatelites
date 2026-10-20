@@ -6,7 +6,8 @@ export async function getFieldThumbnail(
   tenantId: string,
   solicitudId: string,
   geometry: GeoJSONGeometry,
-  accessToken?: string
+  accessToken?: string,
+  actorContext?: { userId?: string | null; userEmail?: string | null; actorType?: "user" | "system" }
 ): Promise<{ thumbnailUrl: string | null; note?: string }> {
   try {
     // Generar imagen de apoyo / mock true-color <= 512px
@@ -17,24 +18,36 @@ export async function getFieldThumbnail(
 
     const storagePath = await uploadReportThumbnail(tenantId, solicitudId, mockImageBuffer, accessToken);
 
-    await createAuditLogDb({
-      tenant_id: tenantId,
-      action: "copernicus.get_field_thumbnail",
-      entity: "thumbnail",
-      payload: { solicitudId, size: "<=512px", status: "success" },
-    }, accessToken);
+    try {
+      await createAuditLogDb({
+        tenant_id: tenantId,
+        user_id: actorContext?.userId ?? null,
+        user_email: actorContext?.userEmail ?? null,
+        action: "copernicus.get_field_thumbnail",
+        entity: "thumbnail",
+        payload: { solicitudId, size: "<=512px", status: "success", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "user" : "system") },
+      });
+    } catch (auditErr) {
+      console.error("[AuditLogWriteError] Failed to create audit log for thumbnail:", auditErr);
+    }
 
     return {
       thumbnailUrl: storagePath,
     };
   } catch (err) {
     console.warn("[getFieldThumbnail] Cuota o servicio no disponible, continuando sin miniatura:", err);
-    await createAuditLogDb({
-      tenant_id: tenantId,
-      action: "copernicus.get_field_thumbnail",
-      entity: "thumbnail",
-      payload: { solicitudId, status: "fallback_quota_exceeded" },
-    }, accessToken);
+    try {
+      await createAuditLogDb({
+        tenant_id: tenantId,
+        user_id: actorContext?.userId ?? null,
+        user_email: actorContext?.userEmail ?? null,
+        action: "copernicus.get_field_thumbnail",
+        entity: "thumbnail",
+        payload: { solicitudId, status: "fallback_quota_exceeded", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "user" : "system") },
+      });
+    } catch (auditErr) {
+      console.error("[AuditLogWriteError] Failed to create audit log for thumbnail error:", auditErr);
+    }
 
     return {
       thumbnailUrl: null,
