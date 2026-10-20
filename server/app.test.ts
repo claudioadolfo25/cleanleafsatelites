@@ -5,7 +5,9 @@ import { createApp } from "./app";
 import { computeBBox, computePolygonAreaHa, geoJSONGeometrySchema, type GeoJSONGeometry } from "./geometry";
 import { processSolicitud } from "./services/analysis-worker";
 import { generateReportPdfBuffer } from "./reports/pdf-service";
+import * as repo from "./db/repository";
 import { createSolicitudAnalisisDb, getTenantUsageAndLimits, getWorkflowLogsDb } from "./db/repository";
+import { vi } from "vitest";
 
 async function createMockJwt(payload: Record<string, unknown> = {}) {
   const secret = new TextEncoder().encode("test-jwt-secret-12345678901234567890");
@@ -1350,16 +1352,20 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     it("3c) getTimeSeries en política live y sin observaciones: devuelve vacío y NO llama a saveObservacionesSerieDb", async () => {
       const origPolicy = process.env.COPERNICUS_PROD_POLICY;
       process.env.COPERNICUS_PROD_POLICY = "live";
+      const saveSpy = vi.spyOn(repo, "saveObservacionesSerieDb");
+      saveSpy.mockClear();
 
       try {
+        const tenantId = "tenant-live-empty-ts";
+        const predioId = "predio-live-1";
         const token = await createMockJwt({
-          app_metadata: { tenant_id: "tenant-live-empty-ts", role: "user" },
+          app_metadata: { tenant_id: tenantId, role: "user" },
         });
 
         const inputParam = encodeURIComponent(
           JSON.stringify({
             json: {
-              predioId: "predio-live-1",
+              predioId,
               satellite: "sentinel-2",
               variable: "ndvi",
             },
@@ -1374,7 +1380,15 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
         const data = seriesRes.body.result.data.json;
         expect(data.source).toBe("copernicus_time_series");
         expect(data.points).toEqual([]);
+
+        // Aserción explícita spy: saveObservacionesSerieDb NO fue llamado
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        // Aserción DB equivalente: verificar que 0 observaciones existen para este tenant y predio
+        const dbRows = await repo.listObservacionesSerieDb(tenantId, predioId, "sentinel-2", "ndvi");
+        expect(dbRows).toHaveLength(0);
       } finally {
+        saveSpy.mockRestore();
         if (origPolicy !== undefined) {
           process.env.COPERNICUS_PROD_POLICY = origPolicy;
         } else {
@@ -1388,16 +1402,20 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
       const origDemo = process.env.DEMO_MODE;
       process.env.COPERNICUS_PROD_POLICY = "live";
       process.env.DEMO_MODE = "true";
+      const saveSpy = vi.spyOn(repo, "saveObservacionesSerieDb");
+      saveSpy.mockClear();
 
       try {
+        const tenantId = "tenant-live-demo-mode";
+        const predioId = "predio-live-demo-1";
         const token = await createMockJwt({
-          app_metadata: { tenant_id: "tenant-live-demo-mode", role: "user" },
+          app_metadata: { tenant_id: tenantId, role: "user" },
         });
 
         const inputParam = encodeURIComponent(
           JSON.stringify({
             json: {
-              predioId: "predio-live-demo-1",
+              predioId,
               satellite: "sentinel-2",
               variable: "ndvi",
             },
@@ -1412,7 +1430,15 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
         const data = seriesRes.body.result.data.json;
         expect(data.source).toBe("copernicus_time_series");
         expect(data.points).toEqual([]);
+
+        // Aserción explícita spy: saveObservacionesSerieDb NO fue llamado incluso con DEMO_MODE=true
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        // Aserción DB equivalente: verificar que 0 observaciones existen para este tenant y predio
+        const dbRows = await repo.listObservacionesSerieDb(tenantId, predioId, "sentinel-2", "ndvi");
+        expect(dbRows).toHaveLength(0);
       } finally {
+        saveSpy.mockRestore();
         if (origPolicy !== undefined) process.env.COPERNICUS_PROD_POLICY = origPolicy;
         else delete process.env.COPERNICUS_PROD_POLICY;
         if (origDemo !== undefined) process.env.DEMO_MODE = origDemo;
