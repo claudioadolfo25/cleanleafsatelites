@@ -3,7 +3,9 @@
 -- Without explicit GRANTs, PostgreSQL has_table_privilege returns false even if RLS policies exist.
 
 -- 1. Schema USAGE Grants
-GRANT USAGE ON SCHEMA public TO authenticated, service_role, supabase_auth_admin, anon;
+GRANT USAGE ON SCHEMA public TO authenticated, service_role, supabase_auth_admin;
+REVOKE ALL ON SCHEMA public FROM anon;
+GRANT USAGE ON SCHEMA public TO anon;
 
 -- 2. Sequence and Specific Function EXECUTE Grants
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
@@ -15,9 +17,8 @@ GRANT EXECUTE ON FUNCTION public.get_current_role() TO authenticated, service_ro
 -- 3. Explicit Grants for GoTrue Auth Hook Daemon (supabase_auth_admin)
 -- Revoke PUBLIC / authenticated / anon EXECUTE on custom_access_token_hook to enforce security
 REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) FROM PUBLIC, authenticated, anon;
-GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) TO supabase_auth_admin, service_role;
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) TO supabase_auth_admin;
 GRANT SELECT ON public.users TO supabase_auth_admin;
-GRANT SELECT ON public.tenants TO supabase_auth_admin;
 
 -- 4. Explicit Table Grants for service_role (Full DML Access)
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO service_role;
@@ -40,25 +41,29 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.alertas TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suscripciones TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.planes TO service_role;
 
--- 5. Explicit Minimal Table Grants for authenticated Role (Governed strictly by RLS)
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.tenants TO authenticated;
+-- 5. Strict Minimal Table Grants for authenticated Role (Governed strictly by RLS)
+GRANT SELECT, INSERT, UPDATE ON public.users TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.tenants TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.predios TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.solicitudes_analisis TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.informes TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.mediciones TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.consumo TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.workflow_logs TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_preferences TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.tenant_settings TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.api_keys TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.observation_cache TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.observaciones_serie TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.escenas TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.informe_escenas TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.alertas TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.suscripciones TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.planes TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.solicitudes_analisis TO authenticated;
+GRANT SELECT, INSERT ON public.informes TO authenticated;
+GRANT SELECT, INSERT ON public.mediciones TO authenticated;
+GRANT SELECT, INSERT ON public.consumo TO authenticated;
+GRANT SELECT, INSERT ON public.workflow_logs TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.user_preferences TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.tenant_settings TO authenticated;
+GRANT SELECT, INSERT ON public.api_keys TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.observation_cache TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.observaciones_serie TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.escenas TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.informe_escenas TO authenticated;
+GRANT SELECT, INSERT ON public.alertas TO authenticated;
+
+-- Catalog & Billing Tables for authenticated: Read-Only (SELECT ONLY)
+GRANT SELECT ON public.suscripciones TO authenticated;
+GRANT SELECT ON public.planes TO authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.suscripciones FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.planes FROM authenticated;
 
 -- 5a. Explicit Grants for audit_logs for authenticated:
 -- authenticated needs SELECT (governed by Migration 011 RLS by tenant_id/super_admin).

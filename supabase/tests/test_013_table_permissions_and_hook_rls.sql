@@ -35,7 +35,7 @@ BEGIN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: supabase_auth_admin must have USAGE on schema public';
   END IF;
 
-  -- Check Function Execution privileges
+  -- Check Function Execution privileges: custom_access_token_hook MUST BE REVOKED from authenticated and anon
   IF has_function_privilege('authenticated', 'public.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role MUST NOT have EXECUTE on public.custom_access_token_hook';
   END IF;
@@ -61,6 +61,19 @@ BEGIN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role must have SELECT on public.solicitudes_analisis';
   END IF;
 
+  -- Check planes & suscripciones for authenticated: SELECT allowed, INSERT/UPDATE/DELETE denied
+  IF NOT has_table_privilege('authenticated', 'public.planes', 'SELECT') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role must have SELECT on public.planes';
+  END IF;
+
+  IF has_table_privilege('authenticated', 'public.planes', 'INSERT') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role MUST NOT have INSERT privilege on public.planes';
+  END IF;
+
+  IF has_table_privilege('authenticated', 'public.suscripciones', 'INSERT') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role MUST NOT have INSERT privilege on public.suscripciones';
+  END IF;
+
   -- Check audit_logs permissions for authenticated: SELECT allowed, INSERT denied
   IF NOT has_table_privilege('authenticated', 'public.audit_logs', 'SELECT') THEN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role must have SELECT on public.audit_logs';
@@ -80,7 +93,7 @@ BEGIN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: supabase_auth_admin must have SELECT privilege on public.users';
   END IF;
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Minimum DCL Table & Function Privilege Matrix successfully verified)';
+  RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Strict DCL Table & Function Privilege Matrix successfully verified)';
 END $$;
 
 -- 3. Test Case 2: Validate Auth Hook Execution under supabase_auth_admin vs Block under authenticated
