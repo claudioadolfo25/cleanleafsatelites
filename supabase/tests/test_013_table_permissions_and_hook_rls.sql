@@ -4,14 +4,22 @@ BEGIN;
 
 -- 1. Create temporary test tenants and users as privileged user
 INSERT INTO public.tenants (id, nombre)
-VALUES ('a0000000-0000-0000-0000-000000000001'::uuid, 'Tenant Test A')
+VALUES
+  ('a0000000-0000-0000-0000-000000000001'::uuid, 'Tenant Test A'),
+  ('b0000000-0000-0000-0000-000000000002'::uuid, 'Tenant Test B')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.users (id, tenant_id, role, email)
 VALUES ('11111111-1111-1111-1111-111111111111'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'admin', 'admin-a@test.cl')
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Test Case 1: Validate Table Privilege Matrix using has_table_privilege
+INSERT INTO public.predios (id, tenant_id, nombre, superficie_ha, geometria)
+VALUES
+  ('a1111111-1111-1111-1111-111111111111'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'Predio A', 50, '{"type":"Polygon","coordinates":[[[-72.6,-38.7],[-72.5,-38.7],[-72.5,-38.6],[-72.6,-38.6],[-72.6,-38.7]]]}'::jsonb),
+  ('b2222222-2222-2222-2222-222222222222'::uuid, 'b0000000-0000-0000-0000-000000000002'::uuid, 'Predio B', 75, '{"type":"Polygon","coordinates":[[[-71.6,-37.7],[-71.5,-37.7],[-71.5,-37.6],[-71.6,-37.6],[-71.6,-37.7]]]}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Test Case 1: Validate Table and Function Privilege Matrix using has_table_privilege & has_function_privilege
 DO $$
 BEGIN
   -- Check Schema USAGE
@@ -25,6 +33,19 @@ BEGIN
 
   IF NOT has_schema_privilege('supabase_auth_admin', 'public', 'USAGE') THEN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: supabase_auth_admin must have USAGE on schema public';
+  END IF;
+
+  -- Check Function Execution privileges
+  IF has_function_privilege('authenticated', 'public.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: authenticated role MUST NOT have EXECUTE on public.custom_access_token_hook';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: anon role MUST NOT have EXECUTE on public.custom_access_token_hook';
+  END IF;
+
+  IF NOT has_function_privilege('supabase_auth_admin', 'public.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 1]: supabase_auth_admin must have EXECUTE on public.custom_access_token_hook';
   END IF;
 
   -- Check authenticated privileges on business tables
@@ -59,10 +80,29 @@ BEGIN
     RAISE EXCEPTION 'TEST FAILED [Case 1]: supabase_auth_admin must have SELECT privilege on public.users';
   END IF;
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Minimum DCL Table Privilege Matrix successfully verified)';
+  RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Minimum DCL Table & Function Privilege Matrix successfully verified)';
 END $$;
 
--- 3. Test Case 2: Validate Custom Access Token Hook under supabase_auth_admin role
+-- 3. Test Case 2: Validate Auth Hook Execution under supabase_auth_admin vs Block under authenticated
+SET LOCAL ROLE authenticated;
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.custom_access_token_hook('{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {}}'::jsonb);
+    RAISE EXCEPTION 'TEST FAILED [Case 2]: authenticated user direct call to custom_access_token_hook should have failed!';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'ASSERTION PASSED: Test Case 2a (authenticated direct call to custom_access_token_hook correctly blocked with permission error)';
+    WHEN OTHERS THEN
+      IF SQLSTATE = '42501' THEN
+        RAISE NOTICE 'ASSERTION PASSED: Test Case 2a (authenticated direct call to custom_access_token_hook correctly blocked with permission error)';
+      ELSE
+        RAISE EXCEPTION 'TEST FAILED [Case 2a]: Expected 42501 permission error, got %: %', SQLSTATE, SQLERRM;
+      END IF;
+  END;
+END $$;
+
 SET LOCAL ROLE supabase_auth_admin;
 
 DO $$
@@ -74,14 +114,14 @@ BEGIN
   v_output_event := public.custom_access_token_hook(v_input_event);
 
   IF (v_output_event->'claims'->'app_metadata'->>'tenant_id') <> 'a0000000-0000-0000-0000-000000000001' THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 2]: custom_access_token_hook failed to inject tenant_id. Got: %', v_output_event;
+    RAISE EXCEPTION 'TEST FAILED [Case 2b]: custom_access_token_hook failed to inject tenant_id. Got: %', v_output_event;
   END IF;
 
   IF (v_output_event->'claims'->'app_metadata'->>'role') <> 'admin' THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 2]: custom_access_token_hook failed to inject role. Got: %', v_output_event;
+    RAISE EXCEPTION 'TEST FAILED [Case 2b]: custom_access_token_hook failed to inject role. Got: %', v_output_event;
   END IF;
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 2 (custom_access_token_hook executed successfully under supabase_auth_admin)';
+  RAISE NOTICE 'ASSERTION PASSED: Test Case 2b (custom_access_token_hook executed successfully under supabase_auth_admin)';
 END $$;
 
 -- 4. Test Case 3: Test authenticated direct INSERT in audit_logs is blocked by DCL/RLS
@@ -125,6 +165,27 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'ASSERTION PASSED: Test Case 4 (service_role successfully inserted into audit_logs)';
+END $$;
+
+-- 6. Test Case 5: Test Multi-Tenant Isolation under authenticated role
+SET LOCAL ROLE authenticated;
+
+DO $$
+DECLARE
+  v_count_a INT;
+  v_count_b INT;
+BEGIN
+  -- Set Tenant A JWT Claims
+  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "admin"}}', true);
+
+  SELECT count(*) INTO v_count_a FROM public.predios WHERE id = 'a1111111-1111-1111-1111-111111111111'::uuid;
+  SELECT count(*) INTO v_count_b FROM public.predios WHERE id = 'b2222222-2222-2222-2222-222222222222'::uuid;
+
+  IF v_count_a <> 1 OR v_count_b <> 0 THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 5]: Tenant A should see predio A (1) and NOT predio B (0). Got A=%, B=%', v_count_a, v_count_b;
+  END IF;
+
+  RAISE NOTICE 'ASSERTION PASSED: Test Case 5 (Multi-tenant isolation verified under authenticated role)';
 END $$;
 
 ROLLBACK;

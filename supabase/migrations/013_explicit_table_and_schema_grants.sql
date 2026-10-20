@@ -5,12 +5,17 @@
 -- 1. Schema USAGE Grants
 GRANT USAGE ON SCHEMA public TO authenticated, service_role, supabase_auth_admin, anon;
 
--- 2. Sequence and Function USAGE / EXECUTE Grants
+-- 2. Sequence and Specific Function EXECUTE Grants
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated, service_role;
+
+-- Grant EXECUTE on specific utility functions to authenticated and service_role
+GRANT EXECUTE ON FUNCTION public.get_current_tenant_id() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_current_role() TO authenticated, service_role;
 
 -- 3. Explicit Grants for GoTrue Auth Hook Daemon (supabase_auth_admin)
-GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) TO supabase_auth_admin;
+-- Revoke PUBLIC / authenticated / anon EXECUTE on custom_access_token_hook to enforce security
+REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) FROM PUBLIC, authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) TO supabase_auth_admin, service_role;
 GRANT SELECT ON public.users TO supabase_auth_admin;
 GRANT SELECT ON public.tenants TO supabase_auth_admin;
 
