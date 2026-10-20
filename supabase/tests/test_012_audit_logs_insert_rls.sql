@@ -9,10 +9,11 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 2. Test Case 1: Direct INSERT as authenticated user MUST fail with RLS violation (42501)
 SET LOCAL ROLE authenticated;
-PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "admin"}}', true);
 
 DO $$
 BEGIN
+  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "admin"}}', true);
+
   BEGIN
     INSERT INTO public.audit_logs (id, tenant_id, user_id, action, entity)
     VALUES ('33333333-3333-3333-3333-333333333333'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'user-a', 'unauthorized_insert', 'tenant');
