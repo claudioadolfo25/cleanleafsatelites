@@ -4,6 +4,7 @@ import type { AnalysisStatus } from "../../shared/analysis-state";
 import type { SatelliteId } from "../../shared/satellite-catalog";
 import { computePolygonAreaHa, type GeoJSONGeometry } from "../geometry";
 import { getSupabaseUserClient } from "./supabase-client";
+import { getSupabaseAdminClient } from "../admin/supabase-client";
 
 export type PredioRecord = {
   id: string;
@@ -942,19 +943,23 @@ export type AuditLogRecord = {
 const memoryAuditLogs: AuditLogRecord[] = [];
 
 export async function createAuditLogDb(
-  log: AuditLogRecord,
-  accessToken?: string
+  log: AuditLogRecord
 ): Promise<AuditLogRecord> {
-  const client = getSupabaseUserClient(accessToken);
   const created: AuditLogRecord = {
     ...log,
     id: log.id ?? `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     created_at: new Date().toISOString(),
   };
 
-  if (client) {
+  const hasDbConfig = Boolean(
+    (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+
+  if (hasDbConfig) {
     try {
-      const { data } = await client
+      const client = getSupabaseAdminClient();
+      const { data, error } = await client
         .from("audit_logs")
         .insert({
           tenant_id: log.tenant_id,
@@ -968,14 +973,28 @@ export async function createAuditLogDb(
         .select()
         .single();
 
-      if (data) return data as AuditLogRecord;
-    } catch {
-      // Fallback
+      if (error) {
+        console.error("[AuditLogWriteError] Database insert failed:", error.message);
+        if (process.env.NODE_ENV !== "test") {
+          throw new Error(`Audit log database write failed: ${error.message}`);
+        }
+      } else if (data) {
+        return data as AuditLogRecord;
+      }
+    } catch (err) {
+      console.error("[AuditLogWriteError] Exception during audit log write:", err);
+      if (process.env.NODE_ENV !== "test") {
+        throw err;
+      }
     }
   }
 
-  memoryAuditLogs.push(created);
-  return created;
+  if (process.env.NODE_ENV === "test" || !hasDbConfig) {
+    memoryAuditLogs.push(created);
+    return created;
+  }
+
+  throw new Error("Audit log creation failed: database unavailable and memory fallback prohibited in production");
 }
 
 export async function listAuditLogsDb(

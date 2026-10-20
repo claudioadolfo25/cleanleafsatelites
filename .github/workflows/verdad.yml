@@ -73,5 +73,24 @@ jobs:
           END \$\$;
           "
 
-          echo "== Executing RLS Isolation Assertion Suite =="
+          echo "== Checking audit_logs INSERT policies (Migration 012) =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+            v_count_insert INT;
+          BEGIN
+            SELECT count(*) INTO v_count_insert
+            FROM pg_policies
+            WHERE tablename = 'audit_logs' AND cmd = 'INSERT';
+
+            IF v_count_insert > 0 THEN
+              RAISE EXCEPTION 'POLICY CHECK FAILED: Permissive INSERT policy on audit_logs still exists!';
+            END IF;
+
+            RAISE NOTICE 'POLICY CHECK PASSED: Direct INSERT on audit_logs is restricted for ordinary roles.';
+          END \$\$;
+          "
+
+          echo "== Executing RLS Isolation Assertion Suites =="
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
