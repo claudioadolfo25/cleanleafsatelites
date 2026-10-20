@@ -2,6 +2,24 @@
 
 BEGIN;
 
+-- Diagnostic Header: Log environment roles, session user, and version
+DO $$
+DECLARE
+  v_version TEXT;
+  v_roles TEXT;
+BEGIN
+  SELECT version() INTO v_version;
+  RAISE NOTICE 'DIAGNOSTIC: PostgreSQL Version: %', v_version;
+  RAISE NOTICE 'DIAGNOSTIC: session_user=%, current_user=%', session_user, current_user;
+
+  SELECT string_agg(rolname || ' (superuser=' || rolsuper || ', bypassrls=' || rolbypassrls || ')', ', ')
+  INTO v_roles
+  FROM pg_roles
+  WHERE rolname IN ('postgres', 'authenticated', 'anon', 'service_role', 'supabase_auth_admin');
+
+  RAISE NOTICE 'DIAGNOSTIC: Roles: %', v_roles;
+END $$;
+
 -- 1. Create temporary test tenants and users as privileged user
 INSERT INTO public.tenants (id, nombre)
 VALUES
@@ -126,11 +144,11 @@ BEGIN
   v_input_event := '{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {}}'::jsonb;
   v_output_event := public.custom_access_token_hook(v_input_event);
 
-  IF (v_output_event->'claims'->'app_metadata'->>'tenant_id') <> 'a0000000-0000-0000-0000-000000000001' THEN
+  IF (v_output_event->'claims'->'app_metadata'->>'tenant_id') IS DISTINCT FROM 'a0000000-0000-0000-0000-000000000001' THEN
     RAISE EXCEPTION 'TEST FAILED [Case 2b]: custom_access_token_hook failed to inject tenant_id. Got: %', v_output_event;
   END IF;
 
-  IF (v_output_event->'claims'->'app_metadata'->>'role') <> 'admin' THEN
+  IF (v_output_event->'claims'->'app_metadata'->>'role') IS DISTINCT FROM 'admin' THEN
     RAISE EXCEPTION 'TEST FAILED [Case 2b]: custom_access_token_hook failed to inject role. Got: %', v_output_event;
   END IF;
 
