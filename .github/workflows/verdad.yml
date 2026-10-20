@@ -91,6 +91,18 @@ jobs:
           END \$\$;
           "
 
+          echo "== Preparing Local CI Test Harness Role Memberships =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          BEGIN
+            -- Grant supabase_auth_admin membership to postgres (the local test runner)
+            -- so that SET LOCAL ROLE supabase_auth_admin succeeds in local CI tests.
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+              GRANT supabase_auth_admin TO postgres;
+            END IF;
+          END \$\$;
+          "
+
           echo "== Executing RLS Isolation Assertion Suites =="
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
