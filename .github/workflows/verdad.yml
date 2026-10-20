@@ -94,3 +94,4 @@ jobs:
           echo "== Executing RLS Isolation Assertion Suites =="
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_013_table_permissions_and_hook_rls.sql
