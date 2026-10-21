@@ -126,15 +126,14 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
 
-          echo "== Verifying Administrative Harness Connection for test_013 =="
+          echo "== Verifying local admin identity before test_013 =="
           ADMIN_DB_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"
-          psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -c "
-          DO \$\$
-          BEGIN
-            IF session_user <> 'supabase_admin' THEN
-              RAISE EXCEPTION 'PRE-FLIGHT FAILED: Expected local harness connection session_user to be supabase_admin, got %', session_user;
-            END IF;
-            RAISE NOTICE 'PRE-FLIGHT PASSED: Local CI harness connected as superuser %', session_user;
-          END \$\$;
-          "
+          ADMIN_IDENTITY=$(psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -tAc "SELECT session_user, current_user;" 2>/dev/null || true)
+          echo "$ADMIN_IDENTITY"
+
+          if ! printf '%s\n' "$ADMIN_IDENTITY" | grep -Eq 'supabase_admin[[:space:]]+supabase_admin'; then
+            echo "ERROR: Expected local session_user/current_user to be supabase_admin before executing test_013."
+            exit 1
+          fi
+
           psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_013_table_permissions_and_hook_rls.sql
