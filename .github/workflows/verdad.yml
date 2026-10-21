@@ -111,7 +111,7 @@ jobs:
             RAISE NOTICE 'DIAGNOSTIC: Role Attributes: %', v_roles;
 
             SELECT string_agg(
-              'grantee=' || m.roleid::regrole || ' -> role=' || m.member::regrole ||
+              'member=' || m.member::regrole || ' -> granted_role=' || m.roleid::regrole ||
               ' (admin_opt=' || m.admin_option || ', inherit_opt=' || m.inherit_option || ', set_opt=' || m.set_option || ')',
               '; '
             )
@@ -128,11 +128,10 @@ jobs:
 
           echo "== Verifying local admin identity before test_013 =="
           ADMIN_DB_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"
-          ADMIN_IDENTITY=$(psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -tAc "SELECT session_user, current_user;" 2>/dev/null || true)
-          echo "$ADMIN_IDENTITY"
+          IS_LOCAL_ADMIN=$(psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -tAc "SELECT session_user = 'supabase_admin' AND current_user = 'supabase_admin';")
 
-          if ! printf '%s\n' "$ADMIN_IDENTITY" | grep -Eq 'supabase_admin[[:space:]]+supabase_admin'; then
-            echo "ERROR: Expected local session_user/current_user to be supabase_admin before executing test_013."
+          if [ "$IS_LOCAL_ADMIN" != "t" ]; then
+            echo "ERROR: Expected local session_user/current_user to be supabase_admin, got '$IS_LOCAL_ADMIN'"
             exit 1
           fi
 

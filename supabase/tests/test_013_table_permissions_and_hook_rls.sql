@@ -2,6 +2,24 @@
 
 BEGIN;
 
+-- Pre-flight Identity Assertion: Verify file is executed under local superuser connection (e.g. supabase_admin)
+DO $$
+DECLARE
+  v_is_super BOOLEAN;
+BEGIN
+  SELECT rolsuper INTO v_is_super FROM pg_roles WHERE rolname = current_user;
+
+  IF session_user IS DISTINCT FROM 'supabase_admin' OR current_user IS DISTINCT FROM 'supabase_admin' THEN
+    RAISE EXCEPTION 'TEST SETUP FAILED: Expected session_user=supabase_admin and current_user=supabase_admin, but got session_user=%, current_user=%', session_user, current_user;
+  END IF;
+
+  IF NOT COALESCE(v_is_super, false) THEN
+    RAISE EXCEPTION 'TEST SETUP FAILED: Expected current_user (%) to be a superuser, but rolsuper is false', current_user;
+  END IF;
+
+  RAISE NOTICE 'TEST SETUP PASSED: Executing test_013 under superuser session_user=%, current_user=%', session_user, current_user;
+END $$;
+
 -- Diagnostic Header: Log environment roles, session user, and version
 DO $$
 DECLARE
@@ -141,8 +159,8 @@ DECLARE
   v_input_event JSONB;
   v_output_event JSONB;
 BEGIN
-  IF current_user <> 'supabase_auth_admin' THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 2b]: Expected current_user to be supabase_auth_admin, but got %', current_user;
+  IF current_user IS DISTINCT FROM 'supabase_auth_admin' THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 2b]: Expected current_user = supabase_auth_admin before hook call, but got %', current_user;
   END IF;
 
   v_input_event := '{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {}}'::jsonb;
