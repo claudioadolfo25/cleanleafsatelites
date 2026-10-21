@@ -1,104 +1,85 @@
--- Automated RLS Isolation Test for audit_logs (Migration 011)
-
 BEGIN;
 
--- 1. Grant SELECT permission to authenticated role
+CREATE EXTENSION IF NOT EXISTS pgtap;
+
+SELECT plan(6);
+
+-- 1. Grant SELECT permissions to authenticated role for test scope
 GRANT SELECT ON public.tenants, public.audit_logs TO authenticated;
 
--- 2. Create temporary test tenants as privileged user
+-- 2. Insert test tenants (as privileged user)
 INSERT INTO public.tenants (id, nombre)
 VALUES
   ('a0000000-0000-0000-0000-000000000001'::uuid, 'Tenant Test A'),
   ('b0000000-0000-0000-0000-000000000002'::uuid, 'Tenant Test B')
 ON CONFLICT (id) DO NOTHING;
 
--- 3. Insert test audit log records as privileged user
+-- 3. Insert test audit log records (as privileged user)
 INSERT INTO public.audit_logs (id, tenant_id, user_id, action, entity)
 VALUES
   ('11111111-1111-1111-1111-111111111111'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'user-a', 'test_action_a', 'tenant'),
   ('22222222-2222-2222-2222-222222222222'::uuid, 'b0000000-0000-0000-0000-000000000002'::uuid, 'user-b', 'test_action_b', 'tenant')
 ON CONFLICT (id) DO NOTHING;
 
--- Switch to non-superuser authenticated role so PostgreSQL enforces RLS policies
+-- Switch to authenticated role so PostgreSQL enforces RLS policies
 SET LOCAL ROLE authenticated;
 
-DO $$
-DECLARE
-  v_has_a BOOLEAN;
-  v_has_b BOOLEAN;
-BEGIN
-  -----------------------------------------------------------------------------
-  -- Test Case 1: Admin A JWT claims -> sees test record A, but NOT test record B
-  -----------------------------------------------------------------------------
-  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "admin"}}', true);
+-------------------------------------------------------------------------------
+-- Caso 1: Admin A JWT claims -> ve el registro A, NO ve el registro B
+-------------------------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "admin"}}', true);
 
-  SELECT
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid)
-  INTO v_has_a, v_has_b;
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
+  1,
+  'Caso 1: Admin A ve el registro A'
+);
 
-  IF NOT v_has_a THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 1]: Admin A should be able to see record A (11111111-1111-1111-1111-111111111111)';
-  END IF;
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid),
+  0,
+  'Caso 1: Admin A NO ve el registro B'
+);
 
-  IF v_has_b THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 1]: Admin A must NOT see record B (22222222-2222-2222-2222-222222222222)';
-  END IF;
+-------------------------------------------------------------------------------
+-- Caso 2: Owner B JWT claims -> ve el registro B, NO ve el registro A
+-------------------------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "b0000000-0000-0000-0000-000000000002", "role": "owner"}}', true);
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 1 (Admin A sees record A, not record B)';
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
+  0,
+  'Caso 2: Owner B NO ve el registro A'
+);
 
-  -----------------------------------------------------------------------------
-  -- Test Case 2: Owner B JWT claims -> sees test record B, but NOT test record A
-  -----------------------------------------------------------------------------
-  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "b0000000-0000-0000-0000-000000000002", "role": "owner"}}', true);
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid),
+  1,
+  'Caso 2: Owner B ve el registro B'
+);
 
-  SELECT
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid)
-  INTO v_has_a, v_has_b;
+-------------------------------------------------------------------------------
+-- Caso 3: Super Admin JWT claims -> ve ambos registros A y B
+-------------------------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"app_metadata": {"role": "super_admin"}}', true);
 
-  IF v_has_a THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 2]: Owner B must NOT see record A (11111111-1111-1111-1111-111111111111)';
-  END IF;
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id IN ('11111111-1111-1111-1111-111111111111'::uuid, '22222222-2222-2222-2222-222222222222'::uuid)),
+  2,
+  'Caso 3: Super Admin ve ambos registros A y B'
+);
 
-  IF NOT v_has_b THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 2]: Owner B should be able to see record B (22222222-2222-2222-2222-222222222222)';
-  END IF;
+-------------------------------------------------------------------------------
+-- Caso 4: Usuario normal JWT claims -> ve 0 registros administrativos
+-------------------------------------------------------------------------------
+SELECT set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "user"}}', true);
 
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 2 (Owner B sees record B, not record A)';
+SELECT is(
+  (SELECT count(*)::int FROM public.audit_logs WHERE id IN ('11111111-1111-1111-1111-111111111111'::uuid, '22222222-2222-2222-2222-222222222222'::uuid)),
+  0,
+  'Caso 4: Usuario normal ve 0 registros administrativos'
+);
 
-  -----------------------------------------------------------------------------
-  -- Test Case 3: Super Admin JWT claims -> sees BOTH test record A and test record B
-  -----------------------------------------------------------------------------
-  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"role": "super_admin"}}', true);
-
-  SELECT
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid)
-  INTO v_has_a, v_has_b;
-
-  IF NOT (v_has_a AND v_has_b) THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 3]: Super Admin should be able to see both record A and record B';
-  END IF;
-
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 3 (Super Admin sees both record A and record B)';
-
-  -----------------------------------------------------------------------------
-  -- Test Case 4: Normal User JWT claims -> sees NEITHER test record A NOR test record B
-  -----------------------------------------------------------------------------
-  PERFORM set_config('request.jwt.claims', '{"app_metadata": {"tenant_id": "a0000000-0000-0000-0000-000000000001", "role": "user"}}', true);
-
-  SELECT
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '11111111-1111-1111-1111-111111111111'::uuid),
-    EXISTS (SELECT 1 FROM public.audit_logs WHERE id = '22222222-2222-2222-2222-222222222222'::uuid)
-  INTO v_has_a, v_has_b;
-
-  IF v_has_a OR v_has_b THEN
-    RAISE EXCEPTION 'TEST FAILED [Case 4]: Normal User must NOT see any administrative audit records';
-  END IF;
-
-  RAISE NOTICE 'ASSERTION PASSED: Test Case 4 (Normal User sees 0 test audit records)';
-
-END $$;
+SELECT * FROM finish();
 
 ROLLBACK;

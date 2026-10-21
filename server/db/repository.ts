@@ -989,12 +989,12 @@ export async function createAuditLogDb(
     }
   }
 
-  if (process.env.NODE_ENV === "test" || !hasDbConfig) {
+  if (process.env.NODE_ENV === "test") {
     memoryAuditLogs.push(created);
     return created;
   }
 
-  throw new Error("Audit log creation failed: database unavailable and memory fallback prohibited in production");
+  throw new Error("Audit log database write failed: SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL not configured");
 }
 
 export async function listAuditLogsDb(
