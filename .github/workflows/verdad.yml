@@ -33,7 +33,7 @@ jobs:
           supabase start
           supabase db reset
 
-      - name: Verify audit_logs RLS Policies and Isolation Test
+      - name: Verify audit_logs RLS Policies and Isolation Test Suite
         run: |
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
@@ -73,24 +73,21 @@ jobs:
           END \$\$;
           "
 
-          echo "== Checking audit_logs INSERT policies (Migration 012) =="
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
-          DO \$\$
-          DECLARE
-            v_count_insert INT;
-          BEGIN
-            SELECT count(*) INTO v_count_insert
-            FROM pg_policies
-            WHERE tablename = 'audit_logs' AND cmd = 'INSERT';
+          echo "== Executing pgTAP Test 011: audit_logs SELECT RLS =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql > /tmp/test_011.log 2>&1 || exit 1
+          cat /tmp/test_011.log
+          if grep -E "not ok|Parse errors" /tmp/test_011.log; then
+            echo "ERROR: pgTAP assertions failed in test_011_audit_logs_rls.sql"
+            exit 1
+          fi
 
-            IF v_count_insert > 0 THEN
-              RAISE EXCEPTION 'POLICY CHECK FAILED: Permissive INSERT policy on audit_logs still exists!';
-            END IF;
+          echo "== Executing pgTAP Test 012: audit_logs INSERT RLS =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql > /tmp/test_012.log 2>&1 || exit 1
+          cat /tmp/test_012.log
+          if grep -E "not ok|Parse errors" /tmp/test_012.log; then
+            echo "ERROR: pgTAP assertions failed in test_012_audit_logs_insert_rls.sql"
+            exit 1
+          fi
 
-            RAISE NOTICE 'POLICY CHECK PASSED: Direct INSERT on audit_logs is restricted for ordinary roles.';
-          END \$\$;
-          "
-
-          echo "== Executing RLS Isolation Assertion Suites =="
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
+          echo "== Running Supabase test db =="
+          supabase test db
