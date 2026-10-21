@@ -1,6 +1,7 @@
--- Migration 013: Explicit Schema, Table, Sequence and Function Grants for Staging and Production
--- Issue: Projects created with automatic table exposure disabled and automatic RLS enabled require explicit DCL GRANT statements.
--- Without explicit GRANTs, PostgreSQL has_table_privilege returns false even if RLS policies exist.
+-- Migration 013: Explicit Schema, Table, Sequence, Function Grants and Auth Hook Fix
+-- Issue 1: Projects created with automatic table exposure disabled require explicit DCL GRANT statements.
+-- Issue 2: custom_access_token_hook must initialize app_metadata JSON object when setting nested claims
+-- and preserve top-level claims.role as the Postgres DB role ('authenticated').
 
 -- 1. Schema USAGE Grants
 GRANT USAGE ON SCHEMA public TO authenticated, service_role, supabase_auth_admin;
@@ -14,13 +15,51 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_
 GRANT EXECUTE ON FUNCTION public.get_current_tenant_id() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_current_role() TO authenticated, service_role;
 
--- 3. Explicit Grants for GoTrue Auth Hook Daemon (supabase_auth_admin)
--- Revoke PUBLIC / authenticated / anon EXECUTE on custom_access_token_hook to enforce security
+-- 3. Update custom_access_token_hook to safely handle nested app_metadata claims
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  claims jsonb;
+  user_tenant_id uuid;
+  user_role text;
+BEGIN
+  -- Consultar tenant_id y role del usuario en la tabla public.users
+  SELECT tenant_id, role INTO user_tenant_id, user_role
+  FROM public.users
+  WHERE id = (event->>'user_id')::uuid;
+
+  claims := coalesce(event->'claims', '{}'::jsonb);
+
+  -- Garantizar que el objeto app_metadata exista dentro de claims
+  IF NOT (claims ? 'app_metadata') OR jsonb_typeof(claims->'app_metadata') <> 'object' THEN
+    claims := jsonb_set(claims, '{app_metadata}', '{}'::jsonb, true);
+  END IF;
+
+  IF user_tenant_id IS NOT NULL THEN
+    claims := jsonb_set(claims, '{tenant_id}', to_jsonb(user_tenant_id::text), true);
+    claims := jsonb_set(claims, '{app_metadata,tenant_id}', to_jsonb(user_tenant_id::text), true);
+  END IF;
+
+  IF user_role IS NOT NULL THEN
+    -- Inyectar rol de aplicación dentro de app_metadata.role (sin sobrescribir claims.role de Postgres)
+    claims := jsonb_set(claims, '{app_metadata,role}', to_jsonb(user_role), true);
+  END IF;
+
+  event := jsonb_set(event, '{claims}', claims);
+  RETURN event;
+END;
+$$;
+
+-- 4. Explicit Grants for GoTrue Auth Hook Daemon (supabase_auth_admin)
 REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) FROM PUBLIC, authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(jsonb) TO supabase_auth_admin;
 GRANT SELECT ON public.users TO supabase_auth_admin;
 
--- 4. Explicit Table Grants for service_role (Full DML Access)
+-- 5. Explicit Table Grants for service_role (Full DML Access)
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.tenants TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.predios TO service_role;
@@ -41,7 +80,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.alertas TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suscripciones TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.planes TO service_role;
 
--- 5. Strict Minimal Table Grants for authenticated Role (Governed strictly by RLS)
+-- 6. Strict Minimal Table Grants for authenticated Role (Governed strictly by RLS)
 GRANT SELECT, INSERT, UPDATE ON public.users TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.tenants TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.predios TO authenticated;
@@ -65,14 +104,12 @@ GRANT SELECT ON public.planes TO authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.suscripciones FROM authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.planes FROM authenticated;
 
--- 5a. Explicit Grants for audit_logs for authenticated:
--- authenticated needs SELECT (governed by Migration 011 RLS by tenant_id/super_admin).
--- authenticated MUST NOT have INSERT, UPDATE or DELETE permissions on audit_logs (retaining Migration 012 posture).
+-- 6a. Explicit Grants for audit_logs for authenticated:
 GRANT SELECT ON public.audit_logs TO authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.audit_logs FROM authenticated;
 
--- 6. Explicit ZERO Table Privileges for anon Role (Zero Trust)
+-- 7. Explicit ZERO Table Privileges for anon Role (Zero Trust)
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
 
--- 7. Ensure Default Privileges for any future tables in public schema
+-- 8. Ensure Default Privileges for any future tables in public schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role;

@@ -163,7 +163,7 @@ BEGIN
     RAISE EXCEPTION 'TEST FAILED [Case 2b]: Expected current_user = supabase_auth_admin before hook call, but got %', current_user;
   END IF;
 
-  v_input_event := '{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {}}'::jsonb;
+  v_input_event := '{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {"role": "authenticated", "app_metadata": {}}}'::jsonb;
   v_output_event := public.custom_access_token_hook(v_input_event);
 
   IF (v_output_event->'claims'->'app_metadata'->>'tenant_id') IS DISTINCT FROM 'a0000000-0000-0000-0000-000000000001' THEN
@@ -172,6 +172,11 @@ BEGIN
 
   IF (v_output_event->'claims'->'app_metadata'->>'role') IS DISTINCT FROM 'admin' THEN
     RAISE EXCEPTION 'TEST FAILED [Case 2b]: custom_access_token_hook failed to inject role. Got: %', v_output_event;
+  END IF;
+
+  -- Ensure Postgres DB role in claims.role is preserved as 'authenticated' (NOT overwritten with application role)
+  IF (v_output_event->'claims'->>'role') IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 2b]: claims.role must remain Postgres DB role ("authenticated"), but got %', (v_output_event->'claims'->>'role');
   END IF;
 
   RAISE NOTICE 'ASSERTION PASSED: Test Case 2b (custom_access_token_hook executed successfully under supabase_auth_admin)';
