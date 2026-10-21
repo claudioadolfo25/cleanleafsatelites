@@ -744,7 +744,7 @@ export const appRouter = router({
             user_email: ctx.user.email,
             action: "admin.update_plan",
             entity: "tenant",
-            payload: { targetTenantId: input.tenantId, newPlanId: input.planId, actor_type: "user", actorTenantId: ctx.user.tenantId },
+            payload: { targetTenantId: input.tenantId, newPlanId: input.planId, actor_type: "human", actorTenantId: ctx.user.tenantId },
           });
         } catch (auditErr) {
           console.error("[AuditLogWriteError] Failed to create audit log for admin.updatePlan:", auditErr);
@@ -770,7 +770,7 @@ export const appRouter = router({
             user_email: ctx.user.email,
             action: "admin.retry_solicitud",
             entity: "solicitud_analisis",
-            payload: { solicitudId: input.solicitudId, actor_type: "user", actorTenantId: ctx.user.tenantId },
+            payload: { solicitudId: input.solicitudId, actor_type: "human", actorTenantId: ctx.user.tenantId },
           });
         } catch (auditErr) {
           console.error("[AuditLogWriteError] Failed to create audit log for admin.retrySolicitud:", auditErr);

@@ -57,7 +57,7 @@ describe("Audit Log INSERT Integrity & Identity Isolation", () => {
     expect(auditEntry.payload).toMatchObject({
       targetTenantId: "target-tenant-b",
       newPlanId: "region_completa",
-      actor_type: "user",
+      actor_type: "human",
       actorTenantId: "tenant-superadmin",
     });
   });

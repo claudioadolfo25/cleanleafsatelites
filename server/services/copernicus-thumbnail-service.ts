@@ -25,7 +25,7 @@ export async function getFieldThumbnail(
         user_email: actorContext?.userEmail ?? null,
         action: "copernicus.get_field_thumbnail",
         entity: "thumbnail",
-        payload: { solicitudId, size: "<=512px", status: "success", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "user" : "system") },
+        payload: { solicitudId, size: "<=512px", status: "success", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "human" : "system") },
       });
     } catch (auditErr) {
       console.error("[AuditLogWriteError] Failed to create audit log for thumbnail:", auditErr);
@@ -43,7 +43,7 @@ export async function getFieldThumbnail(
         user_email: actorContext?.userEmail ?? null,
         action: "copernicus.get_field_thumbnail",
         entity: "thumbnail",
-        payload: { solicitudId, status: "fallback_quota_exceeded", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "user" : "system") },
+        payload: { solicitudId, status: "fallback_quota_exceeded", actor_type: actorContext?.actorType ?? (actorContext?.userId ? "human" : "system") },
       });
     } catch (auditErr) {
       console.error("[AuditLogWriteError] Failed to create audit log for thumbnail error:", auditErr);
