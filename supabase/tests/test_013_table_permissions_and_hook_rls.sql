@@ -141,6 +141,10 @@ DECLARE
   v_input_event JSONB;
   v_output_event JSONB;
 BEGIN
+  IF current_user <> 'supabase_auth_admin' THEN
+    RAISE EXCEPTION 'TEST FAILED [Case 2b]: Expected current_user to be supabase_auth_admin, but got %', current_user;
+  END IF;
+
   v_input_event := '{"user_id": "11111111-1111-1111-1111-111111111111", "claims": {}}'::jsonb;
   v_output_event := public.custom_access_token_hook(v_input_event);
 

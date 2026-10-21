@@ -91,95 +91,50 @@ jobs:
           END \$\$;
           "
 
-          echo "== Read-only inspection of Supabase DB role state =="
-          echo "== supabase --version =="
-          supabase --version
+          echo "== Read-Only CI Environment & Role Diagnostic =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          DECLARE
+            v_roles TEXT;
+            v_memberships TEXT;
+          BEGIN
+            RAISE NOTICE 'DIAGNOSTIC: session_user=%, current_user=%', session_user, current_user;
 
-          echo "== session_user/current_user =="
-          psql "$DB_URL" -v ON_ERROR_STOP=0 -X -A -F $'\t' -c "
-          SELECT
-            session_user,
-            current_user;
+            SELECT string_agg(
+              rolname || ' (super=' || rolsuper || ', bypassrls=' || rolbypassrls || ', canlogin=' || rolcanlogin || ')',
+              '; '
+            )
+            INTO v_roles
+            FROM pg_roles
+            WHERE rolname IN ('postgres', 'supabase_admin', 'supabase_auth_admin', 'service_role', 'authenticated', 'anon');
+
+            RAISE NOTICE 'DIAGNOSTIC: Role Attributes: %', v_roles;
+
+            SELECT string_agg(
+              'grantee=' || m.roleid::regrole || ' -> role=' || m.member::regrole ||
+              ' (admin_opt=' || m.admin_option || ', inherit_opt=' || m.inherit_option || ', set_opt=' || m.set_option || ')',
+              '; '
+            )
+            INTO v_memberships
+            FROM pg_auth_members m;
+
+            RAISE NOTICE 'DIAGNOSTIC: Role Memberships: %', COALESCE(v_memberships, 'None');
+          END \$\$;
           "
-
-          echo "== Attributes for postgres, supabase_admin and supabase_auth_admin =="
-          psql "$DB_URL" -v ON_ERROR_STOP=0 -X -A -F $'\t' -c "
-          SELECT
-            rolname,
-            rolsuper,
-            rolbypassrls,
-            rolcanlogin,
-            rolcreaterole
-          FROM pg_roles
-          WHERE rolname IN ('postgres', 'supabase_admin', 'supabase_auth_admin')
-          ORDER BY rolname;
-          "
-
-          echo "== pg_auth_members (grantor, admin_option, set_option, inherit_option) =="
-          psql "$DB_URL" -v ON_ERROR_STOP=0 -X -A -F $'\t' -c "
-          SELECT
-            r.rolname AS rol,
-            m.member::regrole::text AS miembro,
-            m.grantor::regrole::text AS grantor,
-            m.admin_option,
-            m.set_option,
-            m.inherit_option
-          FROM pg_auth_members m
-          JOIN pg_roles r
-            ON r.oid = m.roleid
-          ORDER BY r.rolname, m.member, m.grantor;
-          "
-
-          echo "== TCP connection test as supabase_admin (non-fatal) =="
-          set +e
-          tcp_status=1
-          tcp_error_type=""
-          for attempt in 1 2; do
-            case "$attempt" in
-              1) cred="supabase_admin" ;;
-              2) cred="postgres" ;;
-            esac
-
-            echo "attempt $attempt/2"
-            PGPASSWORD="$cred" \
-            psql "postgresql://supabase_admin@127.0.0.1:54322/postgres" \
-              -v ON_ERROR_STOP=0 -X -A -F $'\t' -c "
-                SELECT
-                  session_user,
-                  current_user,
-                  (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS is_super,
-                  (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS can_createrole;
-              " >/tmp/supabase_admin_tcp_check.txt 2>/tmp/supabase_admin_tcp_check.err
-            tcp_status=$?
-
-            if [ "$tcp_status" -eq 0 ]; then
-              echo "supabase_admin TCP connection: OK"
-              cat /tmp/supabase_admin_tcp_check.txt
-              break
-            fi
-
-            if grep -qi "password authentication failed" /tmp/supabase_admin_tcp_check.err; then
-              tcp_error_type="auth"
-              echo "attempt $attempt/2 failed; retrying"
-              continue
-            fi
-
-            tcp_error_type="non-auth"
-            echo "supabase_admin TCP connection: FAILED (non-auth)"
-            cat /tmp/supabase_admin_tcp_check.err
-            break
-          done
-
-          if [ "$tcp_status" -ne 0 ] && [ -z "$tcp_error_type" ]; then
-            tcp_error_type="auth"
-          fi
-
-          if [ "$tcp_status" -ne 0 ]; then
-            echo "supabase_admin TCP connection: FAILED ($tcp_error_type)"
-          fi
-          set -e
 
           echo "== Executing RLS Isolation Assertion Suites =="
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_011_audit_logs_rls.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_012_audit_logs_insert_rls.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_013_table_permissions_and_hook_rls.sql
+
+          echo "== Verifying Administrative Harness Connection for test_013 =="
+          ADMIN_DB_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"
+          psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -c "
+          DO \$\$
+          BEGIN
+            IF session_user <> 'supabase_admin' THEN
+              RAISE EXCEPTION 'PRE-FLIGHT FAILED: Expected local harness connection session_user to be supabase_admin, got %', session_user;
+            END IF;
+            RAISE NOTICE 'PRE-FLIGHT PASSED: Local CI harness connected as superuser %', session_user;
+          END \$\$;
+          "
+          psql "$ADMIN_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/test_013_table_permissions_and_hook_rls.sql
