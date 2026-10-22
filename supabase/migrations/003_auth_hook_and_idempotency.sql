@@ -20,12 +20,10 @@ begin
   claims := event->'claims';
 
   if user_tenant_id is not null then
-    claims := jsonb_set(claims, '{tenant_id}', to_jsonb(user_tenant_id::text));
     claims := jsonb_set(claims, '{app_metadata,tenant_id}', to_jsonb(user_tenant_id::text));
   end if;
 
   if user_role is not null then
-    claims := jsonb_set(claims, '{role}', to_jsonb(user_role));
     claims := jsonb_set(claims, '{app_metadata,role}', to_jsonb(user_role));
   end if;
 
