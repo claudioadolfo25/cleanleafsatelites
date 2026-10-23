@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import { checkStrictBoot } from "./_core/env";
 import { registerStorageProxy } from "./_core/storageProxy";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
@@ -73,12 +74,28 @@ export function createApp(): Express {
 
   // Health check route returning status and boolean checks for critical env vars (never raw values)
   app.get("/api/health", (_req: Request, res: Response) => {
+    const isStrictMode = process.env.COPERNICUS_STRICT_MODE === "true";
+    const hasClientId = Boolean(process.env.COPERNICUS_CLIENT_ID);
+    const hasClientSecret = Boolean(process.env.COPERNICUS_CLIENT_SECRET);
+    const isHealthy = !isStrictMode || (hasClientId && hasClientSecret);
+
     const envChecks = {
       supabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
       supabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-      copernicusClientId: Boolean(process.env.COPERNICUS_CLIENT_ID),
-      copernicusClientSecret: Boolean(process.env.COPERNICUS_CLIENT_SECRET),
+      copernicusClientId: hasClientId,
+      copernicusClientSecret: hasClientSecret,
+      copernicusStrictMode: isStrictMode,
     };
+
+    if (!isHealthy) {
+      res.status(503).json({
+        status: "error",
+        service: "agropulso-cleanleaf-api",
+        error: "COPERNICUS_STRICT_MODE=true requiere COPERNICUS_CLIENT_ID y COPERNICUS_CLIENT_SECRET configuradas.",
+        checks: envChecks,
+      });
+      return;
+    }
 
     res.json({
       status: "ok",

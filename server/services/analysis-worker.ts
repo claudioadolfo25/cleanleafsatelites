@@ -130,10 +130,37 @@ export async function processSolicitud(
       const maxAttempts = 3;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const queryStart = Date.now();
         try {
           result = await workerObservationProvider.query(queryReq);
 
           if (result) {
+            const latencyMs = Date.now() - queryStart;
+            // Registrar auditoría de llamada exitosa a Copernicus CDSE
+            try {
+              const { createAuditLogDb } = await import("../db/repository");
+              await createAuditLogDb({
+                tenant_id: tenantId,
+                user_id: solicitud.solicitado_por ?? null,
+                action: "copernicus.cdse_query",
+                entity: "solicitud_analisis",
+                payload: {
+                  solicitudId,
+                  predioId: queryReq.predioId,
+                  satellite: queryReq.satellite,
+                  variable: queryReq.variable,
+                  attempt,
+                  status: "success",
+                  statusCode: (result as any)?.status_code ?? "200",
+                  dataSource: (result as any)?.data_source ?? "copernicus_cdse",
+                  latencyMs,
+                  actor_type: "system",
+                },
+              });
+            } catch (auditErr) {
+              console.error("[AuditLogWriteError] Failed to log CDSE query:", auditErr);
+            }
+
             // Evaluar calidad SCL si está disponible
             const sclPercentage = (result as any).valid_pixel_percentage ?? 0.85;
             const quality = evaluateDataQuality(sclPercentage);
@@ -147,8 +174,33 @@ export async function processSolicitud(
             break;
           }
         } catch (err) {
+          const latencyMs = Date.now() - queryStart;
           lastError = err instanceof Error ? err : new Error(String(err));
           console.warn(`[Worker] Intento ${attempt}/${maxAttempts} falló para solicitud ${solicitudId}: ${lastError.message}`);
+
+          // Registrar auditoría de error en llamada a Copernicus CDSE
+          try {
+            const { createAuditLogDb } = await import("../db/repository");
+            await createAuditLogDb({
+              tenant_id: tenantId,
+              user_id: solicitud.solicitado_por ?? null,
+              action: "copernicus.cdse_query",
+              entity: "solicitud_analisis",
+              payload: {
+                solicitudId,
+                predioId: queryReq.predioId,
+                satellite: queryReq.satellite,
+                variable: queryReq.variable,
+                attempt,
+                status: "error",
+                errorMessage: lastError.message,
+                latencyMs,
+                actor_type: "system",
+              },
+            });
+          } catch (auditErr) {
+            console.error("[AuditLogWriteError] Failed to log CDSE query error:", auditErr);
+          }
 
           if (attempt < maxAttempts) {
             const backoffMs = Math.pow(2, attempt) * 200;

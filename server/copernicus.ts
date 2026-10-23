@@ -36,12 +36,21 @@ export class CopernicusTimeoutError extends Error {
   }
 }
 
-export function isCopernicusStagingAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.APP_ENV === "staging" || env.RENDER_ENV === "staging";
+export function isCopernicusLiveAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (
+    env.APP_ENV === "staging" ||
+    env.RENDER_ENV === "staging" ||
+    env.APP_ENV === "live" ||
+    env.RENDER_ENV === "live" ||
+    env.APP_ENV === "production" ||
+    env.RENDER_ENV === "production"
+  );
 }
 
+export const isCopernicusStagingAuthorized = isCopernicusLiveAuthorized;
+
 export function isCopernicusLiveEnabled(env: NodeJS.ProcessEnv = process.env, tokenManager?: CopernicusTokenManager): boolean {
-  return env.COPERNICUS_MODE === "live" && isCopernicusStagingAuthorized(env) && Boolean(tokenManager?.isConfigured());
+  return env.COPERNICUS_MODE === "live" && isCopernicusLiveAuthorized(env) && Boolean(tokenManager?.isConfigured());
 }
 
 function productForSatellite(satellite: SatelliteQueryRequest["satellite"]): string {

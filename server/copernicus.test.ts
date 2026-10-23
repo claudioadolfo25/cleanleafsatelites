@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { CopernicusTokenManager, CopernicusCDSEProvider, CopernicusUnavailableError, FallbackObservationProvider, SyntheticCopernicusProvider, isCopernicusLiveEnabled, buildStatisticalPayload, buildEvalscript } from "./copernicus";
+import { checkStrictBoot } from "./_core/env";
 
 describe("Copernicus OAuth2 Client Service (Tellus)", () => {
   const DEFAULT_CLIENT_ID = "sh-79ab7ae6-ca8d-4823-90d1-fca2c30fe535";
@@ -81,12 +82,26 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     })).rejects.toThrow("Network connection error");
   });
 
-  it("activa live únicamente en staging con modo live y ambas credenciales", () => {
+  it("activa live en entornos autorizados (staging, live, production) con modo live y ambas credenciales", () => {
     const manager = new CopernicusTokenManager(DEFAULT_CLIENT_ID, TEST_SECRET, TEST_TOKEN_URL);
     expect(isCopernicusLiveEnabled({ APP_ENV: "staging", COPERNICUS_MODE: "live" }, manager)).toBe(true);
-    expect(isCopernicusLiveEnabled({ APP_ENV: "production", COPERNICUS_MODE: "live" }, manager)).toBe(false);
+    expect(isCopernicusLiveEnabled({ APP_ENV: "live", RENDER_ENV: "live", COPERNICUS_MODE: "live" }, manager)).toBe(true);
+    expect(isCopernicusLiveEnabled({ APP_ENV: "production", COPERNICUS_MODE: "live" }, manager)).toBe(true);
     expect(isCopernicusLiveEnabled({ APP_ENV: "staging", COPERNICUS_MODE: "synthetic" }, manager)).toBe(false);
-    expect(isCopernicusLiveEnabled({ APP_ENV: "staging", COPERNICUS_MODE: "live" }, new CopernicusTokenManager(DEFAULT_CLIENT_ID, "", TEST_TOKEN_URL))).toBe(false);
+    expect(isCopernicusLiveEnabled({ APP_ENV: "live", COPERNICUS_MODE: "live" }, new CopernicusTokenManager(DEFAULT_CLIENT_ID, "", TEST_TOKEN_URL))).toBe(false);
+  });
+
+  it("boot-check falla en STRICT_MODE=true si faltan credenciales CDSE", () => {
+    expect(() => checkStrictBoot({ COPERNICUS_STRICT_MODE: "true" })).toThrow(
+      "COPERNICUS_STRICT_MODE=true requiere COPERNICUS_CLIENT_ID y COPERNICUS_CLIENT_SECRET configuradas para arrancar."
+    );
+    expect(() =>
+      checkStrictBoot({
+        COPERNICUS_STRICT_MODE: "true",
+        COPERNICUS_CLIENT_ID: "client-id",
+        COPERNICUS_CLIENT_SECRET: "client-secret",
+      })
+    ).not.toThrow();
   });
 
   it("consulta CDSE real con mocks y etiqueta la respuesta con trazabilidad", async () => {

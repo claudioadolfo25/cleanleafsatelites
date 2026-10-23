@@ -1,7 +1,10 @@
 import { getSupabaseAdminClient } from "./admin/supabase-client";
+import { checkStrictBoot } from "./_core/env";
 import { startWorkerLoop } from "./services/analysis-worker";
 
 console.log("[Worker Process] Iniciando servicio ejecutor de solicitudes Cleanleaf...");
+
+checkStrictBoot();
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error("[Worker Process] Error FATAL: SUPABASE_SERVICE_ROLE_KEY no configurada.");
