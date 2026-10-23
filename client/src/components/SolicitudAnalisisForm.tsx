@@ -76,8 +76,8 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!selectedPredioId && userPredios.length > 0) {
-      toast.error("Selecciona un predio", { description: "Debes seleccionar un predio registrado para consultar." });
+    if (userPredios.length === 0 || !activePredio) {
+      toast.error("Cree un predio primero", { description: "Cree un predio primero para solicitar un análisis." });
       return;
     }
 
@@ -94,8 +94,8 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
       return;
     }
 
-    const targetPredioId = activePredio ? activePredio.id : `predio-demo-las-quinas`;
-    const targetPredioNombre = activePredio ? activePredio.nombre : "Las Quinas";
+    const targetPredioId = activePredio.id;
+    const targetPredioNombre = activePredio.nombre;
 
     createAnalysis.mutate({
       predioId: targetPredioId,
@@ -136,7 +136,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         ) : (
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900">
             <p className="font-semibold">No tienes predios registrados con polígono.</p>
-            <p className="mt-1 text-stone-600">Puedes crear predios en la sección <strong>Mis Predios</strong> o usar la configuración predeterminada.</p>
+            <p className="mt-1 text-stone-600">Cree un predio primero en la sección <strong>Mis Predios</strong> para solicitar un análisis satelital real.</p>
           </div>
         )}
       </div>
@@ -210,8 +210,19 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         <span>Sentinel-1 se usará como respaldo cuando la nubosidad impida una lectura óptica confiable.</span>
       </div>
 
-      <Button type="submit" disabled={createAnalysis.isPending || catalogLoading} className="h-11 w-full rounded-xl bg-emerald-700 text-sm font-semibold shadow-[0_10px_25px_-12px_rgba(4,120,87,0.75)] transition hover:bg-emerald-800 active:scale-[0.98]">
-        {createAnalysis.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creando solicitud…</> : <><CheckCircle2 className="mr-2 h-4 w-4" />Solicitar análisis</>}
+      <Button
+        type="submit"
+        disabled={createAnalysis.isPending || catalogLoading || userPredios.length === 0}
+        title={userPredios.length === 0 ? "Cree un predio primero." : undefined}
+        className="h-11 w-full rounded-xl bg-emerald-700 text-sm font-semibold shadow-[0_10px_25px_-12px_rgba(4,120,87,0.75)] transition hover:bg-emerald-800 active:scale-[0.98]"
+      >
+        {createAnalysis.isPending ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creando solicitud…</>
+        ) : userPredios.length === 0 ? (
+          <>Cree un predio primero</>
+        ) : (
+          <><CheckCircle2 className="mr-2 h-4 w-4" />Solicitar análisis</>
+        )}
       </Button>
     </form>
   );

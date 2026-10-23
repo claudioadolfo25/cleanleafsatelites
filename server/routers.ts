@@ -141,13 +141,14 @@ const idempotencyStore = new Map<string, unknown>();
 const copernicusMode = process.env.COPERNICUS_MODE ?? "synthetic";
 const isTestRuntime = process.env.NODE_ENV === "test";
 const copernicusLiveEnabled = copernicusMode === "live" && isCopernicusLiveEnabled(process.env, copernicusCDSEProvider.getTokenManager());
+const isStrictMode = process.env.COPERNICUS_STRICT_MODE === "true" || getCopernicusProdPolicy() === "live";
 const syntheticProvider = new SyntheticCopernicusProvider(
-  copernicusLiveEnabled ? "Fallback sintético preparado para errores de Copernicus CDSE." : "Copernicus CDSE solo se activa en staging autorizado con COPERNICUS_MODE=live y ambas credenciales."
+  copernicusLiveEnabled ? "Fallback sintético preparado para errores de Copernicus CDSE." : "Copernicus CDSE solo se activa en entorno autorizado con COPERNICUS_MODE=live y ambas credenciales."
 );
 const observationProvider: EarthObservationProvider = isTestRuntime
   ? new MockCopernicusProvider()
   : copernicusLiveEnabled
-    ? new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider)
+    ? (isStrictMode ? copernicusCDSEProvider : new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider))
     : syntheticProvider;
 const catalogClient = createCatalogClient({
   getAccessToken: async () => copernicusLiveEnabled
@@ -491,7 +492,7 @@ export const appRouter = router({
             return dbReports;
           }
           // Para tenants reales (no tenant-demo y no DEMO_MODE explícito), no devolver catálogo demo fallback
-          const isDemoContext = ctx.user.tenantId === "tenant-demo" || (process.env.DEMO_MODE === "true" && getCopernicusProdPolicy() !== "live");
+          const isDemoContext = (ctx.user.tenantId === "tenant-demo" || process.env.DEMO_MODE === "true") && !isStrictMode;
           if (isDemoContext) {
             return listReports(input);
           }
@@ -505,7 +506,7 @@ export const appRouter = router({
           if (dbReport) {
             return dbReport;
           }
-          const isDemoContext = ctx.user.tenantId === "tenant-demo" || (process.env.DEMO_MODE === "true" && getCopernicusProdPolicy() !== "live");
+          const isDemoContext = (ctx.user.tenantId === "tenant-demo" || process.env.DEMO_MODE === "true") && !isStrictMode;
           if (isDemoContext) {
             return getReport(input.id) ?? null;
           }
@@ -580,6 +581,12 @@ export const appRouter = router({
       try {
         return await catalogClient(input);
       } catch (error: unknown) {
+        if (isStrictMode) {
+          throw new TRPCError({
+            code: "BAD_GATEWAY",
+            message: `Error al consultar el catálogo STAC de Copernicus CDSE: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
         return {
           type: "FeatureCollection" as const,
           context: { limit: input.limit ?? 20, matched: 1, returned: 1, next: undefined },

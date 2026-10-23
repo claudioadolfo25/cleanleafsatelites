@@ -5,6 +5,7 @@ import { getSupabaseUserClient } from "../db/supabase-client";
 export type CopernicusProdPolicy = "live" | "synthetic_demo_only" | "disabled";
 
 export function getCopernicusProdPolicy(env: NodeJS.ProcessEnv = process.env): CopernicusProdPolicy {
+  if (env.COPERNICUS_STRICT_MODE === "true") return "live";
   const raw = env.COPERNICUS_PROD_POLICY;
   if (raw === "live") return "live";
   if (raw === "disabled") return "disabled";
