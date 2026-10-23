@@ -339,6 +339,8 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
     }
 
     const startTime = Date.now();
+    let lastHttpStatus: number | null = null;
+
     try {
       const token = await this.tokenManager.fetchAccessToken();
 
@@ -361,6 +363,8 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
             body: JSON.stringify(payload),
             signal: controller.signal,
           });
+
+          lastHttpStatus = response.status;
 
           if (response.status === 429) {
             const retryHeader = response.headers.get("Retry-After");
@@ -416,24 +420,26 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           this.resultCache.set(cacheKey, { data: result, expiresAt: Date.now() + 300000 });
 
           // Auditoría estructurada de llamada exitosa a Copernicus CDSE
-          try {
-            await createAuditLogDb({
-              tenant_id: (request as any).tenantId ?? "system",
-              action: "copernicus_cdse_query",
-              entity: "copernicus_api",
-              payload: {
-                tenant_id: (request as any).tenantId ?? "system",
-                predio_id: request.predioId,
-                satelite: request.satellite,
-                variable: request.variable,
-                resultado: "exitoso",
-                latencia_ms: Date.now() - startTime,
-                http_status: response.status,
-                actor_type: "system",
-              },
-            });
-          } catch (auditErr) {
-            console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+          if (request.tenantId) {
+            try {
+              await createAuditLogDb({
+                tenant_id: request.tenantId,
+                action: "copernicus_cdse_query",
+                entity: "copernicus_api",
+                payload: {
+                  tenant_id: request.tenantId,
+                  predio_id: request.predioId,
+                  satelite: request.satellite,
+                  variable: request.variable,
+                  resultado: "exitoso",
+                  latencia_ms: Date.now() - startTime,
+                  http_status: response.status,
+                  actor_type: "system",
+                },
+              });
+            } catch (auditErr) {
+              console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+            }
           }
 
           return result;
@@ -456,25 +462,27 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
       );
 
       // Auditoría estructurada de llamada fallida a Copernicus CDSE
-      try {
-        await createAuditLogDb({
-          tenant_id: (request as any).tenantId ?? "system",
-          action: "copernicus_cdse_query",
-          entity: "copernicus_api",
-          payload: {
-            tenant_id: (request as any).tenantId ?? "system",
-            predio_id: request.predioId,
-            satelite: request.satellite,
-            variable: request.variable,
-            resultado: "fallido",
-            latencia_ms: Date.now() - startTime,
-            http_status: error instanceof CopernicusRateLimitError ? 429 : 500,
-            error_mensaje: error instanceof Error ? error.message : String(error),
-            actor_type: "system",
-          },
-        });
-      } catch (auditErr) {
-        console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+      if (request.tenantId) {
+        try {
+          await createAuditLogDb({
+            tenant_id: request.tenantId,
+            action: "copernicus_cdse_query",
+            entity: "copernicus_api",
+            payload: {
+              tenant_id: request.tenantId,
+              predio_id: request.predioId,
+              satelite: request.satellite,
+              variable: request.variable,
+              resultado: "fallido",
+              latencia_ms: Date.now() - startTime,
+              http_status: lastHttpStatus,
+              error_mensaje: error instanceof Error ? error.message : String(error),
+              actor_type: "system",
+            },
+          });
+        } catch (auditErr) {
+          console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+        }
       }
 
       throw error;
