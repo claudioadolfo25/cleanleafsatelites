@@ -147,7 +147,7 @@ const syntheticProvider = new SyntheticCopernicusProvider(
 const observationProvider: EarthObservationProvider = isTestRuntime
   ? new MockCopernicusProvider()
   : copernicusLiveEnabled
-    ? new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider)
+    ? (getCopernicusProdPolicy() === "live" ? copernicusCDSEProvider : new FallbackObservationProvider(copernicusCDSEProvider, syntheticProvider))
     : syntheticProvider;
 const catalogClient = createCatalogClient({
   getAccessToken: async () => copernicusLiveEnabled

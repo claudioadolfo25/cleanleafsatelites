@@ -76,7 +76,12 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!selectedPredioId && userPredios.length > 0) {
+    if (userPredios.length === 0) {
+      toast.error("Sin predios registrados", { description: "Debes registrar al menos un predio para solicitar un análisis satelital." });
+      return;
+    }
+
+    if (!selectedPredioId) {
       toast.error("Selecciona un predio", { description: "Debes seleccionar un predio registrado para consultar." });
       return;
     }
@@ -94,12 +99,14 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
       return;
     }
 
-    const targetPredioId = activePredio ? activePredio.id : `predio-demo-las-quinas`;
-    const targetPredioNombre = activePredio ? activePredio.nombre : "Las Quinas";
+    if (!activePredio) {
+      toast.error("Predio no encontrado", { description: "El predio seleccionado no es válido." });
+      return;
+    }
 
     createAnalysis.mutate({
-      predioId: targetPredioId,
-      predioNombre: targetPredioNombre,
+      predioId: activePredio.id,
+      predioNombre: activePredio.nombre,
       vertical: "agricultura",
       satellites,
       variables: selectedVariablesForRequest,
@@ -134,9 +141,14 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
             </SelectContent>
           </Select>
         ) : (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900">
-            <p className="font-semibold">No tienes predios registrados con polígono.</p>
-            <p className="mt-1 text-stone-600">Puedes crear predios en la sección <strong>Mis Predios</strong> o usar la configuración predeterminada.</p>
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">No tienes predios registrados con polígono.</p>
+              <p className="mt-1 text-stone-600">Para procesar un análisis satelital real, debes registrar tu predio primero.</p>
+            </div>
+            <a href="/dashboard/predios" className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800 transition">
+              Crear predio
+            </a>
           </div>
         )}
       </div>
@@ -210,7 +222,7 @@ export default function SolicitudAnalisisForm({ onSuccess }: SolicitudAnalisisFo
         <span>Sentinel-1 se usará como respaldo cuando la nubosidad impida una lectura óptica confiable.</span>
       </div>
 
-      <Button type="submit" disabled={createAnalysis.isPending || catalogLoading} className="h-11 w-full rounded-xl bg-emerald-700 text-sm font-semibold shadow-[0_10px_25px_-12px_rgba(4,120,87,0.75)] transition hover:bg-emerald-800 active:scale-[0.98]">
+      <Button type="submit" disabled={createAnalysis.isPending || catalogLoading || userPredios.length === 0} className="h-11 w-full rounded-xl bg-emerald-700 text-sm font-semibold shadow-[0_10px_25px_-12px_rgba(4,120,87,0.75)] transition hover:bg-emerald-800 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
         {createAnalysis.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creando solicitud…</> : <><CheckCircle2 className="mr-2 h-4 w-4" />Solicitar análisis</>}
       </Button>
     </form>

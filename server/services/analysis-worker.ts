@@ -103,6 +103,7 @@ export async function processSolicitud(
     const derivedBBox = geometryToUse ? computeBBox(geometryToUse) : undefined;
 
     const queryReq = {
+      tenantId,
       predioId: solicitud.predio_id ?? "predio-default",
       satellite: firstSatellite,
       variable: firstVariable,

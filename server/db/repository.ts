@@ -1548,14 +1548,8 @@ export async function getDashboardDataDb(
     },
     predios: prediosMapped,
     measurements: {
-      "sentinel-2": s2Series.length > 0 ? s2Series : [
-        { fecha: "08 Ago", valor: 0.49 }, { fecha: "13 Ago", valor: 0.53 }, { fecha: "18 Ago", valor: 0.58 },
-        { fecha: "23 Ago", valor: 0.55 }, { fecha: "28 Ago", valor: 0.61 }, { fecha: "02 Sep", valor: 0.64 }, { fecha: "07 Sep", valor: 0.68 },
-      ],
-      "sentinel-1": s1Series.length > 0 ? s1Series : [
-        { fecha: "08 Ago", valor: -18.4 }, { fecha: "13 Ago", valor: -17.8 }, { fecha: "18 Ago", valor: -19.1 },
-        { fecha: "23 Ago", valor: -18.7 }, { fecha: "28 Ago", valor: -17.9 }, { fecha: "02 Sep", valor: -17.4 }, { fecha: "07 Sep", valor: -16.8 },
-      ],
+      "sentinel-2": s2Series,
+      "sentinel-1": s1Series,
     },
     alerts: liveAlertas.map(a => ({
       id: a.id,

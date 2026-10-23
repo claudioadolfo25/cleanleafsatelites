@@ -761,7 +761,15 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
     });
 
     it("E2E Resiliencia: CDSE responde 5xx tres veces -> error_final con cero filas sintéticas persistidas", async () => {
+      const origPolicy = process.env.COPERNICUS_PROD_POLICY;
+      const origMode = process.env.COPERNICUS_MODE;
+      process.env.COPERNICUS_PROD_POLICY = "live";
+      process.env.COPERNICUS_MODE = "live";
+
       const tenantId = "tenant-failing-cdse";
+
+      const { SyntheticCopernicusProvider } = await import("./copernicus");
+      const syntheticSpy = vi.spyOn(SyntheticCopernicusProvider.prototype, "query");
 
       const failingCDSEProvider = {
         async query() {
@@ -798,16 +806,33 @@ describe("Express App Integration & tRPC Auth Bridge", () => {
 
       try {
         const result = await processSolicitud(solicitud);
+
+        // 1. Verificación: No se invoca SyntheticCopernicusProvider
+        expect(syntheticSpy).not.toHaveBeenCalled();
+
+        // 2. Verificación: La solicitud termina en error_final y el mensaje es visible
         expect(result.success).toBe(false);
         expect(result.estado).toBe("error_final");
-        expect(result.error).toContain("500");
+        expect(result.error).toBe("Copernicus Statistical API HTTP 500: Internal Server Error");
 
-        // Verificar que hay cero observaciones guardadas en la base de datos para este predio
+        // 3. Verificación: No se persisten observaciones ni mediciones en BD
         const { listObservacionesSerieDb } = await import("./db/repository");
+        const { getSupabaseUserClient } = await import("./db/supabase-client");
         const seriesSaved = await listObservacionesSerieDb(tenantId, "predio-failing-unique-101", "sentinel-2", "ndvi");
         expect(seriesSaved).toEqual([]);
+
+        const client = getSupabaseUserClient();
+        if (client) {
+          const { data: mediciones } = await client.from("mediciones").select("*").eq("solicitud_id", solicitud.id!);
+          expect(mediciones ?? []).toEqual([]);
+        }
       } finally {
         workerObservationProvider.query = originalQuery;
+        syntheticSpy.mockRestore();
+        if (origPolicy !== undefined) process.env.COPERNICUS_PROD_POLICY = origPolicy;
+        else delete process.env.COPERNICUS_PROD_POLICY;
+        if (origMode !== undefined) process.env.COPERNICUS_MODE = origMode;
+        else delete process.env.COPERNICUS_MODE;
       }
     });
   });

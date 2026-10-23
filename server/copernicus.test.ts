@@ -74,6 +74,7 @@ describe("Copernicus OAuth2 Client Service (Tellus)", () => {
     );
 
     await expect(provider.query({
+      tenantId: "tenant-test-1",
       predioId: "predio-1",
       satellite: "sentinel-2",
       variable: "ndvi",

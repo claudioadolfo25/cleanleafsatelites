@@ -5,6 +5,7 @@ import type { SentinelMeasurement } from "./satellite-service";
 import { resolveDataTraceability, type DataSourceType } from "./data-traceability";
 
 export type SatelliteQueryRequest = {
+  tenantId?: string;
   predioId: string;
   satellite: SatelliteId;
   variable: string;
