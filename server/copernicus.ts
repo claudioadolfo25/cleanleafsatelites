@@ -6,6 +6,7 @@ import {
 import { querySentinel, type SentinelMeasurement } from "../shared/satellite-service";
 import { resolveDataTraceability, type DataSourceType } from "../shared/data-traceability";
 import { buildSTACSender, type STACItemSearchRequest } from "./stac-client";
+import { createAuditLogDb } from "./db/repository";
 
 export class CopernicusAuthError extends Error {
   constructor(message: string) {
@@ -337,6 +338,7 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
       return cached.data;
     }
 
+    const startTime = Date.now();
     try {
       const token = await this.tokenManager.fetchAccessToken();
 
@@ -412,6 +414,28 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
           };
 
           this.resultCache.set(cacheKey, { data: result, expiresAt: Date.now() + 300000 });
+
+          // Auditoría estructurada de llamada exitosa a Copernicus CDSE
+          try {
+            await createAuditLogDb({
+              tenant_id: (request as any).tenantId ?? "system",
+              action: "copernicus_cdse_query",
+              entity: "copernicus_api",
+              payload: {
+                tenant_id: (request as any).tenantId ?? "system",
+                predio_id: request.predioId,
+                satelite: request.satellite,
+                variable: request.variable,
+                resultado: "exitoso",
+                latencia_ms: Date.now() - startTime,
+                http_status: response.status,
+                actor_type: "system",
+              },
+            });
+          } catch (auditErr) {
+            console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+          }
+
           return result;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -430,6 +454,29 @@ export class CopernicusCDSEProvider implements EarthObservationProvider {
         "[CopernicusCDSEProvider] Statistical API no disponible:",
         error instanceof Error ? error.message : error
       );
+
+      // Auditoría estructurada de llamada fallida a Copernicus CDSE
+      try {
+        await createAuditLogDb({
+          tenant_id: (request as any).tenantId ?? "system",
+          action: "copernicus_cdse_query",
+          entity: "copernicus_api",
+          payload: {
+            tenant_id: (request as any).tenantId ?? "system",
+            predio_id: request.predioId,
+            satelite: request.satellite,
+            variable: request.variable,
+            resultado: "fallido",
+            latencia_ms: Date.now() - startTime,
+            http_status: error instanceof CopernicusRateLimitError ? 429 : 500,
+            error_mensaje: error instanceof Error ? error.message : String(error),
+            actor_type: "system",
+          },
+        });
+      } catch (auditErr) {
+        console.warn("[CopernicusCDSEProvider] Error escribiendo log de auditoría:", auditErr);
+      }
+
       throw error;
     }
   }
